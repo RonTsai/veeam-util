@@ -1,0 +1,3 @@
+Component,Host,VM
+repo01.corp.local,esx03.corp.local,repo01
+10.0.0.11,esx02.corp.local,proxy-a

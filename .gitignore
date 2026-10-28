@@ -1,0 +1,9 @@
+# Scan output (contains real host names from your environment)
+out/
+demo_out/
+test/out_*/
+vbr_raw.json
+
+__pycache__/
+*.zip
+*.pem

@@ -1,0 +1,461 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VBR Backup Architecture</title>
+<style>
+  :root { --green:#00b336; --ink:#3c4650; --mute:#7a858f; --line:#d9dee2; --bg:#f4f6f7; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:"Segoe UI","Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif;
+         color:var(--ink); background:var(--bg); }
+  header { padding:20px 28px 8px; }
+  h1 { margin:0; font-weight:400; font-size:30px; letter-spacing:.2px; }
+  .meta { color:var(--mute); font-size:13px; margin-top:4px; }
+  .toolbar { display:flex; gap:8px; flex-wrap:wrap; padding:8px 28px; align-items:center; }
+  .toolbar button, .toolbar label { font:inherit; font-size:13px; border:1px solid var(--line); background:#fff;
+         color:var(--ink); padding:6px 12px; border-radius:6px; cursor:pointer; }
+  .toolbar button:hover { border-color:var(--green); }
+  .canvas { margin:8px 16px; background:#fff; border:1px solid var(--line); border-radius:10px; overflow:auto; }
+  .warn { margin:8px 28px; padding:10px 14px; background:#fff8e1; border:1px solid #f1d98a; border-radius:8px; font-size:13px; }
+  section { padding:8px 28px 24px; }
+  h2 { font-weight:500; font-size:18px; margin:18px 0 8px; }
+  table { border-collapse:collapse; width:100%; background:#fff; font-size:13px; border:1px solid var(--line); }
+  th, td { text-align:left; padding:6px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { background:#eef2f3; font-weight:600; }
+  #tip { position:fixed; pointer-events:none; background:#263038; color:#fff; font-size:12px; padding:8px 10px;
+         border-radius:6px; max-width:360px; display:none; z-index:10; line-height:1.5; }
+  #tip b { color:#7be495; }
+  #tip table { background:transparent; border:0; width:auto; font-size:12px; }
+  #tip td { border:0; padding:1px 8px 1px 0; color:#dfe6ea; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Backup architecture: data movers</h1>
+  <div class="meta" id="meta"></div>
+</header>
+<div class="toolbar">
+  <button id="langBtn" title="Language / 語言"></button>
+  <button id="dlSvg" data-i18n="dlSvg"></button>
+  <button id="dlPng" data-i18n="dlPng"></button>
+  <button id="dlJson" data-i18n="dlJson"></button>
+  <label><input type="checkbox" id="showInferred" checked> <span data-i18n="showInferred"></span></label>
+  <label><input type="checkbox" id="showOther" checked> <span data-i18n="showOther"></span></label>
+</div>
+<div id="warnings"></div>
+<div class="canvas"><svg id="diagram" xmlns="http://www.w3.org/2000/svg"></svg></div>
+<section>
+  <div id="placeSection" style="display:none">
+    <h2 data-i18n="placeTitle"></h2>
+    <table id="placeTable"></table>
+  </div>
+  <h2 data-i18n="invTitle"></h2>
+  <table id="invTable"></table>
+  <h2 data-i18n="jobsTitle"></h2>
+  <table id="jobTable"></table>
+</section>
+<div id="tip"></div>
+
+<script>
+const MODEL = /*__MODEL__*/null;
+
+// ---------------------------------------------------------------------------
+// i18n. Collectors write English into the model; everything shown on screen
+// goes through t() (UI strings) or td() (text that came from the collectors).
+// ---------------------------------------------------------------------------
+const I18N = {
+  en: {
+    langBtn: "中文", dlSvg: "Download SVG", dlPng: "Download PNG", dlJson: "Download JSON",
+    showInferred: "Show inferred links (dashed)", showOther: "Show other managed servers",
+    placeTitle: "Component hosts", invTitle: "Infrastructure inventory", jobsTitle: "Jobs",
+    meta: "VBR: {name}  ·  Build {build}  ·  API {api}  ·  Scanned {time}",
+    legendData: "Data flow (set in job)", legendAuto: "Data flow (automatic proxy selection)",
+    legendCopy: "Backup copy / Replica / Offload", legendInferred: "Inferred link",
+    tipInferred: "(inferred: no job information)", tipAuto: "(automatic proxy selection)",
+    otherTitle: "Other servers (tape servers / managed servers without a proxy or repository role)",
+    unknownHost: "Physical / unknown host", unknownGroup: "Physical / unknown", hosted: "Components running here",
+    thKind: "Kind", thName: "Name", thRole: "Role / type", thDetails: "Details",
+    thHost: "ESXi / Hyper-V host", thComponent: "Component", thRoleShort: "Role", thVm: "VM name", thMatched: "Matched by",
+    thJob: "Job", thType: "Type", thSource: "Sources", thProxy: "Proxy", thRepo: "Repository", thState: "State",
+    enabled: "Enabled", disabled: "Disabled",
+    kind_backup: "Backup server", kind_em: "Enterprise Manager", kind_vone: "Veeam ONE", kind_agent: "Veeam Agent",
+    kind_hv_host: "Hyper-V", kind_vi_host: "VMware vSphere", kind_proxy: "Proxy / WAN", kind_repo: "Repository",
+    kind_sobr: "Scale-out repository", kind_object: "Object storage", kind_server: "Other managed server",
+  },
+  zh: {
+    langBtn: "English", dlSvg: "下載 SVG", dlPng: "下載 PNG", dlJson: "下載 JSON",
+    showInferred: "顯示推測連線 (虛線)", showOther: "顯示其他受管伺服器",
+    placeTitle: "元件所在主機", invTitle: "基礎架構清單", jobsTitle: "Jobs",
+    meta: "VBR: {name}  ·  Build {build}  ·  API {api}  ·  掃描時間 {time}",
+    legendData: "資料流 (Job 指定)", legendAuto: "資料流 (Proxy 自動選擇)",
+    legendCopy: "Backup copy / Replica / Offload", legendInferred: "推測連線",
+    tipInferred: "(推測：無 Job 資訊)", tipAuto: "(Proxy 自動選擇)",
+    otherTitle: "其他伺服器 (Tape server / 未擔任 proxy、repository 角色的受管伺服器)",
+    unknownHost: "實體機 / 未知主機", unknownGroup: "實體機 / 未知", hosted: "上面執行的元件",
+    thKind: "類別", thName: "名稱", thRole: "角色 / 類型", thDetails: "詳細",
+    thHost: "ESXi / Hyper-V 主機", thComponent: "元件", thRoleShort: "角色", thVm: "VM 名稱", thMatched: "比對來源",
+    thJob: "Job", thType: "類型", thSource: "來源", thProxy: "Proxy", thRepo: "Repository", thState: "狀態",
+    enabled: "Enabled", disabled: "Disabled",
+    kind_server: "其他受管伺服器",
+  },
+};
+// Collector text -> Traditional Chinese (exact match, also applied per " · " segment)
+const DATA_ZH = {
+  "Runs on": "所在主機", "Matched by": "比對來源", "Extent hosts": "Extent 所在主機",
+  "Registered to this EM": "此 VBR 已註冊", "Registered backup servers": "已註冊的 backup server",
+  "Source": "來源", "Verification": "驗證", "Yes": "是", "No": "否",
+  "Unknown / physical": "未知 / 實體機", "Unknown": "未知",
+  "same host as VBR": "與 VBR 同機", "not connected": "未連線",
+  "VBR registration": "VBR 註冊資訊", "Local service": "本機服務偵測", "Manual CSV": "手動對照表",
+  "Manual (-EnterpriseManager)": "手動指定 (-EnterpriseManager)", "Manual (--em)": "手動指定 (--em)",
+  "EM REST detected on VBR host (9398)": "VBR 主機上偵測到 EM REST (9398)",
+  "Source host (not in managed servers)": "Source host (未在受管清單)",
+  "discovered via vCenter": "由 vCenter 探索", "discovered via inventory": "由清冊探索",
+  "Not found in the vSphere / Hyper-V inventory (physical or unmanaged)": "未在 vSphere / Hyper-V 清冊中找到 (實體機或未受管)",
+  "PowerCLI not installed; component hosts matched via the Veeam inventory (VM names)": "PowerCLI 未安裝，元件所在主機改用 Veeam 清冊 (VM 名稱) 比對",
+  "Could not read jobs; data flow is shown as inferred (dashed) links.": "無法讀取 Jobs，資料流以推測方式 (虛線) 呈現。",
+  "vSphere inventory unavailable; component hosts not matched (use --placement-csv)": "無法取得 vSphere 清冊，未比對元件所在主機 (可用 --placement-csv 手動指定)",
+  "The vSphere inventory was read, but it has no VM-to-host relation; component hosts not matched (use the PowerShell version or --placement-csv)":
+    "已讀到 vSphere 清冊，但其中沒有 VM 與主機的對應關係，未比對元件所在主機 (請改用 PowerShell 版本或 --placement-csv)",
+};
+const DATA_ZH_RULES = [
+  [/^Veeam inventory \((.+)\)$/, "Veeam 清冊 ($1)"],
+  [/^Failed: (.*)$/s, "失敗: $1"],
+  [/^Enterprise Manager auto-detection \(SBackupOptions\.GetEnterpriseServerInfo\) failed: (.*)$/s, "Enterprise Manager 自動偵測 (SBackupOptions.GetEnterpriseServerInfo) 失敗: $1"],
+  [/^PowerCLI could not be loaded: (.*)$/s, "PowerCLI 無法載入: $1"],
+  [/^Reading the inventory of (\S+) failed: (.*)$/s, "讀取 $1 清冊失敗: $2"],
+  [/^vCenter (\S+): login failed: (.*)$/s, "vCenter $1 登入失敗: $2"],
+  [/^vCenter REST \((.+)\)$/, "vCenter REST ($1)"],
+  // SOBR extent summaries: "Extents: esx02 / Unknown", "LHR01 → esx02; LHR02 → Unknown"
+  [/^Extents: (.*)$/, (_, x) => "Extents: " + x.split(" / ").map(td).join(" / ")],
+];
+const pickLang = () => {
+  const q = new URLSearchParams(location.search).get("lang");
+  let saved = null; try { saved = localStorage.getItem("vbrTopoLang"); } catch (e) { }
+  const pref = q || saved || MODEL.lang || navigator.language || "en";
+  return /^zh/i.test(pref) ? "zh" : "en";
+};
+let LANG = pickLang();
+const t = (k, vars) => {
+  let s = I18N[LANG][k] ?? I18N.en[k] ?? k;
+  for (const [a, b] of Object.entries(vars || {})) s = s.replace(`{${a}}`, b);
+  return s;
+};
+function td(s) {
+  if (LANG === "en" || s == null) return s;
+  s = String(s);
+  if (DATA_ZH[s]) return DATA_ZH[s];
+  for (const [re, rpl] of DATA_ZH_RULES) if (re.test(s)) return s.replace(re, rpl);
+  if (s.includes("→ Unknown")) return s.replaceAll("→ Unknown", "→ 未知");
+  if (s.includes(" · ")) return s.split(" · ").map(td).join(" · ");
+  const m = s.match(/^(.*) \((not in managed servers)\)$/);
+  return m ? `${m[1]} (未在受管清單)` : s;
+}
+// Rough text width for laying out the legend (CJK glyphs are wider)
+const textW = s => [...s].reduce((w, c) => w + (c.charCodeAt(0) > 0x2e80 ? 12.5 : 6.8), 0);
+
+const HAS_PLACE = (MODEL.nodes || []).some(n => n.placement);
+const W = 220, H = HAS_PLACE ? 80 : 66, VGAP = 30, BUS_Y = 150, COL_TOP = BUS_Y + 70;
+const COLS = [
+  { kinds:["agent"],                 title:"Veeam Agents" },
+  { kinds:["hv_host"],               title:"Hyper-V" },
+  { kinds:["vi_host"],               title:"VMware vSphere" },
+  { kinds:["proxy"],                 title:"Backup proxies" },
+  { kinds:["repo","sobr","object"],  title:"Repositories" },
+];
+const kindLabel = k => t("kind_" + k);
+
+const SVG_STYLE = `
+  text { font-family:"Segoe UI","Noto Sans TC","Microsoft JhengHei",sans-serif; fill:#3c4650; }
+  .bus { stroke:#4b555e; stroke-width:2; }
+  .mgmt { stroke:#4b555e; stroke-width:1.4; fill:none; }
+  .dot { fill:#4b555e; }
+  .card { fill:#fff; stroke:#d9dee2; stroke-width:1; }
+  .node:hover .card, .node.hl .card { stroke:#00b336; stroke-width:2; }
+  .name { font-size:13.5px; font-weight:600; }
+  .sub { font-size:11px; fill:#7a858f; }
+  .place { font-size:10.5px; fill:#0a7f2e; font-weight:600; }
+  .place.unknown { fill:#a3acb3; font-weight:400; }
+  .placeChip { fill:#e7f7ec; }
+  .placeChip.unknown { fill:#f1f3f4; }
+  .flow { stroke:#00b336; stroke-width:2.2; fill:none; }
+  .flow.auto { stroke:#00b336; stroke-opacity:.55; }
+  .flow.copy { stroke:#1f8fd6; stroke-dasharray:7 4; }
+  .flow.inferred { stroke:#9aa5ae; stroke-dasharray:5 4; }
+  .hit { stroke:transparent; stroke-width:12; fill:none; }
+  .dim { opacity:.12; }
+  .badge { fill:#00b336; stroke:#fff; stroke-width:2; }
+  .badgeT { fill:#fff; font-size:12px; font-weight:700; }
+  .gtitle { font-size:12px; fill:#7a858f; letter-spacing:.5px; }
+  .legend text { font-size:12px; }
+`;
+
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c]));
+const trunc = (s, n) => (s = String(s ?? ""), s.length > n ? s.slice(0, n - 1) + "…" : s);
+
+function icon(kind, sub) {
+  const g = "#00b336", d = "#4b555e";
+  switch (kind) {
+    case "backup": return `<rect x="0" y="0" width="40" height="40" rx="4" fill="${g}"/>
+      <rect x="8" y="8" width="10" height="10" fill="none" stroke="#fff" stroke-width="2.4"/>
+      <rect x="22" y="22" width="10" height="10" fill="none" stroke="#fff" stroke-width="2.4"/>
+      <path d="M22 8h10v10M8 22v10h10" fill="none" stroke="#fff" stroke-width="2.4"/>`;
+    case "vi_host": case "hv_host": {
+      const lbl = kind === "hv_host" ? "Hyper-V" : (/^vCenter/.test(sub) ? "vCenter" : "ESXi");
+      let chips = "";
+      for (let i = 0; i < 4; i++) chips += `<rect x="${i*11}" y="0" width="9" height="9" rx="1.5" fill="${d}"/>`;
+      return chips + `<rect x="0" y="12" width="42" height="14" rx="2" fill="${g}"/>
+        <text x="21" y="22.5" text-anchor="middle" style="fill:#fff;font-size:8.5px;font-weight:700">${lbl}</text>
+        <rect x="6" y="31" width="30" height="8" rx="2" fill="${d}"/><circle cx="32" cy="35" r="1.5" fill="#fff"/>`;
+    }
+    case "proxy": return `<path d="M0 0h30l10 10v30H0z" fill="${g}"/>
+      <path d="M11 17a9 9 0 0 1 16-3M29 23a9 9 0 0 1-16 3" fill="none" stroke="#fff" stroke-width="2.6"/>
+      <path d="M27 9v6h-6M13 31v-6h6" fill="none" stroke="#fff" stroke-width="2.6"/>`;
+    case "repo": return `<path d="M0 0h30l10 10v30H0z" fill="${g}"/>
+      <rect x="9" y="10" width="20" height="6" rx="1" fill="#fff"/><rect x="9" y="19" width="20" height="6" rx="1" fill="#fff"/>
+      <rect x="9" y="28" width="20" height="6" rx="1" fill="#fff"/>`;
+    case "sobr": return `<rect x="6" y="0" width="34" height="32" rx="3" fill="#7fd99a"/>
+      <rect x="0" y="6" width="34" height="34" rx="3" fill="${g}"/>
+      <rect x="7" y="13" width="20" height="5" fill="#fff"/><rect x="7" y="21" width="20" height="5" fill="#fff"/><rect x="7" y="29" width="20" height="5" fill="#fff"/>`;
+    case "object": return `<path d="M10 34a8 8 0 0 1 0-16 11 11 0 0 1 21-3 9 9 0 0 1 1 19z" fill="${g}"/>
+      <text x="20" y="30" text-anchor="middle" style="fill:#fff;font-size:8px;font-weight:700">S3</text>`;
+    case "em": case "vone": return `<rect x="0" y="0" width="40" height="40" rx="4" fill="${kind === "em" ? "#1f8fd6" : "#4b555e"}"/>
+      <rect x="7" y="8" width="26" height="18" rx="2" fill="none" stroke="#fff" stroke-width="2.4"/>
+      <path d="M13 32h14M20 26v6" stroke="#fff" stroke-width="2.4"/>
+      <text x="20" y="21" text-anchor="middle" style="fill:#fff;font-size:8px;font-weight:700">${kind === "em" ? "EM" : "ONE"}</text>`;
+    case "agent": return `<rect x="4" y="0" width="30" height="40" rx="2" fill="#fff" stroke="${d}" stroke-width="2"/>
+      <path d="M10 10h18M10 17h18M10 24h10M24 24h4M10 31h10M24 31h4" stroke="${d}" stroke-width="2.4"/>`;
+    default: return `<rect x="0" y="12" width="40" height="16" rx="3" fill="${d}"/><path d="M6 20h20" stroke="#fff" stroke-width="2"/><circle cx="33" cy="20" r="2" fill="#fff"/>`;
+  }
+}
+
+function render() {
+  const showInferred = document.getElementById("showInferred").checked;
+  const showOther = document.getElementById("showOther").checked;
+  const nodes = MODEL.nodes.filter(n => !n.inSobr);
+  const byId = Object.fromEntries(nodes.map(n => [n.id, n]));
+  const links = MODEL.links.filter(l => byId[l.source] && byId[l.target] && (showInferred || l.kind !== "inferred"));
+
+  // --- columns
+  const cols = COLS.map(c => ({ ...c, nodes: nodes.filter(n => c.kinds.includes(n.kind)) })).filter(c => c.nodes.length);
+  cols.forEach((c, i) => c.nodes.forEach((n, k) => { n.col = i; n.row = k; }));
+  // Order nodes by the rows they link to, to reduce crossings
+  const order = {}; nodes.forEach(n => order[n.id] = n.row ?? 0);
+  for (let pass = 0; pass < 3; pass++) cols.forEach(c => {
+    const score = n => { const ys = links.filter(l => l.source === n.id || l.target === n.id)
+      .map(l => order[l.source === n.id ? l.target : l.source]); return ys.length ? ys.reduce((a,b)=>a+b)/ys.length : order[n.id]; };
+    c.nodes.sort((a, b) => score(a) - score(b) || a.name.localeCompare(b.name));
+    c.nodes.forEach((n, k) => { n.row = k; order[n.id] = k; });
+  });
+
+  // --- route classification
+  const nC = cols.length, gapLinks = Array.from({ length: nC + 1 }, () => []);
+  const lanes = [];
+  links.forEach(l => {
+    const s = byId[l.source], t = byId[l.target];
+    if (t.col === s.col + 1) { l.route = "adj"; gapLinks[t.col].push([l, "a"]); }
+    else if (t.col === s.col) { l.route = "same"; gapLinks[s.col + 1].push([l, "a"]); }
+    else { l.route = "lane"; gapLinks[s.col + 1].push([l, "a"]); gapLinks[t.col].push([l, "b"]); lanes.push(l); }
+  });
+  const gapW = gapLinks.map((g, i) => (i === 0 ? 60 : i === nC ? 40 : 80) + 13 * g.length);
+  let x = gapW[0];
+  cols.forEach((c, i) => { c.x = x; x += W + gapW[i + 1]; });
+  const nMgmt = MODEL.nodes.filter(n => n.kind === "em" || n.kind === "vone").length;
+  const totalW = Math.max(x, 900, gapW[0] + 80 + (nMgmt + 1) * (W + 50));
+  nodes.forEach(n => { if (n.col == null) return; n.x = cols[n.col].x; n.y = COL_TOP + n.row * (H + VGAP); });
+  const maxBottom = Math.max(COL_TOP + H, ...nodes.filter(n => n.col != null).map(n => n.y + H));
+
+  // channel x within each gap
+  gapLinks.forEach((g, i) => {
+    const left = i === 0 ? 14 : cols[i - 1].x + W + 14;
+    const right = i === nC ? totalW - 14 : cols[i].x - 30;
+    g.sort((a, b) => byId[a[0].target].y - byId[b[0].target].y);
+    g.forEach(([l, which], k) => {
+      const cx = left + (right - left) * (k + 1) / (g.length + 1);
+      if (which === "a") l.c1 = cx; else l.c2 = cx;
+    });
+  });
+  lanes.sort((a, b) => byId[b.source].col - byId[a.source].col);
+  lanes.forEach((l, k) => l.laneY = maxBottom + 34 + k * 14);
+  const lanesBottom = lanes.length ? maxBottom + 34 + lanes.length * 14 : maxBottom;
+
+  // ports: outgoing on right edge; incoming on left (or right for same-column)
+  const ports = {};
+  const addPort = (id, side, l, end) => (ports[id + side] ??= []).push([l, end]);
+  links.forEach(l => { addPort(l.source, "R", l, "s"); addPort(l.target, l.route === "same" ? "R" : "L", l, "t"); });
+  Object.entries(ports).forEach(([key, arr]) => {
+    const n = byId[key.slice(0, -1)];
+    arr.sort((a, b) => { const o = e => byId[e[1] === "s" ? e[0].target : e[0].source].y; return o(a) - o(b); });
+    arr.forEach(([l, end], k) => { const y = n.y + 14 + (H - 28) * (k + 1) / (arr.length + 1); if (end === "s") l.sy = y; else l.ty = y; });
+  });
+
+  // other servers
+  const others = showOther ? MODEL.nodes.filter(n => n.kind === "server") : [];
+  const perRow = Math.max(1, Math.floor((totalW - 60) / (W + 20)));
+  const otherTop = lanesBottom + 70;
+  others.forEach((n, k) => { n.x = 40 + (k % perRow) * (W + 20); n.y = otherTop + Math.floor(k / perRow) * (H + 20); });
+  const legendY = (others.length ? otherTop + Math.ceil(others.length / perRow) * (H + 20) : lanesBottom + 30) + 20;
+  const totalH = legendY + 40;
+
+  // backup server
+  const vbr = MODEL.nodes.find(n => n.kind === "backup");
+  vbr.x = (cols[0]?.x ?? 60) + 40; vbr.y = 28;
+  const mgmt = MODEL.nodes.filter(n => n.kind === "em" || n.kind === "vone");
+  mgmt.forEach((n, i) => { n.x = vbr.x + (i + 1) * (W + 50); n.y = 28; });
+
+  // --- draw
+  let s = `<style>${SVG_STYLE}</style><rect width="${totalW}" height="${totalH}" fill="#fff"/>`;
+  s += `<line class="bus" x1="20" y1="${BUS_Y}" x2="${totalW - 20}" y2="${BUS_Y}"/>`;
+  s += `<path class="mgmt" d="M${vbr.x + 30} ${vbr.y + H} V${BUS_Y}"/><circle class="dot" cx="${vbr.x + 30}" cy="${BUS_Y}" r="5"/>`;
+  cols.forEach(c => {
+    const sx = c.x - 14, last = c.nodes[c.nodes.length - 1];
+    s += `<text class="gtitle" x="${c.x}" y="${BUS_Y + 28}">${esc(c.title.toUpperCase())} · ${c.nodes.length}</text>`;
+    s += `<path class="mgmt" d="M${sx} ${BUS_Y} V${last.y + H / 2}"/><circle class="dot" cx="${sx}" cy="${BUS_Y}" r="5"/>`;
+    c.nodes.forEach(n => s += `<path class="mgmt" d="M${sx} ${n.y + H / 2} H${n.x}"/>`);
+  });
+
+  links.forEach((l, i) => {
+    const a = byId[l.source], b = byId[l.target];
+    const sx = a.x + W, tx = l.route === "same" ? b.x + W + 2 : b.x - 2;
+    let d;
+    if (l.route === "adj" || l.route === "same") d = `M${sx} ${l.sy} H${l.c1} V${l.ty} H${tx}`;
+    else d = `M${sx} ${l.sy} H${l.c1} V${l.laneY} H${l.c2} V${l.ty} H${tx}`;
+    const tip = `${esc(a.name)} → ${esc(b.name)}` + (l.jobs.length ? "\n" + l.jobs.map(esc).join("\n") : "") +
+                (l.kind === "inferred" ? "\n" + t("tipInferred") : l.kind === "auto" ? "\n" + t("tipAuto") : "");
+    s += `<g class="link" data-s="${esc(l.source)}" data-t="${esc(l.target)}"><title>${tip}</title>
+      <path class="flow ${l.kind}" d="${d}" marker-end="url(#arr-${l.kind})"/><path class="hit" d="${d}"/></g>`;
+  });
+
+  const place = n => {
+    if (n.placeLabel) return `<rect class="placeChip" x="56" y="45" width="${W - 66}" height="16" rx="4"/>
+      <text class="place" x="62" y="57">${esc(trunc(td(n.placeLabel), 30))}</text>`;
+    if (!n.placement) return "";
+    const p = n.placement, unk = !p.host;
+    const label = unk ? t("unknownHost") : `${p.platform === "hv" ? "Hyper-V" : "ESXi"}: ${p.host}`;
+    return `<rect class="placeChip${unk ? " unknown" : ""}" x="56" y="45" width="${W - 66}" height="16" rx="4"/>
+      <text class="place${unk ? " unknown" : ""}" x="62" y="57">${esc(trunc(label, 30))}</text>`;
+  };
+  const drawNode = n => {
+    const usage = n.usage != null ? `<rect x="58" y="${H - 11}" width="${W - 72}" height="4" rx="2" fill="#e6eaec"/>
+      <rect x="58" y="${H - 11}" width="${(W - 72) * Math.min(1, n.usage)}" height="4" rx="2" fill="${n.usage > .85 ? "#e0533d" : "#00b336"}"/>` : "";
+    const badges = (n.badges || []).map((b, k) => `<circle class="badge" cx="${W - 6 - k * 26}" cy="0" r="12"/>
+      <text class="badgeT" x="${W - 6 - k * 26}" y="4.5" text-anchor="middle">${esc(b)}</text>`).join("");
+    return `<g class="node" data-id="${esc(n.id)}" transform="translate(${n.x},${n.y})">
+      <rect class="card" width="${W}" height="${H}" rx="8"/>
+      <g transform="translate(10,${(H - 40) / 2})">${icon(n.kind, n.sub)}</g>
+      <text class="name" x="58" y="${HAS_PLACE ? 22 : 27}">${esc(trunc(n.name, 21))}</text>
+      <text class="sub" x="58" y="${HAS_PLACE ? 38 : 44}">${esc(trunc(td(n.sub), 27))}</text>${place(n)}${usage}${badges}</g>`;
+  };
+  s += drawNode(vbr);
+  mgmt.forEach(n => s += `<path class="mgmt" d="M${n.x + 30} ${n.y + H} V${BUS_Y}"/><circle class="dot" cx="${n.x + 30}" cy="${BUS_Y}" r="5"/>` + drawNode(n));
+  nodes.filter(n => n.col != null).forEach(n => s += drawNode(n));
+  if (others.length) {
+    s += `<text class="gtitle" x="40" y="${otherTop - 16}">${esc(t("otherTitle"))} · ${others.length}</text>`;
+    others.forEach(n => s += drawNode(n));
+  }
+
+  // legend
+  const lg = [["data", t("legendData")], ["auto", t("legendAuto")], ["copy", t("legendCopy")], ["inferred", t("legendInferred")]];
+  let lx = 0, lgs = "";
+  lg.forEach(([k, label]) => { lgs += `<path class="flow ${k}" d="M${lx} 0 h40" marker-end="url(#arr-${k})"/><text x="${lx + 50}" y="4">${esc(label)}</text>`;
+    lx += 80 + textW(label); });
+  lx += 30;
+  s += `<g class="legend" transform="translate(40,${legendY})">${lgs}
+     <circle class="badge" cx="${lx + 10}" cy="0" r="10"/><text class="badgeT" x="${lx + 10}" y="4" text-anchor="middle">M</text>
+     <text x="${lx + 26}" y="4">Veeam Data Mover Service</text>
+     <circle class="badge" cx="${lx + 230}" cy="0" r="10"/><text class="badgeT" x="${lx + 230}" y="4" text-anchor="middle">A</text>
+     <text x="${lx + 246}" y="4">Veeam Agent</text></g>`;
+
+  const marker = (id, c) => `<marker id="arr-${id}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="${c}"/></marker>`;
+  s = `<defs>${marker("data", "#00b336")}${marker("auto", "#7fd99a")}${marker("copy", "#1f8fd6")}${marker("inferred", "#9aa5ae")}</defs>` + s;
+
+  const svg = document.getElementById("diagram");
+  svg.setAttribute("width", totalW); svg.setAttribute("height", totalH);
+  svg.setAttribute("viewBox", `0 0 ${totalW} ${totalH}`);
+  svg.innerHTML = s;
+  wireHover(svg);
+}
+
+function wireHover(svg) {
+  const tip = document.getElementById("tip");
+  const all = Object.fromEntries(MODEL.nodes.map(n => [n.id, n]));
+  svg.querySelectorAll(".node").forEach(g => {
+    const n = all[g.dataset.id];
+    g.addEventListener("mouseenter", () => {
+      const rel = new Set([n.id]);
+      svg.querySelectorAll(".link").forEach(l => {
+        const on = l.dataset.s === n.id || l.dataset.t === n.id;
+        l.classList.toggle("dim", !on); if (on) { rel.add(l.dataset.s); rel.add(l.dataset.t); }
+      });
+      // Placement: hovering a component lights up its ESXi host; hovering a host lights up everything on it
+      MODEL.nodes.forEach(o => { if (o.runsOn === n.id) rel.add(o.id); });
+      if (n.runsOn) rel.add(n.runsOn);
+      svg.querySelectorAll(".node").forEach(o => o.classList.toggle("dim", !rel.has(o.dataset.id)));
+      const rows = Object.entries(n.details || {}).filter(([k]) => !k.startsWith("_"))
+        .map(([k, v]) => `<tr><td>${esc(td(k))}</td><td>${esc(td(v))}</td></tr>`).join("");
+      const hosted = MODEL.nodes.filter(o => o.runsOn === n.id);
+      const hostedRow = hosted.length ? `<tr><td>${esc(t("hosted"))}</td><td>${hosted.map(o => esc(o.name)).join("<br>")}</td></tr>` : "";
+      tip.innerHTML = `<b>${esc(n.name)}</b><br>${esc(td(n.sub))}<table>${rows}${hostedRow}</table>`;
+      tip.style.display = "block";
+    });
+    g.addEventListener("mousemove", e => { tip.style.left = Math.min(e.clientX + 14, innerWidth - 380) + "px"; tip.style.top = e.clientY + 14 + "px"; });
+    g.addEventListener("mouseleave", () => { tip.style.display = "none"; svg.querySelectorAll(".dim").forEach(x => x.classList.remove("dim")); });
+  });
+}
+
+function tables() {
+  const order = ["backup", "em", "vone", "vi_host", "hv_host", "agent", "proxy", "repo", "sobr", "object", "server"];
+  const ns = [...MODEL.nodes].sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind) || a.name.localeCompare(b.name));
+  const th = keys => "<tr>" + keys.map(k => `<th>${esc(t(k))}</th>`).join("") + "</tr>";
+  document.getElementById("invTable").innerHTML = th(["thKind", "thName", "thRole", "thDetails"]) +
+    ns.map(n => `<tr><td>${esc(kindLabel(n.kind))}</td><td>${esc(n.name)}</td><td>${esc(td(n.sub))}</td><td>${
+      Object.entries(n.details || {}).filter(([k]) => !k.startsWith("_")).map(([k, v]) => `${esc(td(k))}: ${esc(td(v))}`).join("<br>")}</td></tr>`).join("");
+  const placed = MODEL.nodes.filter(n => n.placement);
+  if (placed.length) {
+    document.getElementById("placeSection").style.display = "";
+    const groups = {};
+    placed.forEach(n => (groups[n.placement.host || "—"] ??= []).push(n));
+    const keys = Object.keys(groups).sort((a, b) => (a === "—") - (b === "—") || a.localeCompare(b));
+    document.getElementById("placeTable").innerHTML = th(["thHost", "thComponent", "thRoleShort", "thVm", "thMatched"]) +
+      keys.map(h => groups[h].map((n, i) => `<tr>${i === 0 ? `<td rowspan="${groups[h].length}"><b>${esc(h === "—" ? t("unknownGroup") : h)}</b></td>` : ""}
+        <td>${esc(n.name)}</td><td>${esc(kindLabel(n.kind))}</td><td>${esc(n.placement.vm || "")}</td>
+        <td>${esc(td(n.placement.source || n.placement.note || ""))}</td></tr>`).join("")).join("");
+  }
+  document.getElementById("jobTable").innerHTML = th(["thJob", "thType", "thSource", "thProxy", "thRepo", "thState"]) +
+    (MODEL.jobs || []).map(j => `<tr><td>${esc(j.name)}</td><td>${esc(j.type)}</td><td>${esc((j.sources || []).join(", "))}</td>
+      <td>${esc(j.proxies)}</td><td>${esc(j.repository)}</td><td>${esc(t(j.disabled ? "disabled" : "enabled"))}</td></tr>`).join("");
+}
+
+function download(name, blob) { const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name; a.click(); }
+const svgText = () => new XMLSerializer().serializeToString(document.getElementById("diagram"));
+document.getElementById("dlSvg").onclick = () => download("vbr-architecture.svg", new Blob([svgText()], { type: "image/svg+xml" }));
+document.getElementById("dlJson").onclick = () => download("topology.json", new Blob([JSON.stringify(MODEL, null, 2)], { type: "application/json" }));
+document.getElementById("dlPng").onclick = () => {
+  const svg = document.getElementById("diagram"), img = new Image(), k = 2;
+  img.onload = () => { const c = document.createElement("canvas"); c.width = svg.width.baseVal.value * k; c.height = svg.height.baseVal.value * k;
+    const ctx = c.getContext("2d"); ctx.scale(k, k); ctx.drawImage(img, 0, 0); c.toBlob(b => download("vbr-architecture.png", b)); };
+  img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svgText());
+};
+["showInferred", "showOther"].forEach(id => document.getElementById(id).onchange = render);
+
+function renderAll() {
+  document.documentElement.lang = LANG === "zh" ? "zh-Hant" : "en";
+  document.querySelectorAll("[data-i18n]").forEach(el => el.textContent = t(el.dataset.i18n));
+  document.getElementById("langBtn").textContent = t("langBtn");
+  const v = MODEL.vbr || {};
+  document.getElementById("meta").textContent = t("meta",
+    { name: v.name || "?", build: v.build || "?", api: v.apiVersion || "?", time: v.collectedAt || MODEL.generatedAt });
+  document.getElementById("warnings").innerHTML = MODEL.warnings?.length
+    ? `<div class="warn">⚠ ${MODEL.warnings.map(w => esc(td(w))).join("<br>⚠ ")}</div>` : "";
+  render(); tables();
+}
+document.getElementById("langBtn").onclick = () => {
+  LANG = LANG === "zh" ? "en" : "zh";
+  try { localStorage.setItem("vbrTopoLang", LANG); } catch (e) { }
+  renderAll();
+};
+renderAll();
+</script>
+</body>
+</html>

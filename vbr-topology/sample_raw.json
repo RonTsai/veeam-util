@@ -1,0 +1,337 @@
+{
+  "_meta": {
+    "base": "https://vbr01.corp.local:9419",
+    "apiVersion": "1.2-rev1",
+    "collectedAt": "2026-10-27T10:00:00"
+  },
+  "_errors": {},
+  "serverInfo": {
+    "vbrId": "b1f0",
+    "name": "vbr01.corp.local",
+    "buildVersion": "12.3.1.1139",
+    "patches": [],
+    "databaseVendor": "PostgreSQL"
+  },
+  "managedServers": [
+    {
+      "id": "ms-vbr",
+      "name": "vbr01.corp.local",
+      "type": "WindowsHost",
+      "status": "Available"
+    },
+    {
+      "id": "ms-vc",
+      "name": "vcsa01.corp.local",
+      "type": "ViHost",
+      "viHostType": "VC",
+      "status": "Available"
+    },
+    {
+      "id": "ms-hv1",
+      "name": "hv01.corp.local",
+      "type": "HvServer",
+      "status": "Available"
+    },
+    {
+      "id": "ms-hvc",
+      "name": "hvclu01.corp.local",
+      "type": "HvCluster",
+      "status": "Available"
+    },
+    {
+      "id": "ms-px1",
+      "name": "vbrpx01.corp.local",
+      "type": "WindowsHost"
+    },
+    {
+      "id": "ms-px2",
+      "name": "vbrpx02.corp.local",
+      "type": "LinuxHost"
+    },
+    {
+      "id": "ms-repo1",
+      "name": "repo01.corp.local",
+      "type": "WindowsHost"
+    },
+    {
+      "id": "ms-lhr1",
+      "name": "lhr01.corp.local",
+      "type": "LinuxHost"
+    },
+    {
+      "id": "ms-lhr2",
+      "name": "lhr02.corp.local",
+      "type": "LinuxHost"
+    },
+    {
+      "id": "ms-tape",
+      "name": "tape01.corp.local",
+      "type": "WindowsHost",
+      "description": "Tape server"
+    }
+  ],
+  "proxies": [
+    {
+      "id": "px-1",
+      "name": "vbrpx01.corp.local",
+      "type": "ViProxy",
+      "server": {
+        "hostId": "ms-px1",
+        "transportMode": "HotAdd",
+        "maxTaskCount": 8
+      }
+    },
+    {
+      "id": "px-2",
+      "name": "vbrpx02.corp.local",
+      "type": "ViProxy",
+      "server": {
+        "hostId": "ms-px2",
+        "transportMode": "Network",
+        "maxTaskCount": 4
+      }
+    }
+  ],
+  "repositories": [
+    {
+      "id": "r-1",
+      "name": "Repo01-ReFS",
+      "type": "WinLocal",
+      "hostId": "ms-repo1",
+      "repository": {
+        "path": "E:\\Backups"
+      }
+    },
+    {
+      "id": "r-2",
+      "name": "LHR01",
+      "type": "LinuxHardened",
+      "hostId": "ms-lhr1",
+      "repository": {
+        "path": "/mnt/veeam"
+      }
+    },
+    {
+      "id": "r-3",
+      "name": "LHR02",
+      "type": "LinuxHardened",
+      "hostId": "ms-lhr2",
+      "repository": {
+        "path": "/mnt/veeam"
+      }
+    },
+    {
+      "id": "r-4",
+      "name": "Wasabi-Offsite",
+      "type": "WasabiCloud",
+      "bucket": {
+        "bucketName": "veeam-offsite"
+      }
+    }
+  ],
+  "repositoryStates": [
+    {
+      "id": "r-1",
+      "capacityGB": 40000,
+      "freeGB": 12000,
+      "path": "E:\\Backups",
+      "hostName": "repo01.corp.local"
+    },
+    {
+      "id": "r-2",
+      "capacityGB": 100000,
+      "freeGB": 61000
+    },
+    {
+      "id": "r-3",
+      "capacityGB": 100000,
+      "freeGB": 9000
+    }
+  ],
+  "scaleOutRepositories": [
+    {
+      "id": "sobr-1",
+      "name": "SOBR-Immutable",
+      "performanceTier": {
+        "performanceExtents": [
+          {
+            "id": "r-2",
+            "name": "LHR01"
+          },
+          {
+            "id": "r-3",
+            "name": "LHR02"
+          }
+        ]
+      },
+      "capacityTier": {
+        "isEnabled": true,
+        "extents": [
+          {
+            "id": "r-4"
+          }
+        ]
+      }
+    }
+  ],
+  "protectionGroups": [
+    {
+      "id": "pg-1",
+      "name": "Physical Windows Servers",
+      "type": "IndividualComputers"
+    },
+    {
+      "id": "pg-2",
+      "name": "Linux AD OU",
+      "type": "ADObjects"
+    }
+  ],
+  "jobs": [
+    {
+      "id": "j1",
+      "name": "VMware-Prod-Daily",
+      "type": "VSphereBackup",
+      "isDisabled": false,
+      "virtualMachines": {
+        "includes": [
+          {
+            "inventoryObject": {
+              "hostName": "vcsa01.corp.local",
+              "name": "Prod-Cluster",
+              "type": "Cluster"
+            }
+          }
+        ]
+      },
+      "storage": {
+        "backupRepositoryId": "sobr-1",
+        "backupProxies": {
+          "autoSelection": false,
+          "proxyIds": [
+            "px-1",
+            "px-2"
+          ]
+        }
+      }
+    },
+    {
+      "id": "j2",
+      "name": "VMware-Dev",
+      "type": "VSphereBackup",
+      "isDisabled": false,
+      "virtualMachines": {
+        "includes": [
+          {
+            "inventoryObject": {
+              "hostName": "vcsa01.corp.local",
+              "name": "Dev",
+              "type": "Folder"
+            }
+          }
+        ]
+      },
+      "storage": {
+        "backupRepositoryId": "r-1",
+        "backupProxies": {
+          "autoSelection": true,
+          "proxyIds": []
+        }
+      }
+    },
+    {
+      "id": "j3",
+      "name": "HyperV-Daily",
+      "type": "HyperVBackup",
+      "isDisabled": false,
+      "virtualMachines": {
+        "includes": [
+          {
+            "inventoryObject": {
+              "hostName": "hv01.corp.local",
+              "name": "hv01",
+              "type": "Host"
+            }
+          },
+          {
+            "inventoryObject": {
+              "hostName": "hvclu01.corp.local",
+              "name": "clu",
+              "type": "Cluster"
+            }
+          }
+        ]
+      },
+      "storage": {
+        "backupRepositoryId": "r-1",
+        "backupProxies": {
+          "autoSelection": true,
+          "proxyIds": []
+        }
+      }
+    },
+    {
+      "id": "j4",
+      "name": "Agent-Windows",
+      "type": "WindowsAgentBackup",
+      "isDisabled": false,
+      "computers": [
+        {
+          "id": "pg-1",
+          "type": "ProtectionGroup"
+        }
+      ],
+      "storage": {
+        "backupRepositoryId": "r-1"
+      }
+    },
+    {
+      "id": "j5",
+      "name": "Agent-Linux",
+      "type": "LinuxAgentBackup",
+      "isDisabled": false,
+      "computers": [
+        {
+          "id": "pg-2",
+          "type": "ProtectionGroup"
+        }
+      ],
+      "storage": {
+        "backupRepositoryId": "sobr-1"
+      }
+    },
+    {
+      "id": "j6",
+      "name": "Copy-to-Wasabi",
+      "type": "BackupCopy",
+      "isDisabled": false,
+      "sourceRepositoryId": "r-1",
+      "storage": {
+        "backupRepositoryId": "r-4"
+      }
+    }
+  ],
+  "backups": [],
+  "inventory": {
+    "vcsa01.corp.local": {
+      "method": "legacy",
+      "vmsByHost": {
+        "esx01.corp.local": [
+          "vbr01",
+          "em01",
+          "vbrpx01"
+        ],
+        "esx02.corp.local": [
+          "vbrpx02.corp.local",
+          "lhr01",
+          "app-sql01"
+        ]
+      }
+    }
+  },
+  "enterpriseManagers": [
+    {
+      "host": "em01.corp.local",
+      "source": "手動指定 (--em)"
+    }
+  ]
+}
