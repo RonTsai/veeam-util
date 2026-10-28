@@ -4,6 +4,11 @@ demo_out/
 test/out_*/
 vbr_raw.json
 
+# Local-only lab notes and credentials (never commit these)
+*.local.md
+*.local.ps1
+*.local.env
+
 __pycache__/
 *.zip
 *.pem

@@ -11,6 +11,10 @@ Reply to the user in Traditional Chinese. Code, comments, console output and doc
 - **Never commit real environment data**: host names, IPs, user names, passwords, or scan output
   (`out/`, `vbr_raw.json`). Use `corp.local` style examples. Before committing, grep for anything
   that looks like a real host or IP.
+- **Lab credentials live only in local, git-ignored files** (`*.local.md`, `*.local.ps1`,
+  `*.local.env`). Never copy them into tracked files, commit messages or reports. If a credential is
+  needed, ask the user, or read it from such a file or from an environment variable
+  (`VBR_PASSWORD`, `EM_PASSWORD`, `VCENTER_PASSWORD`).
 - Tags are `<tool>-vX.Y.Z` (for example `vbr-topology-v1.0.0`). Tag pushes are blocked from cloud
   sessions, so the user creates tags and releases in the GitHub UI.
 
