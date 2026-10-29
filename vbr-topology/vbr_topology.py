@@ -388,6 +388,22 @@ class VCenterClient:
         return out
 
 
+def login_vcenter(vc, vc_host, user, password):
+    """
+    Log in to one vCenter. If it rejects the login (HTTP 401), ask once more for that
+    vCenter's user and password, since vCenters often use different accounts.
+    Only asks when running in a terminal.
+    """
+    try:
+        vc.login(user, password)
+    except urllib.error.HTTPError as e:
+        if e.code != 401 or not sys.stdin.isatty():
+            raise
+        print(f"  Login to {vc_host} failed: incorrect user name or password.")
+        user = input(f"  vCenter user for {vc_host} [{user}]: ").strip() or user
+        vc.login(user, getpass.getpass(f"  Password for {user} on {vc_host}: "))
+
+
 def collect_vcenter(args, raw, password):
     """
     Read hosts, VMs and guest identity from each vCenter registered in VBR
@@ -405,7 +421,7 @@ def collect_vcenter(args, raw, password):
     for vc_host in targets:
         vc = VCenterClient(vc_host, ctx)
         try:
-            vc.login(args.vcenter_user, password)
+            login_vcenter(vc, vc_host, args.vcenter_user, password)
         except Exception as e:  # noqa: BLE001
             raw["_errors"][f"vCenter {vc_host}"] = f"login failed: {e}"
             print(f"  [skip] vCenter {vc_host:<18} login failed: {e}")

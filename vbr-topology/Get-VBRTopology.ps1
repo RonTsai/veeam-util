@@ -24,6 +24,10 @@
   .\Get-VBRTopology.ps1 -UsePowerCLI -VCenterUser readonly@vsphere.local
 
 .EXAMPLE
+  # Different vCenter logins per vCenter (no prompts, e.g. for scheduled runs)
+  .\Get-VBRTopology.ps1 -UsePowerCLI -VCenterCredentialMap @{ "vc01.corp.local" = $cred1; "vc02.corp.local" = $cred2 }
+
+.EXAMPLE
   # Choose the output folder, or connect to another VBR (requires the VBR Console)
   .\Get-VBRTopology.ps1 -Server vbr02.corp.local -Credential (Get-Credential) -OutDir C:\Temp\vbr
 #>
@@ -43,6 +47,9 @@ param(
     [pscredential]$VCenterCredential,
     # Pre-fills the user name in that prompt
     [string]$VCenterUser,
+    # Per-vCenter logins, e.g. @{ "vc01.corp.local" = $cred1; "vc02.corp.local" = $cred2 }.
+    # vCenters not in the map use -VCenterCredential (or the prompt).
+    [hashtable]$VCenterCredentialMap = @{},
     # By default each run writes to <OutDir>\<VBR name>_<time>; with this switch, <OutDir> is overwritten
     [switch]$NoTimestamp,
     # Default report language; viewers can switch it in the report
@@ -521,6 +528,26 @@ $viSrv = @($servers | Where-Object { "$($_.Type)" -match '^(VC|ESXi?)$' })
 $vcOnly = @($viSrv | Where-Object { "$($_.Type)" -eq "VC" })
 $viScan = if ($vcOnly.Count) { $vcOnly } else { $viSrv }   # query only the vCenter(s) when present
 
+# Connect to one vCenter. If the login is rejected, ask once more for that vCenter's credentials
+# (vCenters often use different accounts); logins from -VCenterCredentialMap are not re-asked.
+function Connect-VCenter([string]$Name) {
+    $fromMap = $VCenterCredentialMap.ContainsKey($Name)
+    $cred = if ($fromMap) { $VCenterCredentialMap[$Name] } else { $VCenterCredential }
+    try {
+        if ($cred) { return Connect-VIServer $Name -Credential $cred -ErrorAction Stop }
+        return Connect-VIServer $Name -ErrorAction Stop
+    } catch {
+        $badLogin = "$($_.Exception.Message)" -match "incorrect user name or password|InvalidLogin|401"
+        if (-not $badLogin -or $fromMap) { throw }
+        Write-Host "  Login to $Name failed: incorrect user name or password." -ForegroundColor Yellow
+        $gc = @{ Message = "Enter the vCenter credentials for $Name" }
+        if ($cred) { $gc.UserName = $cred.UserName } elseif ($VCenterUser) { $gc.UserName = $VCenterUser }
+        $retry = Get-Credential @gc
+        if (-not $retry) { throw }
+        return Connect-VIServer $Name -Credential $retry -ErrorAction Stop
+    }
+}
+
 # 2) PowerCLI (optional)
 if ($UsePowerCLI) {
     if (-not (Get-Module -ListAvailable VMware.VimAutomation.Core)) {
@@ -535,8 +562,9 @@ if ($UsePowerCLI) {
         Import-Module VMware.VimAutomation.Core -ErrorAction Stop -WarningAction SilentlyContinue | Out-Null
         # Self-signed cert and CEIP prompts would block the script; disable them for this session only
         try { Set-PowerCLIConfiguration -Scope Session -InvalidCertificateAction Ignore -ParticipateInCEIP $false -Confirm:$false | Out-Null } catch { }
-        if (-not $VCenterCredential -and $viScan.Count) {
-            $vcNames = ($viScan | ForEach-Object { $_.Name }) -join ", "
+        $needCred = @($viScan | Where-Object { -not $VCenterCredentialMap.ContainsKey($_.Name) })
+        if (-not $VCenterCredential -and $needCred.Count) {
+            $vcNames = ($needCred | ForEach-Object { $_.Name }) -join ", "
             Write-Host "  vCenter login for PowerCLI: $vcNames" -ForegroundColor Cyan
             $gc = @{ Message = "Enter the vCenter credentials for $vcNames (a read-only vCenter account is enough)" }
             if ($VCenterUser) { $gc.UserName = $VCenterUser }
@@ -545,7 +573,7 @@ if ($UsePowerCLI) {
         foreach ($vc in $viScan) {
             $ci = $null
             try {
-                $ci = if ($VCenterCredential) { Connect-VIServer $vc.Name -Credential $VCenterCredential -ErrorAction Stop } else { Connect-VIServer $vc.Name -ErrorAction Stop }
+                $ci = Connect-VCenter $vc.Name
                 $vms = @(Get-VM -Server $ci)
                 $noHost = 0
                 foreach ($vm in $vms) {
@@ -570,7 +598,17 @@ function Read-Inventory($Srv, [string]$Platform) {
     try {
         if ($Platform -eq "vi") { $ents = @(Find-VBRViEntity -Server $Srv -HostsAndClusters -WarningAction SilentlyContinue) }
         else { $ents = @(Find-VBRHvEntity -Server $Srv -WarningAction SilentlyContinue) }
-    } catch { $script:Warnings.Add("Reading the inventory of $($Srv.Name) failed: $($_.Exception.Message)"); return }
+    } catch {
+        $msg = "$($_.Exception.Message)"
+        if ($msg -match "WMI") {
+            $script:Warnings.Add("VBR could not query Hyper-V host $($Srv.Name) (WMI). Check that the host is online and that its credentials in VBR are valid. Details: $msg")
+        } elseif ($msg -match "not a cluster|cluster services") {
+            $script:Warnings.Add("VBR could not reach the Hyper-V cluster $($Srv.Name). Check that the cluster service is running, or remove the stale cluster from VBR. Details: $msg")
+        } else {
+            $script:Warnings.Add("Reading the inventory of $($Srv.Name) failed: $msg")
+        }
+        return
+    }
     $hostNames = @{}
     foreach ($e in $ents) { if ("$($e.Type)" -match '^(Host|Esx|Server)') { $hostNames[$e.Name.ToLower()] = $e.Name } }
     foreach ($h in $servers) { if ("$($h.Type)" -match '^(ESXi?|HvServer)$') { $hostNames[$h.Name.ToLower()] = $h.Name } }

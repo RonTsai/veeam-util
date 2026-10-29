@@ -117,6 +117,9 @@ Save-Module VCF.PowerCLI -Path D:\pcli
 Get-Module -ListAvailable VMware.VimAutomation.Core
 ```
 
+If a vCenter rejects the login, the script asks once more for that vCenter's credentials, since
+vCenters often use different accounts. For unattended runs, use `-VCenterCredentialMap` instead.
+
 You don't need to configure PowerCLI yourself. For the duration of the run, the script ignores vCenter's
 self-signed certificate and turns off the CEIP prompt.
 
@@ -146,6 +149,7 @@ Set-ExecutionPolicy -Scope Process Bypass
 | `-UsePowerCLI` | Use VMware PowerCLI to find each component's ESXi host |
 | `-VCenterUser` | vCenter user name for `-UsePowerCLI`; the script then asks only for the password |
 | `-VCenterCredential` | vCenter credentials as a `PSCredential` (skips the prompt), e.g. for scheduled runs |
+| `-VCenterCredentialMap` | Per-vCenter credentials, e.g. `@{ "vc01.corp.local" = $cred1; "vc02.corp.local" = $cred2 }` |
 | `-Language` | Default report language: `zh-TW` (default) or `en` |
 | `-Template` | Path to `template.html` (default: next to the script) |
 
@@ -198,7 +202,7 @@ python3 vbr_topology.py --from-raw sample_raw.json --out demo_out
 | `--em-user`, `--em-password` | EM credentials if different from VBR (or `EM_PASSWORD`) |
 | `--vcenter-user` | Query vCenter directly for component hosts. A read-only vCenter account is enough. |
 | `--vcenter-password` | vCenter password (or `VCENTER_PASSWORD`, or the prompt) |
-| `--vcenter HOST` | vCenter address(es) to query, repeatable; default: the vCenters registered in VBR |
+| `--vcenter HOST` | vCenter address(es) to query, repeatable; default: the vCenters registered in VBR. If one rejects the login, the script asks for that vCenter's user and password (in a terminal only). |
 | `--placement-csv` | Manual component → host map |
 | `--from-raw` | Render from a saved `vbr_raw.json` instead of connecting |
 | `--lang` | Default report language: `zh-TW` (default) or `en` |

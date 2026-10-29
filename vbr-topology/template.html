@@ -126,6 +126,10 @@ const DATA_ZH_RULES = [
   [/^PowerCLI could not be loaded: (.*)$/s, "PowerCLI 無法載入: $1"],
   [/^Reading the inventory of (\S+) failed: (.*)$/s, "讀取 $1 清冊失敗: $2"],
   [/^vCenter (\S+): login failed: (.*)$/s, "vCenter $1 登入失敗: $2"],
+  [/^VBR could not query Hyper-V host (\S+) \(WMI\)\. Check that the host is online and that its credentials in VBR are valid\. Details: (.*)$/s,
+    "VBR 無法查詢 Hyper-V 主機 $1 (WMI)。請確認主機已開機，且 VBR 中該主機的帳密仍然有效。詳細: $2"],
+  [/^VBR could not reach the Hyper-V cluster (\S+)\. Check that the cluster service is running, or remove the stale cluster from VBR\. Details: (.*)$/s,
+    "VBR 無法連到 Hyper-V cluster $1。請確認叢集服務正在執行，或從 VBR 移除已不存在的 cluster。詳細: $2"],
   [/^vCenter REST \((.+)\)$/, "vCenter REST ($1)"],
   // SOBR extent summaries: "Extents: esx02 / Unknown", "LHR01 → esx02; LHR02 → Unknown"
   [/^Extents: (.*)$/, (_, x) => "Extents: " + x.split(" / ").map(td).join(" / ")],

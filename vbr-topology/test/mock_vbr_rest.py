@@ -4,9 +4,11 @@ Minimal HTTPS mock of the VBR REST API (and the EM REST API) for offline tests.
   python3 test/mock_vbr_rest.py <cert.pem> <key.pem> <vbr_port> <em_port> [<vcenter_port>]
 
 Env: MOCK_IP_PROXY=1 registers one proxy by IP; MOCK_VC_OLD=1 makes vCenter serve only /rest.
+The vCenter mock rejects the password "bad".
 
 Serves the objects from sample_raw.json plus a legacy vSphere inventory.
 """
+import base64
 import json
 import os
 import ssl
@@ -131,7 +133,9 @@ class VCenterHandler(VbrHandler):
         if self.path == "/api/session" and old:
             return self.send_json({}, 404)
         if self.path in ("/api/session", "/rest/com/vmware/cis/session"):
-            ok = self.headers.get("Authorization", "").startswith("Basic ")
+            auth = self.headers.get("Authorization", "")
+            pw = base64.b64decode(auth[6:]).decode().partition(":")[2] if auth.startswith("Basic ") else None
+            ok = pw is not None and pw != "bad"
             return self.send_json(self.wrap("vc-sid"), 201) if ok else self.send_json({}, 401)
         self.send_json({}, 404)
 

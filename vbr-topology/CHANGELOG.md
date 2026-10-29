@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### Added
+
+- PowerShell: `-VCenterCredentialMap` to give each vCenter its own credentials.
+- PowerShell and Python: when a vCenter rejects the login, ask once more for that vCenter's
+  credentials, since vCenters often use different accounts. No prompt when the credentials come
+  from `-VCenterCredentialMap`, or when Python runs without a terminal.
+
+### Changed
+
+- PowerShell: clearer Hyper-V warnings. A WMI failure now says to check that the host is online and
+  that its credentials in VBR are valid; a cluster failure says to check the cluster service or
+  remove the stale cluster from VBR. Both have Traditional Chinese translations in the report.
+
 ### Fixed
 
 - PowerShell: `-UsePowerCLI` crashed with "You cannot call a method on a null-valued expression"
