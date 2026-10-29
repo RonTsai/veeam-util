@@ -496,7 +496,8 @@ foreach ($s in $servers) {
 Write-Host "Matching component hosts:"
 $placeMap = @{}   # lowercase name / IP -> placement
 function Add-PlaceKey([string]$Key, $Info) {
-    if (-not $Key) { return }
+    # Entries without a host name (e.g. a VM on a disconnected host) cannot place anything
+    if (-not $Key -or -not $Info -or -not $Info.host) { return }
     $k = $Key.Trim().ToLower()
     if ($k -and -not $placeMap.ContainsKey($k)) { $placeMap[$k] = $Info }
 }
@@ -546,13 +547,16 @@ if ($UsePowerCLI) {
             try {
                 $ci = if ($VCenterCredential) { Connect-VIServer $vc.Name -Credential $VCenterCredential -ErrorAction Stop } else { Connect-VIServer $vc.Name -ErrorAction Stop }
                 $vms = @(Get-VM -Server $ci)
+                $noHost = 0
                 foreach ($vm in $vms) {
+                    if (-not $vm.VMHost -or -not $vm.VMHost.Name) { $noHost++; continue }
                     $info = @{ host = $vm.VMHost.Name; vm = $vm.Name; source = "PowerCLI ($($vc.Name))"; platform = "vi" }
                     Add-PlaceKeys $vm.Name $info
                     if ($vm.Guest.HostName) { Add-PlaceKeys $vm.Guest.HostName $info }
                     foreach ($ip in @($vm.Guest.IPAddress)) { Add-PlaceKey $ip $info }
                 }
-                Write-Host ("  [OK]   {0,-28} {1}" -f "PowerCLI $($vc.Name)", $vms.Count)
+                $skipped = if ($noHost) { " ($noHost without a host, skipped)" } else { "" }
+                Write-Host ("  [OK]   {0,-28} {1}{2}" -f "PowerCLI $($vc.Name)", $vms.Count, $skipped)
             } catch { $script:Warnings.Add("PowerCLI $($vc.Name): $($_.Exception.Message)") }
             finally { if ($ci) { Disconnect-VIServer $ci -Confirm:$false -ErrorAction SilentlyContinue } }
         }

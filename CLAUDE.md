@@ -52,6 +52,9 @@ PowerShell, with fake Veeam cmdlets (works with `pwsh` on Linux too):
 ```powershell
 cd vbr-topology
 . ./test/Mock-VeeamCmdlets.ps1; ./Get-VBRTopology.ps1 -Server vbr01.corp.local -OutDir ./test/out_ps -NoTimestamp
+
+# With fake PowerCLI as well (a VM without a host; the vCenter password "bad" is rejected)
+. ./test/Mock-PowerCLI.ps1; ./Get-VBRTopology.ps1 -Server vbr01.corp.local -OutDir ./test/out_ps -NoTimestamp -UsePowerCLI
 ```
 
 Python, offline and against the HTTPS mocks of the VBR, EM and vCenter REST APIs:

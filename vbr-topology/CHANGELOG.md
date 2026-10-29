@@ -1,5 +1,13 @@
 # Changelog: vbr-topology
 
+## Unreleased
+
+### Fixed
+
+- PowerShell: `-UsePowerCLI` crashed with "You cannot call a method on a null-valued expression"
+  when vCenter returned VMs without a host (disconnected host, orphaned VM). Such VMs are now
+  skipped, and the console shows how many.
+
 ## v1.0.0 (2026-10-28)
 
 First release.
