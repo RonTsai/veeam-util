@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>VBR Backup Architecture</title>
+<title>Backup infrastructure topology</title>
 <style>
   :root { --green:#00b336; --ink:#3c4650; --mute:#7a858f; --line:#d9dee2; --bg:#f4f6f7; }
   * { box-sizing:border-box; }
@@ -32,7 +32,7 @@
 </head>
 <body>
 <header>
-  <h1>Backup architecture: data movers</h1>
+  <h1 data-i18n="pageTitle"></h1>
   <div class="meta" id="meta"></div>
 </header>
 <div class="toolbar">
@@ -66,6 +66,7 @@ const MODEL = /*__MODEL__*/null;
 // ---------------------------------------------------------------------------
 const I18N = {
   en: {
+    pageTitle: "Backup infrastructure topology",
     langBtn: "中文", dlSvg: "Download SVG", dlPng: "Download PNG", dlJson: "Download JSON",
     showInferred: "Show inferred links (dashed)", showOther: "Show other managed servers",
     placeTitle: "Component hosts", invTitle: "Infrastructure inventory", jobsTitle: "Jobs",
@@ -84,6 +85,7 @@ const I18N = {
     kind_sobr: "Scale-out repository", kind_object: "Object storage", kind_server: "Other managed server",
   },
   zh: {
+    pageTitle: "備份基礎架構拓撲",
     langBtn: "English", dlSvg: "下載 SVG", dlPng: "下載 PNG", dlJson: "下載 JSON",
     showInferred: "顯示推測連線 (虛線)", showOther: "顯示其他受管伺服器",
     placeTitle: "元件所在主機", invTitle: "基礎架構清單", jobsTitle: "Jobs",
@@ -440,12 +442,12 @@ function tables() {
 
 function download(name, blob) { const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name; a.click(); }
 const svgText = () => new XMLSerializer().serializeToString(document.getElementById("diagram"));
-document.getElementById("dlSvg").onclick = () => download("vbr-architecture.svg", new Blob([svgText()], { type: "image/svg+xml" }));
+document.getElementById("dlSvg").onclick = () => download("vbr-topology.svg", new Blob([svgText()], { type: "image/svg+xml" }));
 document.getElementById("dlJson").onclick = () => download("topology.json", new Blob([JSON.stringify(MODEL, null, 2)], { type: "application/json" }));
 document.getElementById("dlPng").onclick = () => {
   const svg = document.getElementById("diagram"), img = new Image(), k = 2;
   img.onload = () => { const c = document.createElement("canvas"); c.width = svg.width.baseVal.value * k; c.height = svg.height.baseVal.value * k;
-    const ctx = c.getContext("2d"); ctx.scale(k, k); ctx.drawImage(img, 0, 0); c.toBlob(b => download("vbr-architecture.png", b)); };
+    const ctx = c.getContext("2d"); ctx.scale(k, k); ctx.drawImage(img, 0, 0); c.toBlob(b => download("vbr-topology.png", b)); };
   img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svgText());
 };
 ["showInferred", "showOther"].forEach(id => document.getElementById(id).onchange = render);
@@ -455,6 +457,7 @@ function renderAll() {
   document.querySelectorAll("[data-i18n]").forEach(el => el.textContent = t(el.dataset.i18n));
   document.getElementById("langBtn").textContent = t("langBtn");
   const v = MODEL.vbr || {};
+  document.title = t("pageTitle") + (v.name ? " · " + v.name.split(".")[0] : "");
   document.getElementById("meta").textContent = t("meta",
     { name: v.name || "?", build: v.build || "?", api: v.apiVersion || "?", time: v.collectedAt || MODEL.generatedAt });
   document.getElementById("warnings").innerHTML = MODEL.warnings?.length
