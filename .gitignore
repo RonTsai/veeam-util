@@ -1,14 +1,16 @@
 # Scan output (contains real host names from your environment)
 out/
 demo_out/
-test/out_*/
+vbr-topology/test/out_*/
 vbr_raw.json
+result/
 
 # Local-only lab notes and credentials (never commit these)
 *.local.md
 *.local.ps1
 *.local.env
 
+.DS_Store
 __pycache__/
 *.zip
 *.pem
