@@ -1,5 +1,15 @@
 # Changelog: vbr-topology
 
+## Unreleased
+
+### Changed
+
+- Report: the job objects column "Mode" is now "Include / Exclude" (包含 / 排除). File share masks
+  show as `File mask` rows, as VBR names them, and include masks are listed too (only exclude masks
+  were). Object storage jobs also list their tag masks (`Tag mask`).
+- Report: the object count next to a job name leaves out File / Tag masks, which are filters, not
+  protected objects.
+
 ## v1.3.0 (2026-10-30)
 
 ### Added

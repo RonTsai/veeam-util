@@ -78,7 +78,7 @@ const I18N = {
   en: {
     pageTitle: "Backup infrastructure topology",
     objHint: "Click a job to see its protected objects and highlight its data flow in the diagram.",
-    objType: "Type", objName: "Object", objLocation: "Location", objSize: "Size", objMode: "Mode",
+    objType: "Type", objName: "Object", objLocation: "Location", objSize: "Size", objMode: "Include / Exclude",
     objInclude: "Included", objExclude: "Excluded",
     langBtn: "中文", dlSvg: "Download SVG", dlPng: "Download PNG", dlJson: "Download JSON",
     showInferred: "Show inferred links (dashed)", showOther: "Show other managed servers",
@@ -100,7 +100,7 @@ const I18N = {
   zh: {
     pageTitle: "備份基礎架構拓撲",
     objHint: "點選 Job 可查看保護的物件，並在架構圖上標出它的資料流。",
-    objType: "類型", objName: "物件", objLocation: "位置", objSize: "大小", objMode: "方式",
+    objType: "類型", objName: "物件", objLocation: "位置", objSize: "大小", objMode: "包含 / 排除",
     objInclude: "包含", objExclude: "排除",
     langBtn: "English", dlSvg: "下載 SVG", dlPng: "下載 PNG", dlJson: "下載 JSON",
     showInferred: "顯示推測連線 (虛線)", showOther: "顯示其他受管伺服器",
@@ -135,7 +135,7 @@ const DATA_ZH = {
   "Could not read jobs; data flow is shown as inferred (dashed) links.": "無法讀取 Jobs，資料流以推測方式 (虛線) 呈現。",
   "vSphere inventory unavailable; component hosts not matched (use --placement-csv)": "無法取得 vSphere 清冊，未比對元件所在主機 (可用 --placement-csv 手動指定)",
   "Plug-in platform": "Plug-in 平台",
-  "Exclusion mask": "排除遮罩", "File share": "檔案共用", "SMB share": "SMB 共用", "NFS share": "NFS 共用",
+  "File share": "檔案共用", "SMB share": "SMB 共用", "NFS share": "NFS 共用",
   "Object storage": "物件儲存",
   "Proxies of plug-in platforms (Proxmox VE, Nutanix AHV, HPE Morpheus VME) cannot be read through PowerShell or the REST API and are not shown.":
     "Plug-in 平台 (Proxmox VE、Nutanix AHV、HPE Morpheus VME) 的 proxy 無法透過 PowerShell 或 REST API 讀取，因此不會顯示。",
@@ -459,7 +459,8 @@ function tables() {
     (MODEL.jobs || []).map((j, i) => {
       const objs = j.objects || [], has = objs.length > 0;
       const row = `<tr class="job${has ? " has" : ""}" data-i="${i}"><td><span class="caret">${has ? "▸" : ""}</span>${esc(j.name)}${
-        has ? `<span class="count">(${objs.filter(o => !o.excluded).length})</span>` : ""}</td><td>${esc(j.type)}</td>
+        // count included objects only; File / Tag masks are filters, not objects
+        has ? `<span class="count">(${objs.filter(o => !o.excluded && !/ mask$/.test(o.type)).length})</span>` : ""}</td><td>${esc(j.type)}</td>
         <td>${esc((j.sources || []).join(", "))}</td><td>${esc(j.proxies)}</td><td>${esc(j.repository)}</td>
         <td>${esc(t(j.disabled ? "disabled" : "enabled"))}</td></tr>`;
       const sub = has ? `<tr class="objs" data-for="${i}" hidden><td colspan="6"><table>${

@@ -211,17 +211,22 @@ def job_objects(j, names):
         add(o.get("name"), o.get("type"), o.get("hostName"), o.get("size"), True)
     for c in j.get("computers") or []:
         add(c.get("name"), "Protection group" if c.get("type") == "ProtectionGroup" else c.get("type"), c.get("path"))
+    # Include / exclude masks, as VBR calls them: File masks, plus tag masks for buckets
+    masks = (("inclusionMask", "File mask", False), ("inclusionPathMask", "File mask", False),
+             ("exclusionMask", "File mask", True), ("exclusionPathMask", "File mask", True),
+             ("inclusionTagMask", "Tag mask", False), ("exclusionTagMask", "Tag mask", True))
     for o in j.get("objects") or []:
         if "objectStorageServerId" in o:
             path = "/".join(x for x in (o.get("container"), o.get("path")) if x and x != "/")
             add(path, "Object storage", names.get(o.get("objectStorageServerId")))
-            masks = o.get("exclusionPathMask")
         else:
             path = o.get("path")
             add(path, "File share", names.get(o.get("fileServerId")))
-            masks = o.get("exclusionMask")
-        for m in masks or []:
-            add(m, "Exclusion mask", path, excluded=True)
+        for key, typ, excluded in masks:
+            for m in o.get(key) or []:
+                if isinstance(m, dict):   # tag masks may come as {name, value}
+                    m = "=".join(str(x) for x in (m.get("name"), m.get("value")) if x) or json.dumps(m)
+                add(m, typ, path, excluded=excluded)
     src = j.get("sourceObjects") or {}
     for key, typ in (("jobs", "Job"), ("repositories", "Repository"), ("backups", "Backup")):
         for x in (src.get("includes") or {}).get(key) or []:

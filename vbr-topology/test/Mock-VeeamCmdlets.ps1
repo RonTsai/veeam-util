@@ -96,7 +96,7 @@ if (-not ("Mock.VBRNASSMBServer" -as [type])) { Add-Type -TypeDefinition "namesp
 function Get-VBRNASBackupJob {
     New-Obj @{ Id = (gid "n1"); Name = "NAS-Shares"; JobEnabled = $true; ShortTermBackupRepository = $global:R1
         BackupObject = @([pscustomobject]@{ Path = "\\nas01.corp.local\projects"; Server = (New-Object Mock.VBRNASSMBServer)
-                                            InclusionMask = @(); ExclusionMask = @("\.snapshot", "*.tmp") }) }
+                                            InclusionMask = @("*.docx", "*.xlsx"); ExclusionMask = @("\.snapshot", "*.tmp") }) }
 }
 # Mock Enterprise Manager registration info
 if (-not ("Veeam.Backup.Core.SBackupOptions" -as [type])) {

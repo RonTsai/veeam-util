@@ -336,10 +336,12 @@ highlighted in the diagram until you click the job again, even while you hover o
 | VMware, Hyper-V, Cloud Director, replica | `Get-VBRJobObject` (type from `TypeDisplayName`, full inventory path) | `virtualMachines.includes` / `excludes.vms` (location is the host name) |
 | Plug-in (Proxmox VE, Nutanix AHV, HPE Morpheus VME) | `Get-VBRJobObject` (no location) | — (not in the REST API) |
 | Agent | `BackupObject`: protection groups | `computers`: protection groups |
-| File share, object storage | `BackupObject`: shares and buckets, each exclusion mask as an excluded row | `objects`: the same |
+| File share, object storage | `BackupObject`: shares and buckets, then their include / exclude File masks (and tag masks for buckets) | `objects`: the same |
 | Backup copy | Source jobs and repositories | `sourceObjects` |
 
-Disk-level settings (which disks of a VM to process) are not shown as exclusions.
+The **Include / Exclude** column matches the VBR job settings: for VM jobs, an excluded object is on the
+job's **Exclusions** list; for file share jobs, the **File masks** (include and exclude) are listed as
+`File mask` rows. Disk-level settings (which disks of a VM to process) are not shown as exclusions.
 
 ## Offline tests
 

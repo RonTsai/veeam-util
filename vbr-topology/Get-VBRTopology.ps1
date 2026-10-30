@@ -525,14 +525,17 @@ foreach ($c in $copyJobs) {
 foreach ($n in $nasJobs) {
     $repo = Get-IdStr (Get-Prop $n @("ShortTermBackupRepository", "BackupRepository", "StorageRepository"))
     foreach ($p in $proxyByType.GeneralPurposeProxy) { Add-Link $p $repo $n.Name "auto" }
-    # Each share or bucket, then its exclusion masks as excluded rows
+    # Each share or bucket, then its include / exclude masks (VBR: File masks; buckets also have tag masks)
     $nasObjs = @(foreach ($b in @($n.BackupObject)) {
         if (-not $b) { continue }
         $path = "$(Get-Prop $b @('Path', 'Container', 'Name'))"
         $srv = ""; try { $srv = $b.Server.GetType().Name } catch { }
         $kind = switch -Regex ($srv) { 'SMB' { "SMB share" } 'NFS' { "NFS share" } 'ObjectStorage|S3|Azure' { "Object storage" } default { "File share" } }
         New-JobObject $path $kind
-        foreach ($m in @(Get-Prop $b @("ExclusionMask", "ExclusionPathMask"))) { if ($m) { New-JobObject "$m" "Exclusion mask" $path "" $true } }
+        foreach ($mk in @(@("InclusionMask", "File mask", $false), @("InclusionPathMask", "File mask", $false), @("ExclusionMask", "File mask", $true),
+                          @("ExclusionPathMask", "File mask", $true), @("InclusionTagMask", "Tag mask", $false), @("ExclusionTagMask", "Tag mask", $true))) {
+            foreach ($m in @(Get-Prop $b @($mk[0]))) { if ($m) { New-JobObject "$m" $mk[1] $path "" $mk[2] } }
+        }
     })
     $JobRows.Add([ordered]@{ name = $n.Name; type = "File backup"; disabled = ($n.JobEnabled -eq $false)
         repository = $(if ((Test-Node "$repo")) { $Nodes["$repo"].name } else { $null }); sources = @(); proxies = "Automatic"

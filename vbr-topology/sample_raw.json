@@ -353,7 +353,10 @@
         {
           "fileServerId": "fs-1",
           "path": "\\\\nas01.corp.local\\projects",
-          "inclusionMask": [],
+          "inclusionMask": [
+            "*.docx",
+            "*.xlsx"
+          ],
           "exclusionMask": [
             "\\.snapshot",
             "*.tmp"
