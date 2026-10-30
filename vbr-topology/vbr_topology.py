@@ -187,6 +187,51 @@ def _obj(item):
     return item.get("inventoryObject", item) if isinstance(item, dict) else {}
 
 
+def job_objects(j, names):
+    """
+    A job's protected objects for the report: VMs / containers, protection groups, file shares,
+    buckets and backup copy sources. Exclusions (excluded VMs, exclusion masks) are flagged.
+    `names` maps server ids to names. Disk-level settings in excludes.disks are not exclusions.
+    """
+    out = []
+
+    def add(name, typ, location=None, size=None, excluded=False):
+        if name:
+            # "VirtualMachine" -> "Virtual Machine", as PowerShell's TypeDisplayName reads ("vApp" stays)
+            typ = re.sub(r"(?<=[a-z]{2})(?=[A-Z])", " ", typ or "")
+            out.append({"name": name, "type": typ, "location": location or "", "size": size or "",
+                        "excluded": excluded})
+
+    vms = j.get("virtualMachines") or {}
+    for inc in vms.get("includes") or []:
+        o = _obj(inc)
+        add(o.get("name"), o.get("type"), o.get("hostName"), o.get("size"))
+    for exc in (vms.get("excludes") or {}).get("vms") or []:
+        o = _obj(exc)
+        add(o.get("name"), o.get("type"), o.get("hostName"), o.get("size"), True)
+    for c in j.get("computers") or []:
+        add(c.get("name"), "Protection group" if c.get("type") == "ProtectionGroup" else c.get("type"), c.get("path"))
+    for o in j.get("objects") or []:
+        if "objectStorageServerId" in o:
+            path = "/".join(x for x in (o.get("container"), o.get("path")) if x and x != "/")
+            add(path, "Object storage", names.get(o.get("objectStorageServerId")))
+            masks = o.get("exclusionPathMask")
+        else:
+            path = o.get("path")
+            add(path, "File share", names.get(o.get("fileServerId")))
+            masks = o.get("exclusionMask")
+        for m in masks or []:
+            add(m, "Exclusion mask", path, excluded=True)
+    src = j.get("sourceObjects") or {}
+    for key, typ in (("jobs", "Job"), ("repositories", "Repository"), ("backups", "Backup")):
+        for x in (src.get("includes") or {}).get(key) or []:
+            add(_obj(x).get("name"), typ)
+    for key, typ in (("jobs", "Job"), ("objects", "Object")):
+        for x in (src.get("excludes") or {}).get(key) or []:
+            add(_obj(x).get("name"), typ, excluded=True)
+    return out
+
+
 def collect_inventory(client, raw):
     """
     Collect VM -> ESXi host placement from the vSphere inventory VBR already has.
@@ -796,6 +841,7 @@ def build_model(raw, csv_rows=()):
 
     jobs = raw.get("jobs") or []
     job_rows = []
+    server_names = {s["id"]: s.get("name") for s in servers.values()}
     for j in jobs:
         jt = j.get("type", "")
         jtl = _lc(jt)
@@ -814,7 +860,8 @@ def build_model(raw, csv_rows=()):
         job_rows.append({"name": name, "type": jt, "disabled": j.get("isDisabled"),
                          "repository": (nodes.get(repo) or {}).get("name"),
                          "sources": sorted(hosts), "proxies": "Automatic" if auto and not sel_proxies
-                         else ", ".join(nodes[p]["name"] for p in sel_proxies)})
+                         else ", ".join(nodes[p]["name"] for p in sel_proxies),
+                         "objects": job_objects(j, server_names)})
         if repo not in nodes:
             continue
         label = name + (" (disabled)" if j.get("isDisabled") else "")

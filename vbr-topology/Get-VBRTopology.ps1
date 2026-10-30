@@ -401,6 +401,11 @@ function Resolve-SourceNode([string]$HostName, [string]$Platform) {
     return $nid
 }
 
+# One row of a job's protected-object list (shown when the job is expanded in the report)
+function New-JobObject([string]$Name, [string]$Type, [string]$Location = "", [string]$Size = "", [bool]$Excluded = $false) {
+    return [ordered]@{ name = $Name; type = $Type; location = $Location; size = $Size; excluded = $Excluded }
+}
+
 $JobRows = New-Object System.Collections.Generic.List[object]
 $jobRepo = @{}   # job id -> repo id (used to find backup copy sources)
 # These jobs are handled by their own cmdlets; skip them in Get-VBRJob to avoid duplicates
@@ -428,10 +433,14 @@ foreach ($j in $jobs) {
     $sel = @(); try { $sel = @($j.GetProxy() | ForEach-Object { Get-IdStr $_ } | Where-Object { (Test-Node $_) }) } catch { }
     $auto = Get-Prop $j @("Options.JobOptions.SourceProxyAutoDetect")
     if ($auto -eq $true) { $sel = @() }
+    $jobObjs = @($objs | ForEach-Object {
+        New-JobObject "$($_.Name)" "$(Get-Prop $_ @('TypeDisplayName', 'Object.ViType', 'Object.Type'))" "$($_.Location)" `
+            "$(Get-Prop $_ @('ApproxSizeString'))" ("$($_.Type)" -eq "Exclude") })
 
     $JobRows.Add([ordered]@{ name = $j.Name; type = $(if ($typeStr) { $typeStr } else { $type }); disabled = $disabled
         repository = $(if ((Test-Node $repo)) { $Nodes[$repo].name } else { $null }); sources = @($hosts)
-        proxies = $(if ($sel.Count) { ($sel | ForEach-Object { $Nodes[$_].name }) -join ", " } else { "Automatic" }) })
+        proxies = $(if ($sel.Count) { ($sel | ForEach-Object { $Nodes[$_].name }) -join ", " } else { "Automatic" })
+        objects = $jobObjs })
 
     if ($all -match "Copy|BackupSync|SimpleBackupCopy") {
         $srcRepos = @()
@@ -493,7 +502,9 @@ foreach ($a in $agentJobs) {
     foreach ($pg in $pgIds) { Add-Link $pg $repo $label }
     $JobRows.Add([ordered]@{ name = $a.Name; type = "Agent backup ($($a.OSPlatform), $($a.Mode))"; disabled = ($enabled -eq $false)
         repository = $(if ((Test-Node "$repo")) { $Nodes["$repo"].name } else { $null })
-        sources = @($pgIds | ForEach-Object { $Nodes[$_].name }); proxies = "—" })
+        sources = @($pgIds | ForEach-Object { $Nodes[$_].name }); proxies = "—"
+        objects = @(@($a.BackupObject) | Where-Object { $_ } | ForEach-Object {
+            New-JobObject "$($_.Name)" "Protection group" "$(Get-Prop $_ @('Container.Type', 'Container'))" }) })
 }
 
 # Backup copy jobs (v12+ cmdlet)
@@ -505,15 +516,27 @@ foreach ($c in $copyJobs) {
     foreach ($sr in $srcRepos) { if ($sr) { Add-Link $sr $tgt $c.Name "copy" } }
     $JobRows.Add([ordered]@{ name = $c.Name; type = "Backup copy ($($c.Mode))"; disabled = ($c.JobEnabled -eq $false)
         repository = $(if ((Test-Node "$tgt")) { $Nodes["$tgt"].name } else { $null })
-        sources = @($c.BackupJob | Where-Object { $_ } | ForEach-Object { $_.Name }); proxies = "—" })
+        sources = @($c.BackupJob | Where-Object { $_ } | ForEach-Object { $_.Name }); proxies = "—"
+        objects = @(@(@($c.BackupJob) | Where-Object { $_ } | ForEach-Object { New-JobObject "$($_.Name)" "Job" }) +
+                    @(@(Get-Prop $c @("SourceRepository")) | Where-Object { $_ } | ForEach-Object { New-JobObject "$($_.Name)" "Repository" })) })
 }
 
 # File share / NAS backup
 foreach ($n in $nasJobs) {
     $repo = Get-IdStr (Get-Prop $n @("ShortTermBackupRepository", "BackupRepository", "StorageRepository"))
     foreach ($p in $proxyByType.GeneralPurposeProxy) { Add-Link $p $repo $n.Name "auto" }
+    # Each share or bucket, then its exclusion masks as excluded rows
+    $nasObjs = @(foreach ($b in @($n.BackupObject)) {
+        if (-not $b) { continue }
+        $path = "$(Get-Prop $b @('Path', 'Container', 'Name'))"
+        $srv = ""; try { $srv = $b.Server.GetType().Name } catch { }
+        $kind = switch -Regex ($srv) { 'SMB' { "SMB share" } 'NFS' { "NFS share" } 'ObjectStorage|S3|Azure' { "Object storage" } default { "File share" } }
+        New-JobObject $path $kind
+        foreach ($m in @(Get-Prop $b @("ExclusionMask", "ExclusionPathMask"))) { if ($m) { New-JobObject "$m" "Exclusion mask" $path "" $true } }
+    })
     $JobRows.Add([ordered]@{ name = $n.Name; type = "File backup"; disabled = ($n.JobEnabled -eq $false)
-        repository = $(if ((Test-Node "$repo")) { $Nodes["$repo"].name } else { $null }); sources = @(); proxies = "Automatic" })
+        repository = $(if ((Test-Node "$repo")) { $Nodes["$repo"].name } else { $null }); sources = @(); proxies = "Automatic"
+        objects = $nasObjs })
 }
 
 # Re-point links to SOBR extents at the SOBR itself

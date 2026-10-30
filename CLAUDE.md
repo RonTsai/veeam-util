@@ -40,7 +40,9 @@ Reply to the user in Traditional Chinese. Code, comments, console output and doc
   - `kind` is one of `backup, em, vone, agent, hv_host, vi_host, ext_host, proxy, repo, sobr, object, server`
     (`ext_host`: plug-in platforms such as Proxmox VE; PowerShell only, the REST API does not return them)
   - `links[]`: `source, target, kind (data | auto | copy | inferred), jobs`
-  - `jobs[]`, `warnings[]`, `vbr`, `lang`
+  - `jobs[]`: `name, type, disabled, repository, sources, proxies, objects`
+    (`objects[]`: `name, type, location, size, excluded`, the job's protected objects)
+  - `warnings[]`, `vbr`, `lang`
 - **i18n.** Collectors write English only. All on-screen text lives in `template.html`:
   `I18N` for UI strings, `DATA_ZH` / `DATA_ZH_RULES` for collector text. Whenever a collector
   emits new display text, add its Traditional Chinese translation there.

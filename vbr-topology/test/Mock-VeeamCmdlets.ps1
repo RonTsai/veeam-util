@@ -71,13 +71,31 @@ $J4 = job "j4" "AHV-Daily" "VmbApiPolicyTempJob" "" "r1" @() $true @("ahv01.corp
 $J5 = job "j5" "Proxmox-Daily" "VmbApiPolicyTempJob" "" "r1" @() $true @("pveclu01"); $J5.TypeToString = "Proxmox Backup"
 $J6 = job "j6" "VME-Daily" "VmbApiPolicyTempJob" "" "r1" @() $true @("VMECluster"); $J6.TypeToString = "HPE Morpheus VME Backup"
 function Get-VBRJob { $J1; $J2; $J3; $J4; $J5; $J6 }
-function Get-VBRJobObject($Job) { foreach ($h in $Job._hosts) { [pscustomobject]@{ Name = "x"; Location = "$h\Datacenter\Cluster" } } }
+# Job objects as Get-VBRJobObject returns them. Plug-in objects have no Location, only Object.Host.
+function jo($name, $disp, $loc, $hostName, $excl = $false, $size = "") {
+    [pscustomobject]@{ Name = $name; Type = $(if ($excl) { "Exclude" } else { "Include" }); Location = $loc; TypeDisplayName = $disp
+        ApproxSizeString = $size; Object = [pscustomobject]@{ Host = [pscustomobject]@{ Name = $hostName } } }
+}
+$vc = "vcsa01.corp.local"
+$J1 | Add-Member _objs @((jo "Prod-Cluster" "Cluster" "$vc\DC01\Prod-Cluster" $vc $false "1.2 TB"),
+    (jo "SQL-Servers" "Folder" "$vc\DC01\vm\SQL-Servers" $vc $false "640 GB"), (jo "test-sql01" "Virtual Machine" "$vc\DC01\vm\SQL-Servers\test-sql01" $vc $true "80 GB"))
+$J2 | Add-Member _objs @((jo "Dev" "Resource Pool" "$vc\DC01\Prod-Cluster\Dev" $vc $false "300 GB"))
+$J3 | Add-Member _objs @((jo "app01" "Virtual Machine" "hv01.corp.local" "hv01.corp.local"), (jo "hvclu01.corp.local" "Cluster" "hvclu01.corp.local" "hvclu01.corp.local"))
+$J4 | Add-Member _objs @((jo "web01" "Virtual Machine" "" "ahv01.corp.local"), (jo "web02" "Virtual Machine" "" "ahv01.corp.local"))
+$J5 | Add-Member _objs @((jo "pve-vm01" "Virtual Machine" "" "pveclu01"))
+$J6 | Add-Member _objs @((jo "vme-app01" "Virtual Machine" "" "VMECluster"))
+function Get-VBRJobObject($Job) { $Job._objs }
 function Get-VBRComputerBackupJob {
     New-Obj @{ Id = (gid "a1"); Name = "Agent-Windows"; OSPlatform = "Windows"; Mode = "ManagedByBackupServer"; JobEnabled = $true; BackupRepository = $global:R1; BackupObject = @($PG1) }
     New-Obj @{ Id = (gid "a2"); Name = "Agent-Linux"; OSPlatform = "Linux"; Mode = "ManagedByBackupServer"; JobEnabled = $true; BackupRepository = (New-Obj @{ Id = (gid "sobr") }); BackupObject = @($PG2) }
 }
 function Get-VBRBackupCopyJob { New-Obj @{ Id = (gid "c1"); Name = "Copy-to-Wasabi"; Mode = "Periodic"; JobEnabled = $true; BackupJob = @($J2); TargetRepository = $global:R4 } }
-function Get-VBRNASBackupJob { }
+if (-not ("Mock.VBRNASSMBServer" -as [type])) { Add-Type -TypeDefinition "namespace Mock { public class VBRNASSMBServer { } }" }
+function Get-VBRNASBackupJob {
+    New-Obj @{ Id = (gid "n1"); Name = "NAS-Shares"; JobEnabled = $true; ShortTermBackupRepository = $global:R1
+        BackupObject = @([pscustomobject]@{ Path = "\\nas01.corp.local\projects"; Server = (New-Object Mock.VBRNASSMBServer)
+                                            InclusionMask = @(); ExclusionMask = @("\.snapshot", "*.tmp") }) }
+}
 # Mock Enterprise Manager registration info
 if (-not ("Veeam.Backup.Core.SBackupOptions" -as [type])) {
     Add-Type -TypeDefinition @"

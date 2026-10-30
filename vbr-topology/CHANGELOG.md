@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Added
+
+- Report: click a job in the Jobs table to list its protected objects (type, name, location, size,
+  included / excluded) and highlight its data flow in the diagram. Both collectors fill the new
+  `jobs[].objects`: PowerShell from `Get-VBRJobObject` and the `BackupObject` of agent and file
+  share jobs, Python from the job details (VMs, computers, file shares, buckets, backup copy
+  sources). Exclusion masks of file share jobs show as excluded rows.
+
 ### Changed
 
 - Report: the title is now "Backup infrastructure topology" (備份基礎架構拓撲), since the report covers
@@ -93,3 +101,7 @@ First release.
 - Python shows neither plug-in platforms nor ESXi versions: the VBR REST API does not return them, and
   the vCenter REST API has no ESXi version.
 - The plug-in platform IDs were taken from one lab; other plug-in versions may use other IDs.
+- The VBR REST API does not list plug-in platform jobs (Proxmox VE, Nutanix AHV, HPE Morpheus VME),
+  so the Python report has neither these jobs nor their objects.
+- Job object locations differ by collector: PowerShell shows the full inventory path, Python only
+  the host name (vCenter / Hyper-V host).

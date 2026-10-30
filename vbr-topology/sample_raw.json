@@ -198,10 +198,24 @@
             "inventoryObject": {
               "hostName": "vcsa01.corp.local",
               "name": "Prod-Cluster",
-              "type": "Cluster"
+              "type": "Cluster",
+              "size": "1.2 TB"
             }
           }
-        ]
+        ],
+        "excludes": {
+          "vms": [
+            {
+              "inventoryObject": {
+                "hostName": "vcsa01.corp.local",
+                "name": "test-sql01",
+                "type": "VirtualMachine",
+                "size": "80 GB"
+              }
+            }
+          ],
+          "disks": []
+        }
       },
       "storage": {
         "backupRepositoryId": "sobr-1",
@@ -225,7 +239,8 @@
             "inventoryObject": {
               "hostName": "vcsa01.corp.local",
               "name": "Dev",
-              "type": "Folder"
+              "type": "Folder",
+              "size": "300 GB"
             }
           }
         ]
@@ -277,7 +292,9 @@
       "computers": [
         {
           "id": "pg-1",
-          "type": "ProtectionGroup"
+          "type": "ProtectionGroup",
+          "name": "Physical Windows Servers",
+          "path": "IndividualComputers"
         }
       ],
       "storage": {
@@ -292,7 +309,9 @@
       "computers": [
         {
           "id": "pg-2",
-          "type": "ProtectionGroup"
+          "type": "ProtectionGroup",
+          "name": "Linux AD OU",
+          "path": "ADObjects"
         }
       ],
       "storage": {
@@ -307,6 +326,42 @@
       "sourceRepositoryId": "r-1",
       "storage": {
         "backupRepositoryId": "r-4"
+      },
+      "sourceObjects": {
+        "includes": {
+          "jobs": [
+            {
+              "id": "j2",
+              "name": "VMware-Dev"
+            }
+          ],
+          "repositories": [],
+          "backups": []
+        },
+        "excludes": {
+          "jobs": [],
+          "objects": []
+        }
+      }
+    },
+    {
+      "id": "j7",
+      "name": "NAS-Shares",
+      "type": "FileBackup",
+      "isDisabled": false,
+      "objects": [
+        {
+          "fileServerId": "fs-1",
+          "path": "\\\\nas01.corp.local\\projects",
+          "inclusionMask": [],
+          "exclusionMask": [
+            "\\.snapshot",
+            "*.tmp"
+          ]
+        }
+      ],
+      "backupRepository": {
+        "backupRepositoryId": "r-1"
       }
     }
   ],

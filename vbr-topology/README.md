@@ -24,6 +24,8 @@ Scans a Veeam Backup & Replication (VBR) server and draws its backup architectur
 - data-flow arrows derived from the job settings
 - the Veeam Data Mover Service (**M**) and Veeam Agent (**A**) badges
 - **which ESXi / Hyper-V host each component runs on**
+- the protected objects of each job: click a job in the Jobs table to list them (VMs, containers,
+  protection groups, shares, exclusions) and highlight its data flow in the diagram
 
 There are two collectors that produce the same diagram from one shared `template.html`:
 

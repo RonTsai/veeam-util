@@ -23,6 +23,15 @@
   table { border-collapse:collapse; width:100%; background:#fff; font-size:13px; border:1px solid var(--line); }
   th, td { text-align:left; padding:6px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
   th { background:#eef2f3; font-weight:600; }
+  #jobTable tr.job.has { cursor:pointer; }
+  #jobTable tr.job.has:hover td { background:#f3faf5; }
+  #jobTable tr.job.open td { background:#e7f7ec; }
+  .caret { display:inline-block; width:16px; color:var(--mute); }
+  .count { color:var(--mute); font-size:12px; margin-left:6px; }
+  .hint { color:var(--mute); font-size:13px; margin:-4px 0 8px; }
+  #jobTable tr.objs > td { background:#fafbfb; padding:6px 10px 12px 36px; }
+  #jobTable tr.objs table { width:auto; min-width:60%; }
+  #jobTable tr.objs tr.ex td { color:#a3acb3; text-decoration:line-through; }
   #tip { position:fixed; pointer-events:none; background:#263038; color:#fff; font-size:12px; padding:8px 10px;
          border-radius:6px; max-width:360px; display:none; z-index:10; line-height:1.5; }
   #tip b { color:#7be495; }
@@ -50,10 +59,11 @@
     <h2 data-i18n="placeTitle"></h2>
     <table id="placeTable"></table>
   </div>
+  <h2 data-i18n="jobsTitle"></h2>
+  <p class="hint" data-i18n="objHint"></p>
+  <table id="jobTable"></table>
   <h2 data-i18n="invTitle"></h2>
   <table id="invTable"></table>
-  <h2 data-i18n="jobsTitle"></h2>
-  <table id="jobTable"></table>
 </section>
 <div id="tip"></div>
 
@@ -67,6 +77,9 @@ const MODEL = /*__MODEL__*/null;
 const I18N = {
   en: {
     pageTitle: "Backup infrastructure topology",
+    objHint: "Click a job to see its protected objects and highlight its data flow in the diagram.",
+    objType: "Type", objName: "Object", objLocation: "Location", objSize: "Size", objMode: "Mode",
+    objInclude: "Included", objExclude: "Excluded",
     langBtn: "中文", dlSvg: "Download SVG", dlPng: "Download PNG", dlJson: "Download JSON",
     showInferred: "Show inferred links (dashed)", showOther: "Show other managed servers",
     placeTitle: "Component hosts", invTitle: "Infrastructure inventory", jobsTitle: "Jobs",
@@ -86,6 +99,9 @@ const I18N = {
   },
   zh: {
     pageTitle: "備份基礎架構拓撲",
+    objHint: "點選 Job 可查看保護的物件，並在架構圖上標出它的資料流。",
+    objType: "類型", objName: "物件", objLocation: "位置", objSize: "大小", objMode: "方式",
+    objInclude: "包含", objExclude: "排除",
     langBtn: "English", dlSvg: "下載 SVG", dlPng: "下載 PNG", dlJson: "下載 JSON",
     showInferred: "顯示推測連線 (虛線)", showOther: "顯示其他受管伺服器",
     placeTitle: "元件所在主機", invTitle: "基礎架構清單", jobsTitle: "Jobs",
@@ -119,6 +135,8 @@ const DATA_ZH = {
   "Could not read jobs; data flow is shown as inferred (dashed) links.": "無法讀取 Jobs，資料流以推測方式 (虛線) 呈現。",
   "vSphere inventory unavailable; component hosts not matched (use --placement-csv)": "無法取得 vSphere 清冊，未比對元件所在主機 (可用 --placement-csv 手動指定)",
   "Plug-in platform": "Plug-in 平台",
+  "Exclusion mask": "排除遮罩", "File share": "檔案共用", "SMB share": "SMB 共用", "NFS share": "NFS 共用",
+  "Object storage": "物件儲存",
   "Proxies of plug-in platforms (Proxmox VE, Nutanix AHV, HPE Morpheus VME) cannot be read through PowerShell or the REST API and are not shown.":
     "Plug-in 平台 (Proxmox VE、Nutanix AHV、HPE Morpheus VME) 的 proxy 無法透過 PowerShell 或 REST API 讀取，因此不會顯示。",
   "The vSphere inventory was read, but it has no VM-to-host relation; component hosts not matched (use the PowerShell version or --placement-csv)":
@@ -336,7 +354,7 @@ function render() {
     else d = `M${sx} ${l.sy} H${l.c1} V${l.laneY} H${l.c2} V${l.ty} H${tx}`;
     const tip = `${esc(a.name)} → ${esc(b.name)}` + (l.jobs.length ? "\n" + l.jobs.map(esc).join("\n") : "") +
                 (l.kind === "inferred" ? "\n" + t("tipInferred") : l.kind === "auto" ? "\n" + t("tipAuto") : "");
-    s += `<g class="link" data-s="${esc(l.source)}" data-t="${esc(l.target)}"><title>${tip}</title>
+    s += `<g class="link" data-s="${esc(l.source)}" data-t="${esc(l.target)}" data-jobs="${esc(JSON.stringify(l.jobs))}"><title>${tip}</title>
       <path class="flow ${l.kind}" d="${d}" marker-end="url(#arr-${l.kind})"/><path class="hit" d="${d}"/></g>`;
   });
 
@@ -388,6 +406,7 @@ function render() {
   svg.setAttribute("viewBox", `0 0 ${totalW} ${totalH}`);
   svg.innerHTML = s;
   wireHover(svg);
+  highlightSelJob();
 }
 
 function wireHover(svg) {
@@ -413,7 +432,7 @@ function wireHover(svg) {
       tip.style.display = "block";
     });
     g.addEventListener("mousemove", e => { tip.style.left = Math.min(e.clientX + 14, innerWidth - 380) + "px"; tip.style.top = e.clientY + 14 + "px"; });
-    g.addEventListener("mouseleave", () => { tip.style.display = "none"; svg.querySelectorAll(".dim").forEach(x => x.classList.remove("dim")); });
+    g.addEventListener("mouseleave", () => { tip.style.display = "none"; highlightSelJob(); });
   });
 }
 
@@ -435,9 +454,54 @@ function tables() {
         <td>${esc(n.name)}</td><td>${esc(kindLabel(n.kind))}</td><td>${esc(n.placement.vm || "")}</td>
         <td>${esc(td(n.placement.source || n.placement.note || ""))}</td></tr>`).join("")).join("");
   }
+  // Jobs with protected objects expand on click (see toggleJob)
   document.getElementById("jobTable").innerHTML = th(["thJob", "thType", "thSource", "thProxy", "thRepo", "thState"]) +
-    (MODEL.jobs || []).map(j => `<tr><td>${esc(j.name)}</td><td>${esc(j.type)}</td><td>${esc((j.sources || []).join(", "))}</td>
-      <td>${esc(j.proxies)}</td><td>${esc(j.repository)}</td><td>${esc(t(j.disabled ? "disabled" : "enabled"))}</td></tr>`).join("");
+    (MODEL.jobs || []).map((j, i) => {
+      const objs = j.objects || [], has = objs.length > 0;
+      const row = `<tr class="job${has ? " has" : ""}" data-i="${i}"><td><span class="caret">${has ? "▸" : ""}</span>${esc(j.name)}${
+        has ? `<span class="count">(${objs.filter(o => !o.excluded).length})</span>` : ""}</td><td>${esc(j.type)}</td>
+        <td>${esc((j.sources || []).join(", "))}</td><td>${esc(j.proxies)}</td><td>${esc(j.repository)}</td>
+        <td>${esc(t(j.disabled ? "disabled" : "enabled"))}</td></tr>`;
+      const sub = has ? `<tr class="objs" data-for="${i}" hidden><td colspan="6"><table>${
+        th(["objType", "objName", "objLocation", "objSize", "objMode"])}${objs.map(o => `<tr class="${o.excluded ? "ex" : ""}">
+        <td>${esc(td(o.type))}</td><td>${esc(o.name)}</td><td>${esc(o.location)}</td><td>${esc(o.size)}</td>
+        <td>${esc(t(o.excluded ? "objExclude" : "objInclude"))}</td></tr>`).join("")}</table></td></tr>` : "";
+      return row + sub;
+    }).join("");
+  document.querySelectorAll("#jobTable tr.job.has").forEach(tr => tr.onclick = () => toggleJob(tr));
+  showSelJob();
+}
+
+// The expanded job (index into MODEL.jobs), or null. One job at a time; it survives re-renders,
+// and node hovers fall back to its highlight when the mouse leaves.
+let selJob = null;
+
+function toggleJob(tr) {
+  selJob = selJob === +tr.dataset.i ? null : +tr.dataset.i;
+  showSelJob();
+}
+
+// Expand the selected job's objects in the table and highlight its links in the diagram
+function showSelJob() {
+  document.querySelectorAll("#jobTable tr.job.has").forEach(x => {
+    const on = +x.dataset.i === selJob;
+    x.classList.toggle("open", on); x.querySelector(".caret").textContent = on ? "▾" : "▸";
+    document.querySelector(`#jobTable tr.objs[data-for="${x.dataset.i}"]`).hidden = !on;
+  });
+  highlightSelJob();
+}
+
+function highlightSelJob() {
+  const svg = document.getElementById("diagram");
+  svg.querySelectorAll(".dim").forEach(x => x.classList.remove("dim"));
+  if (selJob == null) return;
+  // Link labels are the job name, plus " (disabled)" for disabled jobs
+  const name = MODEL.jobs[selJob].name, ends = new Set();
+  svg.querySelectorAll(".link").forEach(l => {
+    const on = JSON.parse(l.dataset.jobs).some(x => x === name || x.startsWith(name + " ("));
+    l.classList.toggle("dim", !on); if (on) { ends.add(l.dataset.s); ends.add(l.dataset.t); }
+  });
+  if (ends.size) svg.querySelectorAll(".node").forEach(n => n.classList.toggle("dim", !ends.has(n.dataset.id)));
 }
 
 function download(name, blob) { const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name; a.click(); }
