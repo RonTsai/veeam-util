@@ -66,6 +66,8 @@ function job($k, $name, $type, $plat, $repoKey, $proxies, $auto, $hosts) {
 $J1 = job "j1" "VMware-Prod-Daily" "Backup" "EVmware" "sobr" @("vpx1","vpx2") $false @("vcsa01.corp.local")
 $J2 = job "j2" "VMware-Dev" "Backup" "EVmware" "r1" @() $true @("vcsa01.corp.local")
 $J3 = job "j3" "HyperV-Daily" "Backup" "EHyperV" "r1" @() $true @("hv01.corp.local","hvclu01.corp.local")
+# TypeToString as VBR shows it
+$J1.TypeToString = "VMware Backup"; $J2.TypeToString = "VMware Backup"; $J3.TypeToString = "Hyper-V Backup"
 # Plug-in jobs: the platform is only in TypeToString. Proxmox names its cluster, not a registered host.
 $J4 = job "j4" "AHV-Daily" "VmbApiPolicyTempJob" "" "r1" @() $true @("ahv01.corp.local"); $J4.TypeToString = "Nutanix AHV Backup"
 $J5 = job "j5" "Proxmox-Daily" "VmbApiPolicyTempJob" "" "r1" @() $true @("pveclu01"); $J5.TypeToString = "Proxmox Backup"

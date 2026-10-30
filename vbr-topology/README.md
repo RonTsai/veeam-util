@@ -5,17 +5,24 @@
 > [!IMPORTANT]
 > **Both collectors are read-only. They never change anything on VBR.**
 >
-> - PowerShell: only `Get-*` / `Find-*` cmdlets are called. With `-UsePowerCLI`, vCenter is only read
+> - PowerShell: only `Get-*` / `Find-*` cmdlets are called, plus read-only methods of the objects they
+>   return (such as `GetProxy()` and `GetPhysicalHost()`). With `-UsePowerCLI`, vCenter is only read
 >   (`Get-VM`).
 > - Python: only REST `GET` requests, plus login / logout and the inventory browser query
 >   (a `POST` that only reads data). With `--vcenter-user`, vCenter is only read (hosts, VMs, guest identity).
 
-![VBR topology report (English)](docs/images/report-en.png)
+![VBR topology report: architecture diagram](docs/images/report-en.png)
 
-*Report generated from mock data (`test/`), with the vCenter lookup enabled.*
+*Diagram of a report generated from mock data (`test/`) with the PowerShell collector and the PowerCLI
+mock. All names are made up.*
 
-Scans a Veeam Backup & Replication (VBR) server and draws its backup architecture in the style of the
-"Backup architecture: data movers" slide:
+> [!TIP]
+> **Try the report without a VBR server:** download [`docs/example.html`](docs/example.html) (on GitHub,
+> open it and click **Download raw file**), then open it in a browser. It is the full report built from
+> the same mock data: hover the cards, click a job, switch between English and 中文, export SVG / PNG.
+
+Scans a Veeam Backup & Replication (VBR) server and writes an interactive HTML report, "Backup
+infrastructure topology". Its diagram follows the style of the "Backup architecture: data movers" slide:
 
 - the management network with the backup server, Enterprise Manager and Veeam ONE on top
 - sources (Veeam Agents, Hyper-V, VMware vSphere, plug-in platforms such as Proxmox VE, Nutanix AHV and
@@ -24,8 +31,10 @@ Scans a Veeam Backup & Replication (VBR) server and draws its backup architectur
 - data-flow arrows derived from the job settings
 - the Veeam Data Mover Service (**M**) and Veeam Agent (**A**) badges
 - **which ESXi / Hyper-V host each component runs on**
-- the protected objects of each job: click a job in the Jobs table to list them (VMs, containers,
-  protection groups, shares, exclusions) and highlight its data flow in the diagram
+
+Below the diagram, the report lists the component hosts, the jobs and the full infrastructure inventory.
+**Click a job** to list its protected objects (VMs, containers, protection groups, shares, exclusions)
+and highlight its data flow in the diagram. See [Jobs and protected objects](#jobs-and-protected-objects).
 
 There are two collectors that produce the same diagram from one shared `template.html`:
 
@@ -35,6 +44,9 @@ There are two collectors that produce the same diagram from one shared `template
 | Talks to | Veeam PowerShell module | VBR REST API |
 | Needs | Windows PowerShell 5.1 or PowerShell 7 | Python 3.8+, standard library only |
 | Enterprise Manager | Auto-detected | `--em <host>` (or auto, when EM is installed on the VBR host) |
+| vSphere versions | vCenter and ESXi | vCenter only (with `--vcenter-user`) |
+| Plug-in platforms (Proxmox VE, Nutanix AHV, HPE Morpheus VME) | Hosts and jobs | — (not in the REST API) |
+| Job protected objects | All job types, with full inventory paths | All but plug-in jobs; location is the host name |
 | Extras | Tape servers, replica jobs, SOBR capacity-tier offload | — |
 
 ## Files
@@ -46,6 +58,7 @@ There are two collectors that produce the same diagram from one shared `template
 | `template.html` | Diagram template used by both. **Keep it in the same folder as the scripts.** |
 | `placement_sample.csv` | Example of a manual component → host map |
 | `sample_raw.json` | Demo data for the Python version (`--from-raw sample_raw.json`) |
+| `docs/example.html` | Example report built from the mock data, to try without a VBR server |
 | `test/` | Offline mocks of the Veeam cmdlets and of the VBR / EM REST APIs |
 
 ## Output
@@ -60,8 +73,8 @@ out\
 
 | File | Contents |
 |---|---|
-| `topology.html` | Interactive diagram. Hover shows details and highlights related links and hosts. Exports SVG / PNG / JSON. |
-| `topology.json` | Normalized nodes, links and jobs |
+| `topology.html` | Interactive report. Hovering a card shows its details and highlights related links and hosts; clicking a job lists its protected objects. Exports the diagram as SVG / PNG, and the model as JSON. |
+| `topology.json` | Normalized nodes, links and jobs, including each job's protected objects |
 | `vbr_raw.json` | Python only: raw API responses, for troubleshooting or re-rendering offline |
 
 ### Report language
@@ -297,24 +310,59 @@ Without PowerCLI, the script falls back to the Veeam inventory automatically.
   every VMware proxy is linked (light green).
 - **Hyper-V job**: on-host mode links the Hyper-V host straight to the repository, because the host runs the
   Data Mover itself. Off-host mode goes through the proxy.
+- **Plug-in job** (Proxmox VE, Nutanix AHV, HPE Morpheus VME, PowerShell only): source host → repository,
+  since the plug-in proxies cannot be read. When the job's source is not a registered host (for example a
+  Proxmox cluster name), every host of that platform gets an inferred (dashed) link.
 - **Agent job**: protection group → repository
+- **File share job**: general-purpose proxies → repository
 - **Backup copy, replica, SOBR offload**: blue dashed line
 - **SOBR extents**: merged into their SOBR
 - **Sources without job information**: get a gray dashed "inferred" link to the proxies. ESXi hosts are skipped
   when a vCenter is present.
 - **Managed servers without a role**: listed under "Other servers"
 
+## Jobs and protected objects
+
+![Jobs table with one job expanded](docs/images/report-jobs-en.png)
+
+Click a job in the **Jobs** table to expand its protected objects: type, name, location, size, and
+whether the object is included or excluded (excluded rows are struck through). The job's links stay
+highlighted in the diagram until you click the job again, even while you hover other cards.
+
+| Job type | PowerShell | Python (REST) |
+|---|---|---|
+| VMware, Hyper-V, Cloud Director, replica | `Get-VBRJobObject` (type from `TypeDisplayName`, full inventory path) | `virtualMachines.includes` / `excludes.vms` (location is the host name) |
+| Plug-in (Proxmox VE, Nutanix AHV, HPE Morpheus VME) | `Get-VBRJobObject` (no location) | — (not in the REST API) |
+| Agent | `BackupObject`: protection groups | `computers`: protection groups |
+| File share, object storage | `BackupObject`: shares and buckets, each exclusion mask as an excluded row | `objects`: the same |
+| Backup copy | Source jobs and repositories | `sourceObjects` |
+
+Disk-level settings (which disks of a VM to process) are not shown as exclusions.
+
 ## Offline tests
 
 ```powershell
-# PowerShell: fake Veeam cmdlets
-. .\test\Mock-VeeamCmdlets.ps1; .\Get-VBRTopology.ps1 -Server vbr01.corp.local -OutDir .\test\out_ps
+# PowerShell: fake Veeam cmdlets (also runs with pwsh 7 on macOS / Linux)
+. .\test\Mock-VeeamCmdlets.ps1; .\Get-VBRTopology.ps1 -Server vbr01.corp.local -OutDir .\test\out_ps -NoTimestamp
+
+# With fake PowerCLI as well (the vCenter password "bad" is rejected)
+. .\test\Mock-PowerCLI.ps1; .\Get-VBRTopology.ps1 -Server vbr01.corp.local -OutDir .\test\out_ps -NoTimestamp -UsePowerCLI
 ```
 
+Use a new PowerShell window afterwards: the fake cmdlets stay loaded and hide the real Veeam ones until
+the window is closed.
+
 ```bash
-# Python: HTTPS mock of the VBR and EM REST APIs (needs a self-signed cert)
+# Python: offline, from the demo data
+python3 vbr_topology.py --from-raw sample_raw.json --out demo_out --no-timestamp
+
+# Python: HTTPS mock of the VBR, EM and vCenter REST APIs (needs a self-signed cert)
 openssl req -x509 -newkey rsa:2048 -nodes -keyout key.pem -out cert.pem -days 2 -subj /CN=localhost
 python3 test/mock_vbr_rest.py cert.pem key.pem 19419 19398 19443 &   # VBR, EM and vCenter mocks
 EM_REST_PORT=19398 VBR_PASSWORD=x VCENTER_PASSWORD=x python3 vbr_topology.py --host localhost --port 19419 \
   --user admin --insecure --em localhost --vcenter-user ro@vsphere.local --vcenter localhost:19443
 ```
+
+## Known limitations
+
+See "Known limitations" in [CHANGELOG.md](CHANGELOG.md).
