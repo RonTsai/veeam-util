@@ -655,7 +655,7 @@ if ($UsePowerCLI) {
                 $noHost = 0
                 foreach ($vm in $vms) {
                     if (-not $vm.VMHost -or -not $vm.VMHost.Name) { $noHost++; continue }
-                    $info = @{ host = $vm.VMHost.Name; vm = $vm.Name; source = "PowerCLI ($($vc.Name))"; platform = "vi" }
+                    $info = @{ host = $vm.VMHost.Name; vm = $vm.Name; source = "PowerCLI ($($vc.Name))"; platform = "vi"; ips = @($vm.Guest.IPAddress) }
                     Add-PlaceKeys $vm.Name $info
                     if ($vm.Guest.HostName) { Add-PlaceKeys $vm.Guest.HostName $info }
                     foreach ($ip in @($vm.Guest.IPAddress)) { Add-PlaceKey $ip $info }
@@ -728,6 +728,14 @@ function Get-NameVariants([string]$Name) {
     return , $out
 }
 
+# IPv4 addresses (no loopback / link-local), else global IPv6; comma-separated
+function Select-Ips($Addrs) {
+    $all = @(@($Addrs) | ForEach-Object { "$_" } | Where-Object { $_ } | Select-Object -Unique)
+    $v4 = @($all | Where-Object { $_ -match '^\d+\.\d+\.\d+\.\d+$' -and $_ -notmatch '^(127|169\.254)\.' })
+    if ($v4.Count) { return $v4 -join ", " }
+    return (@($all | Where-Object { $_ -match ':' -and $_ -notmatch '^(fe80|::1$)' }) -join ", ")
+}
+
 $placedCount = 0
 foreach ($n in @($Nodes.Values)) {
     if ($n.kind -notin @("backup", "em", "vone", "proxy", "repo", "server")) { continue }
@@ -762,9 +770,23 @@ foreach ($n in @($Nodes.Values)) {
     $n["runsOn"] = $hid
     $n.details["Runs on"] = "$hn (VM: $($hit.vm))"
     $n.details["Matched by"] = $hit.source
+    $guestIps = Select-Ips $hit.ips
+    if ($guestIps) { $n.details["IP"] = "$guestIps (VM guest)" }
     $placedCount++
 }
 Write-Host ("  [OK]   {0,-28} {1}" -f "Components placed", $placedCount)
+
+# IP addresses for the hover details: the VM's guest IPs (PowerCLI) when known, else DNS
+foreach ($n in @($Nodes.Values)) {
+    if ($n.kind -in @("agent", "sobr", "object") -or $n.details["IP"]) { continue }
+    $nm = if ($n.details["Host"]) { $n.details["Host"] } elseif ($n.kind -ne "repo") { $n.name } else { $null }
+    if (-not $nm) { continue }
+    $ip = $null
+    if ([System.Net.IPAddress]::TryParse($nm, [ref]$ip)) { $n.details["IP"] = $nm; continue }
+    Get-NameVariants $nm | Out-Null   # fills the DNS cache
+    $he = $dnsCache[$nm]
+    if ($he) { $found = Select-Ips $he.AddressList; if ($found) { $n.details["IP"] = "$found (DNS)" } }
+}
 
 # SOBR: summarize where the extents live (extents themselves are not drawn)
 foreach ($n in @($Nodes.Values)) {

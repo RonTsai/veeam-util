@@ -1,5 +1,13 @@
 # Changelog: vbr-topology
 
+## Unreleased
+
+### Added
+
+- Report: hovering a component shows its IP address, from the VM's guest IPs when PowerCLI or the
+  vCenter REST API matched it, otherwise from DNS (both collectors). IPv4 is preferred; loopback and
+  link-local addresses are skipped.
+
 ## v1.3.1 (2026-10-30)
 
 ### Added

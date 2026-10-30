@@ -155,6 +155,9 @@ const DATA_ZH_RULES = [
     "VBR 無法連到 Hyper-V cluster $1。請確認叢集服務正在執行，或從 VBR 移除已不存在的 cluster。詳細: $2"],
   [/^vCenter REST \((.+)\)$/, "vCenter REST ($1)"],
   [/^ESXi hosts run different versions: (.*)$/, "ESXi 主機版本不一致: $1"],
+  // Where an IP address came from (hover details)
+  [/^(.+) \(VM guest\)$/, "$1 (取自 VM)"],
+  [/^(.+) \(DNS\)$/, "$1 (DNS 查詢)"],
   [/^vCenter (\S+) version: (.*)$/s, "讀取 vCenter $1 版本失敗: $2"],
   // SOBR extent summaries: "Extents: esx02 / Unknown", "LHR01 → esx02; LHR02 → Unknown"
   [/^Extents: (.*)$/, (_, x) => "Extents: " + x.split(" / ").map(td).join(" / ")],

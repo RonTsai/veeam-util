@@ -576,7 +576,7 @@ def placement_index(raw, csv_rows):
         for vm in data.get("vms") or []:
             if not vm.get("host"):
                 continue
-            info = {"host": vm["host"], "vm": vm.get("name"), "source": src, "platform": "vi"}
+            info = {"host": vm["host"], "vm": vm.get("name"), "source": src, "platform": "vi", "ips": vm.get("ips")}
             add_names(vm.get("name"), info)
             add_names(vm.get("guestHost"), info)
             for ip in vm.get("ips") or []:
@@ -656,6 +656,37 @@ def name_variants(name):
             out += [n, n.split(".")[0]]
         out += addrs
     return out
+
+
+def pick_ips(addrs):
+    """IPv4 addresses (no loopback / link-local), else global IPv6; comma-separated."""
+    out = []
+    for a in addrs or []:
+        try:
+            ip = ipaddress.ip_address(a)
+        except ValueError:
+            continue
+        if not (ip.is_loopback or ip.is_link_local) and str(ip) not in out:
+            out.append(str(ip))
+    return ", ".join([a for a in out if "." in a] or out)
+
+
+def add_ips(nodes):
+    """IP addresses for the hover details, where placement did not already give the guest IPs: DNS."""
+    for n in nodes.values():
+        if n["kind"] in ("agent", "sobr", "object") or n["details"].get("IP"):
+            continue
+        name = n["details"].get("Host") or (n["name"] if n["kind"] != "repo" else None)
+        if not name:
+            continue
+        if _is_ip(name):
+            n["details"]["IP"] = name
+            continue
+        name_variants(name)  # fills the DNS cache
+        res = _dns_cache.get(name)
+        ips = pick_ips(res[2]) if res else ""
+        if ips:
+            n["details"]["IP"] = f"{ips} (DNS)"
 
 
 def build_model(raw, csv_rows=()):
@@ -967,6 +998,8 @@ def build_model(raw, csv_rows=()):
     elif any(n["kind"] == "vi_host" for n in nodes.values()):
         warnings.append("vSphere inventory unavailable; component hosts not matched (use --placement-csv)")
 
+    add_ips(nodes)
+
     for n in nodes.values():
         n["details"] = {k: v for k, v in n["details"].items() if v not in (None, "", [])}
 
@@ -1017,6 +1050,8 @@ def apply_placement(nodes, by_name, place_by, add_node, vbr_name):
         n["runsOn"] = hid
         n["details"]["Runs on"] = f"{host} (VM: {hit.get('vm')})"
         n["details"]["Matched by"] = hit["source"]
+        if pick_ips(hit.get("ips")):
+            n["details"]["IP"] = f"{pick_ips(hit.get('ips'))} (VM guest)"
 
     # SOBR: summarize where the extents live (extents themselves are not drawn)
     for n in nodes.values():

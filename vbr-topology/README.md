@@ -288,6 +288,11 @@ example `ESXi: esx01.corp.local`. Anything not found shows as "Physical / unknow
 cards summarize where their extents run. Hovering an ESXi host highlights every component on it.
 The report also has a table grouped by host.
 
+Hovering a card also shows its **IP address**: the VM's guest IPs when PowerCLI (`-UsePowerCLI`) or the
+vCenter REST API (`--vcenter-user`) matched it ("VM guest"), otherwise what DNS returns for its name on
+the machine that builds the report ("DNS"). IPv4 addresses are preferred; loopback and link-local
+addresses are left out.
+
 Matching methods, highest priority first:
 
 | Method | PowerShell | Python | Notes |
