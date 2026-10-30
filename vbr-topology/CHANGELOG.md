@@ -4,6 +4,15 @@
 
 ### Added
 
+- PowerShell: plug-in platforms (Proxmox VE, Nutanix AHV, HPE Morpheus VME) as source hosts, from
+  managed servers of type `ExternalInfrastructureServer`. They get their own column and node kind
+  (`ext_host`) in the report. An unknown platform ID shows as "Plug-in platform".
+- PowerShell: data flow for plug-in platform jobs (Proxmox VE, Nutanix AHV, HPE Morpheus VME), from the
+  source host straight to the repository. A source that is not a registered plug-in host, such as a
+  Proxmox cluster name, gets inferred (dashed) links from every host of that platform.
+- PowerShell: vCenter and ESXi product, version and build (from `Get-VBRServer`, no PowerCLI needed),
+  plus a warning when the ESXi hosts run different versions.
+- Python: vCenter product, version and build with `--vcenter-user` (`/api/appliance/system/version`).
 - PowerShell: `-VCenterCredentialMap` to give each vCenter its own credentials.
 - PowerShell and Python: when a vCenter rejects the login, ask once more for that vCenter's
   credentials, since vCenters often use different accounts. No prompt when the credentials come
@@ -17,6 +26,10 @@
 
 ### Fixed
 
+- PowerShell: Nutanix AHV jobs were treated as Hyper-V jobs ("AHV" matched "Hv"); a source that was
+  not a managed server then showed up as a made-up Hyper-V host.
+- PowerShell: a relative `-OutDir` or `-Template` failed with "Could not find a part of the path",
+  because .NET file calls resolve it against the Veeam Console folder, not the current location.
 - PowerShell: `-UsePowerCLI` crashed with "You cannot call a method on a null-valued expression"
   when vCenter returned VMs without a host (disconnected host, orphaned VM). Such VMs are now
   skipped, and the console shows how many.
@@ -57,3 +70,9 @@ First release.
 - PowerShell detects Enterprise Manager through an undocumented VBR API
   (`SBackupOptions.GetEnterpriseServerInfo`), which may change between versions.
 - Hyper-V placement (`Find-VBRHvEntity`) has not been tested on a real Hyper-V environment.
+- The proxies (workers) of plug-in platforms (Proxmox VE, Nutanix AHV, HPE Morpheus VME) are not
+  exposed through PowerShell (`GetChilds()` / `GetSubHosts()` return nothing) or the REST API, so the
+  report does not show them.
+- Python shows neither plug-in platforms nor ESXi versions: the VBR REST API does not return them, and
+  the vCenter REST API has no ESXi version.
+- The plug-in platform IDs were taken from one lab; other plug-in versions may use other IDs.
