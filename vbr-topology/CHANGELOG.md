@@ -1,6 +1,6 @@
 # Changelog: vbr-topology
 
-## Unreleased
+## v1.3.0 (2026-10-30)
 
 ### Added
 
@@ -15,6 +15,8 @@
 - Report: the title is now "Backup infrastructure topology" (備份基礎架構拓撲), since the report covers
   more than data movers. It follows the language switch, and the browser tab also shows the VBR
   name. Downloads are named `vbr-topology.svg` / `vbr-topology.png`.
+- Report: the Jobs table now comes right after Component hosts, before the infrastructure
+  inventory.
 
 ## v1.2.0 (2026-10-30)
 
