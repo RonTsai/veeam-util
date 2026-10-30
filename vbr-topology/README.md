@@ -17,9 +17,11 @@
 mock. All names are made up.*
 
 > [!TIP]
-> **Try the report without a VBR server:** download [`docs/example.html`](docs/example.html) (on GitHub,
-> open it and click **Download raw file**), then open it in a browser. It is the full report built from
-> the same mock data: hover the cards, click a job, switch between English and 中文, export SVG / PNG.
+> **Try the report without a VBR server:**
+> [**open the example report online**](https://htmlpreview.github.io/?https://raw.githubusercontent.com/RonTsai/veeam-util/main/vbr-topology/docs/example.html),
+> or download [`docs/example.html`](docs/example.html) (on GitHub, open it and click **Download raw
+> file**) and open it in a browser. It is the full report built from the same mock data: hover the
+> cards, click a job, switch between English and 中文, export SVG / PNG.
 
 Scans a Veeam Backup & Replication (VBR) server and writes an interactive HTML report, "Backup
 infrastructure topology". Its diagram follows the style of the "Backup architecture: data movers" slide:
