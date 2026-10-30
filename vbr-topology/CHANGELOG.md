@@ -1,6 +1,6 @@
 # Changelog: vbr-topology
 
-## Unreleased
+## v1.4.0 (2026-10-30)
 
 ### Added
 
