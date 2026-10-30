@@ -229,21 +229,58 @@ try {
 } catch { }
 foreach ($m in $EnterpriseManager) { Add-Mgmt "em" $m "Enterprise Manager" @{ Source = "Manual (-EnterpriseManager)" } }
 
+# Plug-in platforms (ExternalInfrastructureServer) carry no type field; the platform ID is the
+# "_platform_<guid>" suffix of their physical host name. Unknown IDs show as "Plug-in platform".
+$PluginPlatforms = @{
+    "01208ee8-47fe-4ea8-8727-5115874da1ad" = "Proxmox VE"
+    "799a5a3e-ae1e-4eaf-86eb-8a9acc2670e2" = "Nutanix AHV"
+    "2d470d24-b6bb-4fa3-b7ff-f0fc1137ca52" = "HPE Morpheus VME"
+}
+# "VMware ESXi 8.0.3 build-25595708" -> Product / Version / Build
+function Get-ViVersion($Server) {
+    $txt = "$(Get-Prop $Server @('Info.Info'))"
+    if ($txt -match '^(.*?)\s+(\d+(?:\.\d+)+)\s+build-(\d+)') { return @{ Product = $Matches[1]; Version = $Matches[2]; Build = $Matches[3] } }
+    return $null
+}
+
 $serverById = @{}; $serverByName = @{}
+$esxiVersions = @{}
 foreach ($s in $servers) {
     $id = Get-IdStr $s; $t = "$($s.Type)"
     $serverById[$id] = $s; $serverByName[$s.Name.ToLower()] = $s
     $det = @{ Type = $t; Description = $s.Description; Status = $(if ($s.IsUnavailable) { "Unavailable" } else { "Available" }) }
     if ($s.Name -ieq $vbrName -or $t -eq "Local" -or $s.Name -ieq [Environment]::MachineName) { [void]$UsedHosts.Add($id) }
+    $ver = ""
+    if ($t -match '^(VC|ESXi?)$') {
+        $v = Get-ViVersion $s
+        if ($v) {
+            $det["Product"] = $v.Product; $det["Version"] = $v.Version; $det["Build"] = $v.Build; $ver = " $($v.Version)"
+            if ($t -ne "VC") { $esxiVersions[$v.Version] = 1 + [int]$esxiVersions[$v.Version] }
+        }
+    }
     switch -Regex ($t) {
-        '^VC$'           { Add-Node $id "vi_host" $s.Name "vCenter Server · Source host" @() $det | Out-Null; [void]$UsedHosts.Add($id) }
-        '^ESXi?$'        { Add-Node $id "vi_host" $s.Name "ESXi · Source host" @() $det | Out-Null; [void]$UsedHosts.Add($id) }
+        '^VC$'           { Add-Node $id "vi_host" $s.Name "vCenter Server$ver · Source host" @() $det | Out-Null; [void]$UsedHosts.Add($id) }
+        '^ESXi?$'        { Add-Node $id "vi_host" $s.Name "ESXi$ver · Source host" @() $det | Out-Null; [void]$UsedHosts.Add($id) }
+        '^ExternalInfrastructureServer$' {
+            $platId = $null
+            try { if ("$($s.GetPhysicalHost().Name)" -match '_platform_([0-9a-fA-F-]{36})$') { $platId = $Matches[1].ToLower() } } catch { }
+            $plat = if ($platId -and $PluginPlatforms.ContainsKey($platId)) { $PluginPlatforms[$platId] } else { "Plug-in platform" }
+            $det["Platform"] = $plat; $det["Platform ID"] = $platId
+            Add-Node $id "ext_host" $s.Name "$plat · Source host" @() $det | Out-Null; [void]$UsedHosts.Add($id)
+        }
         'Vcd|CloudDir'   { Add-Node $id "vi_host" $s.Name "VMware Cloud Director" @() $det | Out-Null; [void]$UsedHosts.Add($id) }
         '^Hv(Server|Host)$' { $det["Data Mover"] = "On-host proxy (Veeam Data Mover Service)"
                            Add-Node $id "hv_host" $s.Name "Hyper-V host · Source host" @("M") $det | Out-Null; [void]$UsedHosts.Add($id) }
         '^HvCluster$'    { Add-Node $id "hv_host" $s.Name "Hyper-V cluster · Source host" @("M") $det | Out-Null; [void]$UsedHosts.Add($id) }
         '^Scvmm$'        { Add-Node $id "hv_host" $s.Name "SCVMM · Source host" @("M") $det | Out-Null; [void]$UsedHosts.Add($id) }
     }
+}
+if ($esxiVersions.Count -gt 1) {
+    $vlist = ($esxiVersions.Keys | Sort-Object { [version]$_ } -Descending | ForEach-Object { "$_ × $($esxiVersions[$_])" }) -join ", "
+    $script:Warnings.Add("ESXi hosts run different versions: $vlist")
+}
+if (@($Nodes.Values | Where-Object { $_.kind -eq "ext_host" }).Count) {
+    $script:Warnings.Add("Proxies of plug-in platforms (Proxmox VE, Nutanix AHV, HPE Morpheus VME) cannot be read through PowerShell or the REST API and are not shown.")
 }
 
 function Resolve-HostName($obj) {
@@ -411,6 +448,20 @@ foreach ($j in $jobs) {
         continue
     }
     if (-not (Test-Node $repo)) { continue }
+    # Plug-in platform jobs (checked before Hyper-V: "AHV" would match "Hv"). Their proxies are not
+    # readable, so the source links straight to the repository. A source that is not a registered
+    # plug-in host (e.g. a cluster name) gets inferred links from every host of that platform.
+    $jobPlat = if ($typeStr -match "Proxmox") { "Proxmox VE" } elseif ($typeStr -match "Nutanix|AHV") { "Nutanix AHV" }
+               elseif ($typeStr -match "Morpheus") { "HPE Morpheus VME" } elseif ($type -match "VmbApi") { "Plug-in platform" } else { $null }
+    if ($jobPlat) {
+        $platHosts = @($Nodes.Values | Where-Object { $_.kind -eq "ext_host" -and $_.details["Platform"] -eq $jobPlat })
+        foreach ($h in $hosts) {
+            $hit = @($platHosts | Where-Object { $_.name -ieq $h })
+            if ($hit.Count) { foreach ($x in $hit) { Add-Link $x.id $repo $label "auto" } }
+            else { foreach ($x in $platHosts) { Add-Link $x.id $repo $label "inferred" } }
+        }
+        continue
+    }
     if ($all -match "HyperV|Hv") {
         foreach ($h in $hosts) {
             $src = Resolve-SourceNode $h "hv"
@@ -733,11 +784,15 @@ if (-not $NoTimestamp) {
     $OutDir = Join-Path $OutDir ("{0}_{1}" -f $short, (Get-Date -Format "yyyyMMdd-HHmmss"))
 }
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
+# [IO.File] resolves relative paths against the process directory (the Veeam Console folder once the
+# module is loaded), not the PowerShell location, so pass it absolute paths
+$OutDir = (Resolve-Path -LiteralPath $OutDir).ProviderPath
 $json = ConvertTo-Json -InputObject $model -Depth 10
 $utf8 = New-Object System.Text.UTF8Encoding($false)
 [IO.File]::WriteAllText((Join-Path $OutDir "topology.json"), $json, $utf8)
 
 if (-not (Test-Path $Template)) { throw "template.html not found: $Template (keep it in the same folder as this script)" }
+$Template = (Resolve-Path -LiteralPath $Template).ProviderPath
 $tpl = [IO.File]::ReadAllText($Template, [Text.Encoding]::UTF8)
 $html = $tpl.Replace("/*__MODEL__*/null", $json.Replace("</", "<\/"))
 $htmlPath = Join-Path $OutDir "topology.html"

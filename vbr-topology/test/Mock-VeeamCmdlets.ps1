@@ -13,6 +13,20 @@ foreach ($s in @(
     @("tape","tape01.corp.local","Windows"), @("old","oldsrv.corp.local","Windows"))) {
     $H[$s[0]] = New-Obj @{ Id = (gid $s[0]); Name = $s[1]; Type = $s[2]; Description = ""; IsUnavailable = $false }
 }
+# vSphere version strings, as Get-VBRServer returns them in Info.Info (two ESXi versions -> mixed-version warning)
+$H.vc | Add-Member Info ([pscustomobject]@{ Info = "VMware vCenter Server 8.0.3 build-24322831" })
+foreach ($s in @(@("esx1", "esx01.corp.local", "8.0.3 build-24280767"), @("esx2", "esx02.corp.local", "7.0.3 build-21930508"))) {
+    $H[$s[0]] = New-Obj @{ Id = (gid $s[0]); Name = $s[1]; Type = "ESXi"; Description = ""; IsUnavailable = $false
+        Info = [pscustomobject]@{ Info = "VMware ESXi $($s[2])" } }
+}
+# Plug-in platforms: the platform ID is only in the physical host name
+foreach ($s in @(@("pve", "pve01.corp.local", "01208ee8-47fe-4ea8-8727-5115874da1ad"), @("pve2", "pve02.corp.local", "01208ee8-47fe-4ea8-8727-5115874da1ad"),
+                 @("ahv", "ahv01.corp.local", "799a5a3e-ae1e-4eaf-86eb-8a9acc2670e2"),
+                 @("vme", "VMECluster", "2d470d24-b6bb-4fa3-b7ff-f0fc1137ca52"), @("ext", "other01.corp.local", "00000000-1111-2222-3333-444444444444"))) {
+    $phys = "ExternalInfrastructureOfServer_$(gid ($s[0] + 'p'))_platform_$($s[2])"
+    $H[$s[0]] = New-Obj @{ Id = (gid $s[0]); Name = $s[1]; Type = "ExternalInfrastructureServer"; Description = ""; IsUnavailable = $false
+        Info = [pscustomobject]@{ Info = "" } } @{ GetPhysicalHost = [scriptblock]::Create("[pscustomobject]@{ Name = '$phys' }") }
+}
 function Get-VBRServerSession { [pscustomobject]@{ Server = "localhost" } }
 function Get-VBRBackupServerInfo { [pscustomobject]@{ Build = [version]"12.3.1.1139" } }
 function Get-VBRServer { $H.Values }
@@ -52,7 +66,11 @@ function job($k, $name, $type, $plat, $repoKey, $proxies, $auto, $hosts) {
 $J1 = job "j1" "VMware-Prod-Daily" "Backup" "EVmware" "sobr" @("vpx1","vpx2") $false @("vcsa01.corp.local")
 $J2 = job "j2" "VMware-Dev" "Backup" "EVmware" "r1" @() $true @("vcsa01.corp.local")
 $J3 = job "j3" "HyperV-Daily" "Backup" "EHyperV" "r1" @() $true @("hv01.corp.local","hvclu01.corp.local")
-function Get-VBRJob { $J1; $J2; $J3 }
+# Plug-in jobs: the platform is only in TypeToString. Proxmox names its cluster, not a registered host.
+$J4 = job "j4" "AHV-Daily" "VmbApiPolicyTempJob" "" "r1" @() $true @("ahv01.corp.local"); $J4.TypeToString = "Nutanix AHV Backup"
+$J5 = job "j5" "Proxmox-Daily" "VmbApiPolicyTempJob" "" "r1" @() $true @("pveclu01"); $J5.TypeToString = "Proxmox Backup"
+$J6 = job "j6" "VME-Daily" "VmbApiPolicyTempJob" "" "r1" @() $true @("VMECluster"); $J6.TypeToString = "HPE Morpheus VME Backup"
+function Get-VBRJob { $J1; $J2; $J3; $J4; $J5; $J6 }
 function Get-VBRJobObject($Job) { foreach ($h in $Job._hosts) { [pscustomobject]@{ Name = "x"; Location = "$h\Datacenter\Cluster" } } }
 function Get-VBRComputerBackupJob {
     New-Obj @{ Id = (gid "a1"); Name = "Agent-Windows"; OSPlatform = "Windows"; Mode = "ManagedByBackupServer"; JobEnabled = $true; BackupRepository = $global:R1; BackupObject = @($PG1) }

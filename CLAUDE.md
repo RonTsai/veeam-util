@@ -33,7 +33,8 @@ Reply to the user in Traditional Chinese. Code, comments, console output and doc
 - **Keep the two collectors in parity.** Both produce the same model:
   - `nodes[]`: `id, kind, name, sub, badges, details`, optionally `placement, runsOn, usage,
     inSobr, extents, placeLabel`
-  - `kind` is one of `backup, em, vone, agent, hv_host, vi_host, proxy, repo, sobr, object, server`
+  - `kind` is one of `backup, em, vone, agent, hv_host, vi_host, ext_host, proxy, repo, sobr, object, server`
+    (`ext_host`: plug-in platforms such as Proxmox VE; PowerShell only, the REST API does not return them)
   - `links[]`: `source, target, kind (data | auto | copy | inferred), jobs`
   - `jobs[]`, `warnings[]`, `vbr`, `lang`
 - **i18n.** Collectors write English only. All on-screen text lives in `template.html`:

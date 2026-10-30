@@ -148,6 +148,9 @@ class VCenterHandler(VbrHandler):
         u = urllib.parse.urlparse(self.path)
         q = urllib.parse.parse_qs(u.query)
         p = u.path.replace("/rest/", "/api/", 1)
+        if p == "/api/appliance/system/version":
+            return self.send_json(self.wrap({"product": "VMware vCenter Server", "version": "8.0.3.00400",
+                                             "build": "24322831", "type": "vCenter Server with an embedded Platform Services Controller"}))
         if p == "/api/vcenter/host":
             return self.send_json(self.wrap([{"host": k, "name": v, "connection_state": "CONNECTED", "power_state": "POWERED_ON"}
                                              for k, v in VC_HOSTS.items()]))

@@ -441,6 +441,12 @@ def collect_vcenter(args, raw, password):
                 for v, g in zip(on, pool.map(lambda x: vc.guest(x["id"]), on)):
                     v.update(g)
             raw["vcenter"][vc_host] = {"api": vc.api, "hosts": hosts, "vms": vms}
+            try:
+                # {"product": "VMware vCenter Server", "version": "8.0.3.00400", "build": "24322831", ...}
+                raw["vcenter"][vc_host]["version"] = vc._get("/api/appliance/system/version",
+                                                             "/rest/appliance/system/version")
+            except Exception as e:  # noqa: BLE001
+                raw["_errors"][f"vCenter {vc_host} version"] = str(e)
             with_guest = sum(1 for v in vms if v.get("guestHost") or v.get("ips"))
             print(f"  [OK]   vCenter {vc_host:<18} {len(hosts)} hosts, {len(vms)} VMs ({with_guest} with guest info)")
         except Exception as e:  # noqa: BLE001
@@ -646,6 +652,13 @@ def build_model(raw, csv_rows=()):
     # ---- Managed servers
     servers = {s["id"]: s for s in raw.get("managedServers") or []}
     by_name = {_lc(s.get("name")): s for s in servers.values()}
+    # vCenter version by name; --vcenter may name it differently (IP, host:port), so with one
+    # registered vCenter and one queried vCenter, pair them
+    vc_versions = {_lc(vc.split(":")[0]): data.get("version") or {} for vc, data in (raw.get("vcenter") or {}).items()}
+    vc_names = [_lc(s.get("name")) for s in servers.values()
+                if s.get("type") == "ViHost" and s.get("viHostType") in ("VC", "vCenter")]
+    if len(vc_names) == 1 and len(vc_versions) == 1 and vc_names[0] not in vc_versions:
+        vc_versions = {vc_names[0]: next(iter(vc_versions.values()))}
     for s in servers.values():
         t = s.get("type", "")
         if _lc(s.get("name")) == _lc(vbr_name):
@@ -653,9 +666,12 @@ def build_model(raw, csv_rows=()):
         if t == "ViHost":
             vt = s.get("viHostType", "")
             label = "vCenter Server" if vt in ("VC", "vCenter") else ("ESXi" if vt == "ESXi" else "VMware vSphere")
-            add_node(s["id"], "vi_host", s["name"], f"{label} · Source host",
+            ver = vc_versions.get(_lc(s.get("name"))) or {}
+            short = ".".join(str(ver.get("version") or "").split(".")[:3])   # 8.0.3.00400 -> 8.0.3
+            add_node(s["id"], "vi_host", s["name"], f"{label}{' ' + short if short else ''} · Source host",
                      details={"Type": f"{t} / {vt}", "Description": s.get("description"),
-                              "Status": s.get("status")})
+                              "Status": s.get("status"), "Product": ver.get("product"),
+                              "Version": ver.get("version"), "Build": ver.get("build")})
             used_hosts.add(s["id"])
         elif t in ("HvServer", "HvCluster", "SCVMM", "HvHost"):
             label = {"HvServer": "Hyper-V host", "HvCluster": "Hyper-V cluster", "SCVMM": "SCVMM"}.get(t, t)

@@ -18,7 +18,9 @@ Scans a Veeam Backup & Replication (VBR) server and draws its backup architectur
 "Backup architecture: data movers" slide:
 
 - the management network with the backup server, Enterprise Manager and Veeam ONE on top
-- sources (Veeam Agents, Hyper-V, VMware vSphere), backup proxies and repositories as columns
+- sources (Veeam Agents, Hyper-V, VMware vSphere, plug-in platforms such as Proxmox VE, Nutanix AHV and
+  HPE Morpheus VME), backup proxies and repositories as columns
+- vCenter and ESXi versions (product, version, build)
 - data-flow arrows derived from the job settings
 - the Veeam Data Mover Service (**M**) and Veeam Agent (**A**) badges
 - **which ESXi / Hyper-V host each component runs on**
@@ -163,6 +165,19 @@ older versions), `Find-VBRViEntity`, `Find-VBRHvEntity`.
 A cmdlet that is missing in your version, or whose feature is not licensed, is skipped and listed as a
 warning at the top of the report.
 
+### vSphere versions and plug-in platforms
+
+- vCenter and ESXi versions come from `Get-VBRServer` (`Info.Info`, for example
+  `VMware ESXi 8.0.3 build-25595708`); PowerCLI is not needed. When the ESXi hosts run different
+  versions, the report shows a warning.
+- Plug-in platforms (Proxmox VE, Nutanix AHV, HPE Morpheus VME) are managed servers of type
+  `ExternalInfrastructureServer`. The platform is read from the platform ID at the end of
+  `GetPhysicalHost().Name`; an unknown ID shows as "Plug-in platform".
+- The proxies (workers) of plug-in platforms are not exposed through PowerShell or the REST API, so
+  they are not shown. Plug-in jobs link the source host straight to the repository; when the job's
+  source is not a registered host (for example a Proxmox cluster name), every host of that platform
+  gets an inferred (dashed) link.
+
 ### Enterprise Manager / Veeam ONE
 
 There is no official cmdlet that returns the Enterprise Manager a VBR is registered to, so the script uses:
@@ -228,10 +243,15 @@ vCenter REST API, with `--vcenter-user` (vCenter 7.0 U2+ via `/api`; older vCent
 | ESXi hosts | `GET /api/vcenter/host` |
 | VMs per host | `GET /api/vcenter/vm?hosts={host}` |
 | Guest hostname / IPs (powered-on VMs with VMware Tools) | `GET /api/vcenter/vm/{vm}/guest/identity`, `/guest/networking/interfaces` |
+| vCenter version | `GET /api/appliance/system/version` |
 
 The machine running the script must reach vCenter on port 443. The VBR REST API only lists the vCenter
 itself, not its ESXi hosts, so **without `--vcenter-user` the Python report shows no ESXi hosts** and can
 only match components by VM name, if at all.
+
+The Python version shows the vCenter version (with `--vcenter-user`), but not ESXi versions or plug-in
+platforms (Proxmox VE, Nutanix AHV, HPE Morpheus VME): the VBR REST API does not return them. Use the
+PowerShell version for those.
 
 ### Enterprise Manager
 

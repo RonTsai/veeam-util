@@ -80,7 +80,7 @@ const I18N = {
     thJob: "Job", thType: "Type", thSource: "Sources", thProxy: "Proxy", thRepo: "Repository", thState: "State",
     enabled: "Enabled", disabled: "Disabled",
     kind_backup: "Backup server", kind_em: "Enterprise Manager", kind_vone: "Veeam ONE", kind_agent: "Veeam Agent",
-    kind_hv_host: "Hyper-V", kind_vi_host: "VMware vSphere", kind_proxy: "Proxy / WAN", kind_repo: "Repository",
+    kind_hv_host: "Hyper-V", kind_vi_host: "VMware vSphere", kind_ext_host: "Plug-in platform", kind_proxy: "Proxy / WAN", kind_repo: "Repository",
     kind_sobr: "Scale-out repository", kind_object: "Object storage", kind_server: "Other managed server",
   },
   zh: {
@@ -97,7 +97,7 @@ const I18N = {
     thHost: "ESXi / Hyper-V 主機", thComponent: "元件", thRoleShort: "角色", thVm: "VM 名稱", thMatched: "比對來源",
     thJob: "Job", thType: "類型", thSource: "來源", thProxy: "Proxy", thRepo: "Repository", thState: "狀態",
     enabled: "Enabled", disabled: "Disabled",
-    kind_server: "其他受管伺服器",
+    kind_server: "其他受管伺服器", kind_ext_host: "Plug-in 平台",
   },
 };
 // Collector text -> Traditional Chinese (exact match, also applied per " · " segment)
@@ -116,6 +116,9 @@ const DATA_ZH = {
   "PowerCLI not installed; component hosts matched via the Veeam inventory (VM names)": "PowerCLI 未安裝，元件所在主機改用 Veeam 清冊 (VM 名稱) 比對",
   "Could not read jobs; data flow is shown as inferred (dashed) links.": "無法讀取 Jobs，資料流以推測方式 (虛線) 呈現。",
   "vSphere inventory unavailable; component hosts not matched (use --placement-csv)": "無法取得 vSphere 清冊，未比對元件所在主機 (可用 --placement-csv 手動指定)",
+  "Plug-in platform": "Plug-in 平台",
+  "Proxies of plug-in platforms (Proxmox VE, Nutanix AHV, HPE Morpheus VME) cannot be read through PowerShell or the REST API and are not shown.":
+    "Plug-in 平台 (Proxmox VE、Nutanix AHV、HPE Morpheus VME) 的 proxy 無法透過 PowerShell 或 REST API 讀取，因此不會顯示。",
   "The vSphere inventory was read, but it has no VM-to-host relation; component hosts not matched (use the PowerShell version or --placement-csv)":
     "已讀到 vSphere 清冊，但其中沒有 VM 與主機的對應關係，未比對元件所在主機 (請改用 PowerShell 版本或 --placement-csv)",
 };
@@ -131,6 +134,8 @@ const DATA_ZH_RULES = [
   [/^VBR could not reach the Hyper-V cluster (\S+)\. Check that the cluster service is running, or remove the stale cluster from VBR\. Details: (.*)$/s,
     "VBR 無法連到 Hyper-V cluster $1。請確認叢集服務正在執行，或從 VBR 移除已不存在的 cluster。詳細: $2"],
   [/^vCenter REST \((.+)\)$/, "vCenter REST ($1)"],
+  [/^ESXi hosts run different versions: (.*)$/, "ESXi 主機版本不一致: $1"],
+  [/^vCenter (\S+) version: (.*)$/s, "讀取 vCenter $1 版本失敗: $2"],
   // SOBR extent summaries: "Extents: esx02 / Unknown", "LHR01 → esx02; LHR02 → Unknown"
   [/^Extents: (.*)$/, (_, x) => "Extents: " + x.split(" / ").map(td).join(" / ")],
 ];
@@ -165,6 +170,7 @@ const COLS = [
   { kinds:["agent"],                 title:"Veeam Agents" },
   { kinds:["hv_host"],               title:"Hyper-V" },
   { kinds:["vi_host"],               title:"VMware vSphere" },
+  { kinds:["ext_host"],              title:"Plug-in platforms" },
   { kinds:["proxy"],                 title:"Backup proxies" },
   { kinds:["repo","sobr","object"],  title:"Repositories" },
 ];
@@ -205,8 +211,9 @@ function icon(kind, sub) {
       <rect x="8" y="8" width="10" height="10" fill="none" stroke="#fff" stroke-width="2.4"/>
       <rect x="22" y="22" width="10" height="10" fill="none" stroke="#fff" stroke-width="2.4"/>
       <path d="M22 8h10v10M8 22v10h10" fill="none" stroke="#fff" stroke-width="2.4"/>`;
-    case "vi_host": case "hv_host": {
-      const lbl = kind === "hv_host" ? "Hyper-V" : (/^vCenter/.test(sub) ? "vCenter" : "ESXi");
+    case "vi_host": case "hv_host": case "ext_host": {
+      const lbl = kind === "hv_host" ? "Hyper-V" : kind === "vi_host" ? (/^vCenter/.test(sub) ? "vCenter" : "ESXi")
+        : /^Proxmox/.test(sub) ? "Proxmox" : /^Nutanix/.test(sub) ? "AHV" : /Morpheus/.test(sub) ? "VME" : "Plug-in";
       let chips = "";
       for (let i = 0; i < 4; i++) chips += `<rect x="${i*11}" y="0" width="9" height="9" rx="1.5" fill="${d}"/>`;
       return chips + `<rect x="0" y="12" width="42" height="14" rx="2" fill="${g}"/>
@@ -409,7 +416,7 @@ function wireHover(svg) {
 }
 
 function tables() {
-  const order = ["backup", "em", "vone", "vi_host", "hv_host", "agent", "proxy", "repo", "sobr", "object", "server"];
+  const order = ["backup", "em", "vone", "vi_host", "ext_host", "hv_host", "agent", "proxy", "repo", "sobr", "object", "server"];
   const ns = [...MODEL.nodes].sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind) || a.name.localeCompare(b.name));
   const th = keys => "<tr>" + keys.map(k => `<th>${esc(t(k))}</th>`).join("") + "</tr>";
   document.getElementById("invTable").innerHTML = th(["thKind", "thName", "thRole", "thDetails"]) +
