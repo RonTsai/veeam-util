@@ -69,7 +69,8 @@ First release.
 
 ### Known limitations
 
-- Tested in one lab environment (VBR v13.1, vCenter 7) and against the offline mocks only.
+- Tested in one lab environment (VBR v13.1, vCenter 8.0.3, ESXi 7.0.3 and 8.0.3) and against the
+  offline mocks only.
 - Python does not list tape servers yet; the REST endpoint for them still needs to be confirmed.
 - On VBR v13 REST, the inventory does not return VMs per host. Without `--vcenter-user`, Python
   usually cannot place components on ESXi hosts.

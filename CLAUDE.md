@@ -77,8 +77,8 @@ Mock env switches: `MOCK_IP_PROXY`, `MOCK_VC_OLD`, `MOCK_EMPTY_PARENT`, `MOCK_NO
 Check the report in both languages (`topology.html?lang=en` / `?lang=zh`) with Playwright.
 
 The mocks follow the documented API shapes, but real responses can differ. The user tests on a
-real lab (VBR v13.1, vCenter 7). When something fails there, ask for the console output or the
-relevant part of `vbr_raw.json`, with names masked.
+real lab (VBR v13.1, vCenter 8.0.3, ESXi 7.0.3 and 8.0.3). When something fails there, ask for the
+console output or the relevant part of `vbr_raw.json`, with names masked.
 
 ## Open items
 
