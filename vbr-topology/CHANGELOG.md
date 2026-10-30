@@ -1,6 +1,11 @@
 # Changelog: vbr-topology
 
-## Unreleased
+## v1.3.1 (2026-10-30)
+
+### Added
+
+- `docs/example.html`: the full report built from the mock data, to try without a VBR server. The
+  README links an online preview of it, and its example images are rebuilt from the same data.
 
 ### Changed
 
