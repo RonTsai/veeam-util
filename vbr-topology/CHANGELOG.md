@@ -1,6 +1,6 @@
 # Changelog: vbr-topology
 
-## Unreleased
+## v1.2.0 (2026-10-30)
 
 ### Added
 
@@ -13,6 +13,18 @@
 - PowerShell: vCenter and ESXi product, version and build (from `Get-VBRServer`, no PowerCLI needed),
   plus a warning when the ESXi hosts run different versions.
 - Python: vCenter product, version and build with `--vcenter-user` (`/api/appliance/system/version`).
+
+### Fixed
+
+- PowerShell: Nutanix AHV jobs were treated as Hyper-V jobs ("AHV" matched "Hv"); a source that was
+  not a managed server then showed up as a made-up Hyper-V host.
+- PowerShell: a relative `-OutDir` or `-Template` failed with "Could not find a part of the path",
+  because .NET file calls resolve it against the Veeam Console folder, not the current location.
+
+## v1.1.0 (2026-10-30)
+
+### Added
+
 - PowerShell: `-VCenterCredentialMap` to give each vCenter its own credentials.
 - PowerShell and Python: when a vCenter rejects the login, ask once more for that vCenter's
   credentials, since vCenters often use different accounts. No prompt when the credentials come
@@ -26,10 +38,6 @@
 
 ### Fixed
 
-- PowerShell: Nutanix AHV jobs were treated as Hyper-V jobs ("AHV" matched "Hv"); a source that was
-  not a managed server then showed up as a made-up Hyper-V host.
-- PowerShell: a relative `-OutDir` or `-Template` failed with "Could not find a part of the path",
-  because .NET file calls resolve it against the Veeam Console folder, not the current location.
 - PowerShell: `-UsePowerCLI` crashed with "You cannot call a method on a null-valued expression"
   when vCenter returned VMs without a host (disconnected host, orphaned VM). Such VMs are now
   skipped, and the console shows how many.
