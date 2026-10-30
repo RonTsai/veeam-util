@@ -15,8 +15,12 @@ Reply to the user in Traditional Chinese. Code, comments, console output and doc
   `*.local.env`). Never copy them into tracked files, commit messages or reports. If a credential is
   needed, ask the user, or read it from such a file or from an environment variable
   (`VBR_PASSWORD`, `EM_PASSWORD`, `VCENTER_PASSWORD`).
-- Tags are `<tool>-vX.Y.Z` (for example `vbr-topology-v1.0.0`). Tag pushes are blocked from cloud
-  sessions, so the user creates tags and releases in the GitHub UI.
+- Tags are `<tool>-vX.Y.Z` (for example `vbr-topology-v1.0.0`). Releases are marked pre-release.
+  - Local session (Claude Code on the user's machine): Claude can create the tag and the GitHub
+    release with `git` and `gh`. First check the existing tags (`git tag -l`, `gh release list`),
+    confirm the version with the user, and move the CHANGELOG notes from "Unreleased" to that
+    version before tagging.
+  - Cloud session: tag pushes are blocked, so the user creates tags and releases in the GitHub UI.
 
 ## Layout
 
