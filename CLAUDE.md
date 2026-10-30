@@ -78,6 +78,29 @@ EM_REST_PORT=19398 VBR_PASSWORD=x VCENTER_PASSWORD=x python3 vbr_topology.py --h
 Mock env switches: `MOCK_IP_PROXY`, `MOCK_VC_OLD`, `MOCK_EMPTY_PARENT`, `MOCK_NO_LEGACY`, `MOCK_NO_BROWSER`.
 Check the report in both languages (`topology.html?lang=en` / `?lang=zh`) with Playwright.
 
+### Example report and README images
+
+`vbr-topology/docs/example.html` and `vbr-topology/docs/images/*.png` are built from the mocks. When a
+change alters what the report shows (`template.html`, the model, the mocks), rebuild them in the same
+change, so the README matches the code:
+
+```powershell
+cd vbr-topology
+. ./test/Mock-VeeamCmdlets.ps1; . ./test/Mock-PowerCLI.ps1
+$c = New-Object PSCredential("ro@vsphere.local", (ConvertTo-SecureString "x" -AsPlainText -Force))
+./Get-VBRTopology.ps1 -Server vbr01.corp.local -OutDir ./test/out_ps -NoTimestamp -UsePowerCLI -VCenterCredential $c -Language en
+Copy-Item ./test/out_ps/topology.html ./docs/example.html
+```
+
+- `report-en.png`: the diagram SVG only, at 2x (as the report's Download PNG).
+- `report-jobs-en.png`: the Jobs heading, hint and table with `VMware-Prod-Daily` expanded, at 2x.
+
+To take them, copy the report to a scratch folder, append a script that keeps only that part of the
+page (and clicks the job), then use headless Chrome:
+`--headless=new --hide-scrollbars --force-device-scale-factor=2 --window-size=<W>,<H> --screenshot=...`
+(get W and H from `--dump-dom` with the script writing them into `<title>`). Look at both images, and
+grep `example.html` for real names, IPs and local paths before committing.
+
 The mocks follow the documented API shapes, but real responses can differ. The user tests on a
 real lab (VBR v13.1, vCenter 8.0.3, ESXi 7.0.3 and 8.0.3). When something fails there, ask for the
 console output or the relevant part of `vbr_raw.json`, with names masked.
