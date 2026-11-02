@@ -322,6 +322,7 @@
       "id": "j6",
       "name": "Copy-to-Wasabi",
       "type": "BackupCopy",
+      "mode": "Periodic",
       "isDisabled": false,
       "sourceRepositoryId": "r-1",
       "storage": {
@@ -366,22 +367,97 @@
       "backupRepository": {
         "backupRepositoryId": "r-1"
       }
+    },
+    {
+      "id": "j8",
+      "name": "VMware-Replica-DR",
+      "type": "VSphereReplica",
+      "isDisabled": false,
+      "virtualMachines": {
+        "includes": [
+          {
+            "inventoryObject": {
+              "hostName": "vcsa01.corp.local",
+              "name": "app-sql01",
+              "type": "VirtualMachine",
+              "size": "120 GB"
+            }
+          }
+        ],
+        "excludes": {
+          "vms": [],
+          "disks": []
+        }
+      },
+      "destination": {
+        "host": {
+          "type": "Host",
+          "hostName": "vcsa01.corp.local",
+          "name": "esx02.corp.local",
+          "objectId": "host-2"
+        }
+      },
+      "jobSettings": {
+        "metadataRepositoryId": "r-1"
+      },
+      "dataTransfer": {
+        "sourceProxies": {
+          "autoSelectEnabled": true
+        },
+        "targetProxies": {
+          "autoSelectEnabled": true
+        }
+      }
+    },
+    {
+      "id": "j9",
+      "name": "EntraID-Tenant",
+      "type": "EntraIDTenantBackup",
+      "isDisabled": false,
+      "storage": {
+        "tenantId": "t-1"
+      }
+    },
+    {
+      "id": "j10",
+      "name": "SureBackup-Prod",
+      "type": "SureBackupContentScan",
+      "isDisabled": true,
+      "linkedJobs": {
+        "includes": [
+          {
+            "type": "VSphereBackup",
+            "id": "j1",
+            "name": "VMware-Prod-Daily"
+          }
+        ],
+        "excludes": []
+      }
     }
   ],
-  "backups": [],
+  "backups": [
+    {
+      "id": "b-1",
+      "name": "Agent Backup Job 99",
+      "platformName": "WindowsPhysical",
+      "repositoryId": "r-1",
+      "jobId": null
+    }
+  ],
   "inventory": {
     "vcsa01.corp.local": {
       "method": "legacy",
       "vmsByHost": {
+        "esx02.corp.local": [
+          "VBR01.WIN.Demo",
+          "vbrpx02.corp.local",
+          "lhr01",
+          "app-sql01"
+        ],
         "esx01.corp.local": [
           "vbr01",
           "em01",
           "vbrpx01"
-        ],
-        "esx02.corp.local": [
-          "vbrpx02.corp.local",
-          "lhr01",
-          "app-sql01"
         ]
       }
     }

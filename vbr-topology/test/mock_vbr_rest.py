@@ -34,8 +34,10 @@ PATHS = {
     "/api/v1/backups": "backups",
 }
 # vCenter inventory: host -> VMs
-INVENTORY = {"esx01.corp.local": ["vbr01", "em01", "vbrpx01"],
-             "esx02.corp.local": ["vbrpx02.corp.local", "lhr01", "app-sql01"]}
+# "VBR01.WIN.Demo" comes first and its first label is "vbr01": the backup server must still match
+# VM vbr01 by its exact name
+INVENTORY = {"esx02.corp.local": ["VBR01.WIN.Demo", "vbrpx02.corp.local", "lhr01", "app-sql01"],
+             "esx01.corp.local": ["vbr01", "em01", "vbrpx01"]}
 
 
 class VbrHandler(BaseHTTPRequestHandler):

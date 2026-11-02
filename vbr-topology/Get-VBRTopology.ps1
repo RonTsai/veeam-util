@@ -166,6 +166,13 @@ $nasJobs     = Invoke-Safe "Unstructured / NAS backup job" {
     if (Get-Command Get-VBRUnstructuredBackupJob -ErrorAction SilentlyContinue) { Get-VBRUnstructuredBackupJob }
     else { Get-VBRNASBackupJob -WarningAction SilentlyContinue }
 }
+# Listed in the Jobs table only (no data-flow links); older versions lack these cmdlets
+$entraJobs   = Invoke-Safe "Get-VBREntraIDTenantBackupJob" {
+    if (Get-Command Get-VBREntraIDTenantBackupJob -ErrorAction SilentlyContinue) { Get-VBREntraIDTenantBackupJob }
+}
+$sbJobs      = Invoke-Safe "Get-VBRSureBackupJob"          {
+    if (Get-Command Get-VBRSureBackupJob -ErrorAction SilentlyContinue) { Get-VBRSureBackupJob }
+}
 
 $build = $null
 try { $build = (Get-VBRBackupServerInfo).Build.ToString() } catch { }
@@ -175,16 +182,40 @@ if (-not $build) {
         $build = (Get-Item $dll).VersionInfo.ProductVersion
     } catch { }
 }
+# The backup server is the host of the active session (the Veeam PowerShell Toolkit window is already
+# connected when it opens), else -Server. Only a local connection makes this machine the backup server;
+# from a remote console, this machine is not part of the VBR infrastructure.
+$localNames = @("localhost", ".", "127.0.0.1", "::1")
 $vbrName = $Server
-if ($Server -in @("localhost", ".", "127.0.0.1")) {
+if ($session) {
+    $sv = "$(Get-Prop $session @('Server', 'ServerName'))"
+    if ($sv -and $sv -notin $localNames) { $vbrName = $sv }
+}
+$vbrLocal = $vbrName -in $localNames
+$vbrConnectedAs = $null
+$ipTmp = $null
+if ($vbrLocal) {
     try { $vbrName = [System.Net.Dns]::GetHostEntry([Environment]::MachineName).HostName } catch { $vbrName = [Environment]::MachineName }
+} else {
+    # An IP or a short name / alias (e.g. "vbr"): use the DNS name of its address (forward, then reverse
+    # lookup), so the report shows the real host. Keep the name as given when DNS has nothing better.
+    $isIp = [System.Net.IPAddress]::TryParse($vbrName, [ref]$ipTmp)
+    if ($isIp -or $vbrName -notmatch '\.') {
+        try {
+            $addr = if ($isIp) { $ipTmp } else { @([System.Net.Dns]::GetHostAddresses($vbrName) | Where-Object { $_.AddressFamily -eq "InterNetwork" })[0] }
+            $ptr = "$([System.Net.Dns]::GetHostEntry($addr).HostName)"
+            if ($ptr -and $ptr -ine $vbrName -and -not [System.Net.IPAddress]::TryParse($ptr, [ref]$ipTmp) -and ($isIp -or $ptr -match '\.')) {
+                $vbrConnectedAs = $vbrName; $vbrName = $ptr
+            }
+        } catch { }
+    }
 }
 
 # ---------------------------------------------------------------------------
 # Build nodes
 # ---------------------------------------------------------------------------
 
-Add-Node "vbr" "backup" $vbrName "Backup server · v$build" @() @{ Build = $build; Server = $vbrName } | Out-Null
+Add-Node "vbr" "backup" $vbrName "Backup server · v$build" @() @{ Build = $build; Server = $vbrName; "Connected as" = $vbrConnectedAs } | Out-Null
 
 # ---- Enterprise Manager / Veeam ONE (management tier)
 # There is no official cmdlet that returns the EM a VBR is registered to. Use the
@@ -195,7 +226,7 @@ function Add-Mgmt([string]$Kind, [string]$Name, [string]$Sub, $Details) {
     if (-not $Name) { return }
     $key = "${Kind}:$($Name.ToLower())"
     if ($mgmtSeen[$key]) { foreach ($k in $Details.Keys) { if ($Details[$k]) { $Nodes[$mgmtSeen[$key]].details[$k] = "$($Details[$k])" } }; return }
-    if ($Name -ieq $vbrName -or $Name -ieq [Environment]::MachineName) { $Sub += " · same host as VBR" }
+    if ($Name -ieq $vbrName -or ($vbrLocal -and $Name -ieq [Environment]::MachineName)) { $Sub += " · same host as VBR" }
     $id = "mgmt:$key"; $mgmtSeen[$key] = $id
     Add-Node $id $Kind $Name $Sub @() $Details | Out-Null
 }
@@ -249,7 +280,7 @@ foreach ($s in $servers) {
     $id = Get-IdStr $s; $t = "$($s.Type)"
     $serverById[$id] = $s; $serverByName[$s.Name.ToLower()] = $s
     $det = @{ Type = $t; Description = $s.Description; Status = $(if ($s.IsUnavailable) { "Unavailable" } else { "Available" }) }
-    if ($s.Name -ieq $vbrName -or $t -eq "Local" -or $s.Name -ieq [Environment]::MachineName) { [void]$UsedHosts.Add($id) }
+    if ($s.Name -ieq $vbrName -or $t -eq "Local" -or ($vbrLocal -and $s.Name -ieq [Environment]::MachineName)) { [void]$UsedHosts.Add($id) }
     $ver = ""
     if ($t -match '^(VC|ESXi?)$') {
         $v = Get-ViVersion $s
@@ -336,6 +367,17 @@ foreach ($sb in $sobrs) {
     foreach ($e in @($sb.Extent)) { if ($e) { $extentOf[(Get-IdStr (Get-Prop $e @("Repository", "Id")))] = (Get-IdStr $sb) } }
 }
 
+# Get-VBRBackupRepository leaves out SOBR performance extents; add them from the SOBRs
+# (object storage extents are drawn from Get-VBRObjectStorageRepository instead)
+$repoSeen = @{}
+foreach ($x in @($repos) + @($objRepos)) { if ($x) { $repoSeen[(Get-IdStr $x)] = $true } }
+foreach ($sb in $sobrs) {
+    foreach ($e in @($sb.Extent)) {
+        $er = Get-Prop $e @("Repository")
+        if ($er -and -not $repoSeen[(Get-IdStr $er)]) { $repoSeen[(Get-IdStr $er)] = $true; $repos += $er }
+    }
+}
+
 $dedupTypes = "DDBoost|ExaGrid|StoreOnce|Quantum|Infinidat|Fujitsu"
 foreach ($r in $repos) {
     $id = Get-IdStr $r; $t = "$($r.Type)"
@@ -410,7 +452,7 @@ $JobRows = New-Object System.Collections.Generic.List[object]
 $jobRepo = @{}   # job id -> repo id (used to find backup copy sources)
 # These jobs are handled by their own cmdlets; skip them in Get-VBRJob to avoid duplicates
 $handledElsewhere = New-Object System.Collections.Generic.HashSet[string]
-foreach ($x in @($copyJobs) + @($agentJobs) + @($nasJobs)) { if ($x) { [void]$handledElsewhere.Add((Get-IdStr $x)) } }
+foreach ($x in @($copyJobs) + @($agentJobs) + @($nasJobs) + @($entraJobs) + @($sbJobs)) { if ($x) { [void]$handledElsewhere.Add((Get-IdStr $x)) } }
 
 foreach ($j in $jobs) {
     $jid = Get-IdStr $j
@@ -425,6 +467,8 @@ foreach ($j in $jobs) {
 
     $hosts = New-Object System.Collections.Generic.HashSet[string]
     $objs = @(); try { $objs = @(Get-VBRJobObject -Job $j) } catch { }
+    # Only the objects set in the job: ExtendedChild entries are VMs VBR expanded itself (e.g. replica mappings)
+    $objs = @($objs | Where-Object { "$($_.Type)" -in @("", "Include", "Exclude") })
     foreach ($o in $objs) {
         $h = Get-Prop $o @("Object.Host.Name", "Host.Name")
         if (-not $h -and $o.Location) { $h = ($o.Location -split '[\\/]')[0] }
@@ -542,6 +586,24 @@ foreach ($n in $nasJobs) {
         objects = $nasObjs })
 }
 
+# Entra ID tenant backup and SureBackup: no repository or proxy of their own to draw
+foreach ($x in $entraJobs) {
+    $enabled = Get-Prop $x @("JobEnabled", "IsEnabled", "Enabled")
+    $JobRows.Add([ordered]@{ name = $x.Name; type = "Entra ID backup"; disabled = ($enabled -eq $false); repository = $null
+        sources = @(); proxies = "—"; objects = @() })
+}
+foreach ($x in $sbJobs) {
+    $enabled = Get-Prop $x @("JobEnabled", "IsEnabled", "Enabled")
+    $lj = $x.LinkedJob; if (-not $lj) { $lj = $x.LinkedJobs }
+    $linked = @(@($lj) | Where-Object { $_ } | ForEach-Object { "$(Get-Prop $_ @('Job.Name', 'Name'))" } | Where-Object { $_ })
+    # A SureBackup job with a virtual lab (and usually an application group); without one it is a content scan
+    $vl = $x.PSObject.Properties["VirtualLab"]
+    $appGroup = "$(Get-Prop $x @('ApplicationGroup.Name', 'ApplicationGroup'))"
+    $JobRows.Add([ordered]@{ name = $x.Name; type = $(if ($vl -and $vl.Value) { "SureBackup" } else { "SureBackup (content scan)" })
+        disabled = ($enabled -eq $false); repository = $null; sources = $linked; proxies = "—"
+        objects = @(@($linked | ForEach-Object { New-JobObject $_ "Job" }) + @($(if ($appGroup) { New-JobObject $appGroup "Application group" }))) })
+}
+
 # Re-point links to SOBR extents at the SOBR itself
 foreach ($key in @($Links.Keys)) {
     $l = $Links[$key]; $changed = $false
@@ -578,18 +640,19 @@ foreach ($s in $servers) {
 # ---------------------------------------------------------------------------
 
 Write-Host "Matching component hosts:"
-$placeMap = @{}   # lowercase name / IP -> placement
-function Add-PlaceKey([string]$Key, $Info) {
+$placeMap = @{}     # lowercase name / IP -> placement
+$placeShort = @{}   # lowercase first label of a name -> placement (weakest match)
+function Add-PlaceKey([string]$Key, $Info, [hashtable]$Map = $placeMap) {
     # Entries without a host name (e.g. a VM on a disconnected host) cannot place anything
     if (-not $Key -or -not $Info -or -not $Info.host) { return }
     $k = $Key.Trim().ToLower()
-    if ($k -and -not $placeMap.ContainsKey($k)) { $placeMap[$k] = $Info }
+    if ($k -and -not $Map.ContainsKey($k)) { $Map[$k] = $Info }
 }
 function Add-PlaceKeys([string]$Name, $Info) {
     if (-not $Name) { return }
     Add-PlaceKey $Name $Info
     $ip = $null
-    if (-not [System.Net.IPAddress]::TryParse($Name, [ref]$ip)) { Add-PlaceKey ($Name.Split(".")[0]) $Info }
+    if (-not [System.Net.IPAddress]::TryParse($Name, [ref]$ip)) { Add-PlaceKey ($Name.Split(".")[0]) $Info $placeShort }
 }
 
 # 1) Manual CSV map
@@ -728,6 +791,18 @@ function Get-NameVariants([string]$Name) {
     return , $out
 }
 
+# Placement of the first name that matches: full names first, then IP addresses, then short names.
+# A short name is the weakest key: "vbr" is also the first label of an unrelated VM name like "VBR.WIN.Demo".
+function Find-Placement([string[]]$Names) {
+    $vars = @(foreach ($nm in $Names) { foreach ($v in (Get-NameVariants $nm)) { if ($v) { $v.ToLower() } } })
+    $ip = $null
+    $ipVars = @($vars | Where-Object { [System.Net.IPAddress]::TryParse($_, [ref]$ip) })
+    $nameVars = @($vars | Where-Object { $_ -notin $ipVars })
+    foreach ($v in $nameVars + $ipVars) { if ($placeMap.ContainsKey($v)) { return $placeMap[$v] } }
+    foreach ($v in $nameVars) { if ($placeShort.ContainsKey($v)) { return $placeShort[$v] } }
+    return $null
+}
+
 # IPv4 addresses (no loopback / link-local), else global IPv6; comma-separated
 function Select-Ips($Addrs) {
     $all = @(@($Addrs) | ForEach-Object { "$_" } | Where-Object { $_ } | Select-Object -Unique)
@@ -742,13 +817,10 @@ foreach ($n in @($Nodes.Values)) {
     $names = @()
     if ($n.details["Host"]) { $names += $n.details["Host"] }
     if ($n.kind -ne "repo") { $names += $n.name }
-    if ($n.kind -eq "backup") { $names += [Environment]::MachineName }
+    if ($n.kind -eq "backup" -and $vbrLocal) { $names += [Environment]::MachineName }
+    if ($n.kind -eq "backup" -and $vbrConnectedAs) { $names += $vbrConnectedAs }
     if (-not $names.Count) { continue }
-    $hit = $null
-    foreach ($nm in $names) {
-        foreach ($v in (Get-NameVariants $nm)) { if ($v -and $placeMap.ContainsKey($v.ToLower())) { $hit = $placeMap[$v.ToLower()]; break } }
-        if ($hit) { break }
-    }
+    $hit = Find-Placement $names
     if (-not $hit) {
         $n["placement"] = [ordered]@{ host = $null; note = "Not found in the vSphere / Hyper-V inventory (physical or unmanaged)" }
         $n.details["Runs on"] = "Unknown / physical"

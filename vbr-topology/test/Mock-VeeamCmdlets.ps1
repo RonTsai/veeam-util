@@ -27,7 +27,8 @@ foreach ($s in @(@("pve", "pve01.corp.local", "01208ee8-47fe-4ea8-8727-5115874da
     $H[$s[0]] = New-Obj @{ Id = (gid $s[0]); Name = $s[1]; Type = "ExternalInfrastructureServer"; Description = ""; IsUnavailable = $false
         Info = [pscustomobject]@{ Info = "" } } @{ GetPhysicalHost = [scriptblock]::Create("[pscustomobject]@{ Name = '$phys' }") }
 }
-function Get-VBRServerSession { [pscustomobject]@{ Server = "localhost" } }
+# MOCK_SESSION_HOST: the host the session is connected to (e.g. a short name or an IP), as in the Toolkit window
+function Get-VBRServerSession { [pscustomobject]@{ Server = $(if ($env:MOCK_SESSION_HOST) { $env:MOCK_SESSION_HOST } else { "localhost" }) } }
 function Get-VBRBackupServerInfo { [pscustomobject]@{ Build = [version]"12.3.1.1139" } }
 function Get-VBRServer { $H.Values }
 function Get-VBRViProxy {
@@ -47,7 +48,7 @@ function Get-VBRBackupRepository([switch]$ScaleOut) {
     $global:R1 = New-Obj @{ Id = (gid "r1"); Name = "Repo01-ReFS"; Type = "WinLocal"; HostId = (gid "repo1"); FriendlyPath = "E:\Backups" } @{ GetContainer = { [pscustomobject]@{ CachedTotalSpace = [pscustomobject]@{ InGigabytes = 40000 }; CachedFreeSpace = [pscustomobject]@{ InGigabytes = 12000 } } } }
     $global:R2 = New-Obj @{ Id = (gid "r2"); Name = "LHR01"; Type = "LinuxHardened"; HostId = (gid "lhr1"); FriendlyPath = "/mnt/veeam" } @{ GetContainer = { [pscustomobject]@{ CachedTotalSpace = [pscustomobject]@{ InGigabytes = 100000 }; CachedFreeSpace = [pscustomobject]@{ InGigabytes = 61000 } } } }
     $global:R3 = New-Obj @{ Id = (gid "r3"); Name = "LHR02"; Type = "LinuxHardened"; HostId = (gid "lhr2"); FriendlyPath = "/mnt/veeam" }
-    $global:R1; $global:R2; $global:R3
+    $global:R1   # like VBR v12+: SOBR extents (R2, R3) are not returned
 }
 $global:R4 = New-Obj @{ Id = (gid "r4"); Name = "Wasabi-Offsite"; Type = "WasabiCloud"; BucketName = "veeam-offsite" }
 function Get-VBRObjectStorageRepository { $global:R4 }
@@ -72,7 +73,10 @@ $J1.TypeToString = "VMware Backup"; $J2.TypeToString = "VMware Backup"; $J3.Type
 $J4 = job "j4" "AHV-Daily" "VmbApiPolicyTempJob" "" "r1" @() $true @("ahv01.corp.local"); $J4.TypeToString = "Nutanix AHV Backup"
 $J5 = job "j5" "Proxmox-Daily" "VmbApiPolicyTempJob" "" "r1" @() $true @("pveclu01"); $J5.TypeToString = "Proxmox Backup"
 $J6 = job "j6" "VME-Daily" "VmbApiPolicyTempJob" "" "r1" @() $true @("VMECluster"); $J6.TypeToString = "HPE Morpheus VME Backup"
-function Get-VBRJob { $J1; $J2; $J3; $J4; $J5; $J6 }
+# Replica: the metadata repository is the target repository id; the replica goes to esx02
+$J7 = job "j7" "VMware-Replica-DR" "Replica" "EVmware" "r1" @() $true @("vcsa01.corp.local"); $J7.TypeToString = "VMware Replication"
+$J7.Info | Add-Member TargetHostId (gid "esx2")
+function Get-VBRJob { $J1; $J2; $J3; $J4; $J5; $J6; $J7 }
 # Job objects as Get-VBRJobObject returns them. Plug-in objects have no Location, only Object.Host.
 function jo($name, $disp, $loc, $hostName, $excl = $false, $size = "") {
     [pscustomobject]@{ Name = $name; Type = $(if ($excl) { "Exclude" } else { "Include" }); Location = $loc; TypeDisplayName = $disp
@@ -86,12 +90,21 @@ $J3 | Add-Member _objs @((jo "app01" "Virtual Machine" "hv01.corp.local" "hv01.c
 $J4 | Add-Member _objs @((jo "web01" "Virtual Machine" "" "ahv01.corp.local"), (jo "web02" "Virtual Machine" "" "ahv01.corp.local"))
 $J5 | Add-Member _objs @((jo "pve-vm01" "Virtual Machine" "" "pveclu01"))
 $J6 | Add-Member _objs @((jo "vme-app01" "Virtual Machine" "" "VMECluster"))
+# ExtendedChild: a VM VBR expanded itself (not set in the job), not listed in the report
+$J7 | Add-Member _objs @((jo "app-sql01" "Virtual Machine" "$vc\DC01\vm\app-sql01" $vc),
+    ([pscustomobject]@{ Name = "app-sql02"; Type = "ExtendedChild"; Location = "$vc\DC01\vm\app-sql02"; TypeDisplayName = "Virtual Machine" }))
 function Get-VBRJobObject($Job) { $Job._objs }
 function Get-VBRComputerBackupJob {
     New-Obj @{ Id = (gid "a1"); Name = "Agent-Windows"; OSPlatform = "Windows"; Mode = "ManagedByBackupServer"; JobEnabled = $true; BackupRepository = $global:R1; BackupObject = @($PG1) }
     New-Obj @{ Id = (gid "a2"); Name = "Agent-Linux"; OSPlatform = "Linux"; Mode = "ManagedByBackupServer"; JobEnabled = $true; BackupRepository = (New-Obj @{ Id = (gid "sobr") }); BackupObject = @($PG2) }
 }
 function Get-VBRBackupCopyJob { New-Obj @{ Id = (gid "c1"); Name = "Copy-to-Wasabi"; Mode = "Periodic"; JobEnabled = $true; BackupJob = @($J2); TargetRepository = $global:R4 } }
+function Get-VBREntraIDTenantBackupJob { New-Obj @{ Id = (gid "e1"); Name = "EntraID-Tenant"; JobEnabled = $true } }
+# A content scan (no virtual lab, linked jobs) and a SureBackup job with a virtual lab and an application group
+function Get-VBRSureBackupJob {
+    New-Obj @{ Id = (gid "sb1"); Name = "SureBackup-Prod"; IsEnabled = $false; LinkedJob = @([pscustomobject]@{ Job = $J1 }) }
+    New-Obj @{ Id = (gid "sb2"); Name = "SureBackup-AppGroup"; IsEnabled = $true; VirtualLab = "Lab01"; ApplicationGroup = "DC-AppGroup"; LinkedJob = @() }
+}
 if (-not ("Mock.VBRNASSMBServer" -as [type])) { Add-Type -TypeDefinition "namespace Mock { public class VBRNASSMBServer { } }" }
 function Get-VBRNASBackupJob {
     New-Obj @{ Id = (gid "n1"); Name = "NAS-Shares"; JobEnabled = $true; ShortTermBackupRepository = $global:R1
@@ -114,6 +127,8 @@ function Find-VBRViEntity($Server, [switch]$HostsAndClusters) {
     $p = "vcsa01.corp.local\DC01\Prod-Cluster"
     [pscustomobject]@{ Name = "esx01.corp.local"; Type = "Host"; Path = "$p\esx01.corp.local" }
     [pscustomobject]@{ Name = "esx02.corp.local"; Type = "Host"; Path = "$p\esx02.corp.local" }
+    # Its first label is "vbr01" too: must not place the backup server (exact names win over short names)
+    [pscustomobject]@{ Name = "VBR01.WIN.Demo";   Type = "Vm";   Path = "$p\esx02.corp.local\VBR01.WIN.Demo" }
     [pscustomobject]@{ Name = "vbr01";            Type = "Vm";   Path = "$p\esx01.corp.local\vbr01" }
     [pscustomobject]@{ Name = "em01";             Type = "Vm";   Path = "$p\esx01.corp.local\em01" }
     [pscustomobject]@{ Name = "vbrpx01";          Type = "Vm";   Path = "$p\esx01.corp.local\vbrpx01" }

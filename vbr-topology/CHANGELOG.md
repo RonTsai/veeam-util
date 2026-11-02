@@ -1,5 +1,46 @@
 # Changelog: vbr-topology
 
+## Unreleased
+
+### Fixed
+
+- PowerShell: run from a remote console that was already connected to VBR (for example the Veeam
+  PowerShell Toolkit window), the report named the console machine as the backup server and placed
+  it on that machine's host. The backup server is now the host of the active connection; this
+  machine's name is only used when VBR is local.
+- Both: a backup server connected by a short name (for example `vbr`) could be placed on the wrong VM,
+  because a VM named `VBR.WIN.Demo` has the same first label. Components are now matched by full name
+  first, then by IP address, and only then by short name. A short name or IP of the backup server is
+  replaced by its DNS name when DNS has one; the name used to connect shows as "Connected as".
+- PowerShell: repositories that are SOBR extents were missing (`Get-VBRBackupRepository` does not
+  return them), so the SOBR showed no extent hosts and the extent's server was listed as an unused
+  managed server.
+- PowerShell: replica jobs listed VMs VBR expanded itself (`ExtendedChild` job objects) as included
+  objects. Only the objects set in the job are listed now.
+- Python: the backup server showed VBR's internal name (`serverInfo.name`, for example
+  `vbr-1a2b3c4d` on the appliance) instead of the host connected to.
+- Python: a "Veeam Agents" node was drawn for backups that have no job (imported or orphaned). The
+  `/backups` list is now only used when `/jobs` has no agent jobs (older API versions).
+- Python: replica jobs had no repository; the metadata repository is shown, as in PowerShell.
+
+### Changed
+
+- Python: job types read as in PowerShell (`VMware Backup`, `Hyper-V Backup`, `VMware Replication`,
+  `Backup copy (Immediate)`, `Agent backup (Windows, ManagedByBackupServer)`, ...) instead of the REST
+  names (`VSphereBackup`, ...).
+- Python: agent, backup copy, Entra ID and SureBackup jobs show "—" as their proxies, as in
+  PowerShell. Agent jobs list their protection groups as sources, backup copy and SureBackup jobs
+  their source jobs.
+
+### Added
+
+- Python: backup copy links from the repositories of the source jobs (`sourceObjects.includes.jobs`)
+  and of the listed source repositories, and replica links (source host → proxies → target ESXi
+  host, or its vCenter when the host is not known), as PowerShell draws them.
+- PowerShell: Entra ID tenant backup and SureBackup jobs are listed in the Jobs table (no links: they
+  have no repository or proxy of their own), as Python already did. A SureBackup job without a
+  virtual lab shows as `SureBackup (content scan)`; a job's application group is listed as its object.
+
 ## v1.4.0 (2026-10-30)
 
 ### Added
@@ -130,3 +171,24 @@ First release.
   so the Python report has neither these jobs nor their objects.
 - Job object locations differ by collector: PowerShell shows the full inventory path, Python only
   the host name (vCenter / Hyper-V host).
+- The VBR REST API (v13.1) does not list Hyper-V replication jobs, Unix (Solaris, AIX) agent jobs or
+  SureBackup jobs with a virtual lab (only content scans), so the Python report does not show them.
+- Deduplicating storage appliances (Data Domain, StoreOnce) are missing from REST `/repositories`, so
+  in Python, jobs and backup copies that target them have no repository or link.
+- Python only shows an Enterprise Manager given with `--em` (or installed on the VBR host): the REST
+  API does not expose the EM registration.
+- Python shows a Hyper-V cluster without its member hosts, and no ESXi hosts of a vCenter whose login
+  was rejected: REST `managedServers` lists only the cluster and the vCenter.
+- Managed servers that are not hosts (file shares, Azure Blob / Azure accounts, Entra ID tenants) are
+  listed by PowerShell as "other managed servers"; REST `managedServers` does not return them.
+- The backup server is named after the host used to connect, or its DNS name when that is a short name
+  or an IP. When DNS (or the hosts file) of the scanning machine only knows an alias, the alias is
+  shown; placement still finds the VM by the address.
+- Repositories without a host of their own (object storage, dedup appliances) are placed on their
+  gateway server by PowerShell (often the VBR server); Python shows them as "Unknown / physical".
+- Both collectors label object storage backup jobs `File backup`, as `Get-VBRUnstructuredBackupJob`
+  does not tell them apart.
+- Object type names differ slightly by collector (`Vapp` / `vApp`, `Virtual machine` / `Virtual
+  Machine` for Hyper-V), and PowerShell lists the computers of an agent job as `Protection group`.
+- Entra ID tenant backup jobs have no enabled / disabled state in PowerShell (only `EnableSchedule`),
+  so they always show as enabled.

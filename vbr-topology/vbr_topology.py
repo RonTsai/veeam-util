@@ -517,6 +517,48 @@ SHARE_REPO_TYPES = {"smb", "nfs"}
 DEDUP_REPO_TYPES = {"ddboost", "exagrid", "hpstoreonce", "quantum", "infinidat", "fujitsu"}
 
 
+LOCAL_HOSTS = {"localhost", ".", "127.0.0.1", "::1"}
+
+# REST job types -> the wording PowerShell shows (TypeToString and the PowerShell collector's own labels)
+JOB_TYPES = {"vspherebackup": "VMware Backup", "hypervbackup": "Hyper-V Backup",
+             "vspherereplica": "VMware Replication", "hypervreplica": "Hyper-V Replication",
+             "clouddirectorbackup": "Cloud Director Backup", "filebackup": "File backup",
+             "objectstoragebackup": "File backup", "entraidtenantbackup": "Entra ID backup",
+             "surebackupcontentscan": "SureBackup (content scan)", "surebackup": "SureBackup"}
+AGENT_OS = {"windows": "Windows", "linux": "Linux", "mac": "Mac", "unix": "Unix", "solaris": "Unix", "aix": "Unix"}
+
+
+def job_type_label(j):
+    t = j.get("type") or ""
+    if _lc(t) in JOB_TYPES:
+        return JOB_TYPES[_lc(t)]
+    if _lc(t) == "backupcopy":
+        return f"Backup copy ({j['mode']})" if j.get("mode") else "Backup copy"
+    # WindowsAgentBackup (managed by the backup server), WindowsAgentBackupServerPolicy (managed by the agent), ...
+    m = re.match(r"^(windows|linux|mac|unix|solaris|aix)agentbackup(.*)$", _lc(t))
+    if m:
+        mode = "ManagedByAgent" if "policy" in m.group(2) else "ManagedByBackupServer"
+        return f"Agent backup ({AGENT_OS[m.group(1)]}, {mode})"
+    return t
+
+
+def canonical_host(name):
+    """
+    The DNS name of a host given as an IP or a short name / alias (forward, then reverse lookup),
+    or None when DNS has nothing better. Full names are kept as given.
+    """
+    if not name or _lc(name) in LOCAL_HOSTS or (not _is_ip(name) and "." in name):
+        return None
+    try:
+        addr = name if _is_ip(name) else socket.gethostbyname(name)
+        ptr = socket.gethostbyaddr(addr)[0]
+    except OSError:
+        return None
+    if ptr and _lc(ptr) != _lc(name) and not _is_ip(ptr) and (_is_ip(name) or "." in ptr):
+        return ptr
+    return None
+
+
 def _lc(s):
     return (s or "").strip().lower()
 
@@ -550,22 +592,22 @@ def find_first(obj, key):
 
 def placement_index(raw, csv_rows):
     """
-    Build a lookup: lowercase VM name / short name / IP -> placement info.
+    Build two lookups: lowercase VM name / IP -> placement info, and short name (first label) -> placement info.
     Priority: manual CSV, then vCenter REST (guest hostname / IP), then the VBR inventory.
     """
-    index = {}
+    index, short = {}, {}
 
-    def add(key, info):
+    def add(key, info, into=index):
         k = _lc(key)
-        if k and k not in index:
-            index[k] = info
+        if k and k not in into:
+            into[k] = info
 
     def add_names(name, info):
         if not name:
             return
         add(name, info)
         if not _is_ip(name):
-            add(name.split(".")[0], info)
+            add(name.split(".")[0], info, short)
 
     for r in csv_rows:
         if r.get("Component") and r.get("Host"):
@@ -617,7 +659,7 @@ def placement_index(raw, csv_rows):
                             host = host_names[_lc(seg)]
             if host:
                 add_names(o.get("name"), {"host": host, "vm": o.get("name"), "source": src, "platform": "vi"})
-    return index
+    return index, short
 
 
 def _strings(obj, skip=()):
@@ -711,10 +753,17 @@ def build_model(raw, csv_rows=()):
 
     info = raw.get("serverInfo") or {}
     meta = raw.get("_meta", {})
-    vbr_name = info.get("name") or urllib.parse.urlparse(meta.get("base", "")).hostname or "VBR"
+    # The backup server is named after the host we connected to (its DNS name when that was an IP or a
+    # short name); serverInfo.name is VBR's internal name (e.g. "vbr-1a2b3c4d" on the appliance) and is
+    # only used for a local connection
+    conn_host = urllib.parse.urlparse(meta.get("base", "")).hostname or ""
+    dns_name = meta.get("hostName") if "hostName" in meta else canonical_host(conn_host)  # older vbr_raw.json: resolve now
+    vbr_name = (dns_name or (conn_host if conn_host and not _is_ip(conn_host) and _lc(conn_host) not in LOCAL_HOSTS else None)
+                or info.get("name") or conn_host or "VBR")
     add_node("vbr", "backup", vbr_name, f"Backup server · v{info.get('buildVersion', '?')}",
              details={"Build": info.get("buildVersion"), "Patches": ", ".join(info.get("patches") or []),
-                      "Database": info.get("databaseVendor"), "VBR ID": info.get("vbrId")})
+                      "Database": info.get("databaseVendor"), "VBR ID": info.get("vbrId"),
+                      "Connected as": conn_host if dns_name else None})
 
     # ---- Enterprise Manager (management tier, drawn next to the backup server)
     for em in raw.get("enterpriseManagers") or []:
@@ -742,7 +791,7 @@ def build_model(raw, csv_rows=()):
         vc_versions = {vc_names[0]: next(iter(vc_versions.values()))}
     for s in servers.values():
         t = s.get("type", "")
-        if _lc(s.get("name")) == _lc(vbr_name):
+        if _lc(s.get("name")) in (_lc(vbr_name), _lc(info.get("name"))):
             used_hosts.add(s["id"])
         if t == "ViHost":
             vt = s.get("viHostType", "")
@@ -878,29 +927,70 @@ def build_model(raw, csv_rows=()):
     jobs = raw.get("jobs") or []
     job_rows = []
     server_names = {s["id"]: s.get("name") for s in servers.values()}
+
+    def job_repo(j):
+        # Replicas keep only their metadata in a repository (jobSettings.metadataRepositoryId)
+        return ((j.get("storage") or {}).get("backupRepositoryId") or next(iter(find_all(j, "backupRepositoryId")), None)
+                or next(iter(find_all(j, "metadataRepositoryId")), None))
+
+    repo_of_job = {j.get("id"): job_repo(j) for j in jobs}
+    replica_targets = []   # (proxies, destination host, its vCenter, label): linked once ESXi hosts are known
     for j in jobs:
         jt = j.get("type", "")
         jtl = _lc(jt)
         name = j.get("name")
         storage = j.get("storage") or {}
-        repo = storage.get("backupRepositoryId") or next(iter(find_all(j, "backupRepositoryId")), None)
-        proxy_cfg = storage.get("backupProxies") or next(iter(find_all(j, "backupProxies")), {}) or {}
+        repo = repo_of_job.get(j.get("id"))
+        # Backup jobs: storage.backupProxies {autoSelection, proxyIds}; replicas: dataTransfer.sourceProxies
+        proxy_cfg = (storage.get("backupProxies") or next(iter(find_all(j, "backupProxies")), {})
+                     or (j.get("dataTransfer") or {}).get("sourceProxies") or {})
         sel_proxies = [p for p in (proxy_cfg.get("proxyIds") or []) if p in nodes]
-        auto = proxy_cfg.get("autoSelection", not sel_proxies)
+        auto = proxy_cfg.get("autoSelection", proxy_cfg.get("autoSelectEnabled", not sel_proxies))
         includes = (j.get("virtualMachines") or {}).get("includes") or []
         hosts = set()
         for inc in includes:
             obj = _obj(inc)
             if obj.get("hostName"):
                 hosts.add(obj["hostName"])
-        job_rows.append({"name": name, "type": jt, "disabled": j.get("isDisabled"),
+        is_agent = "agent" in jtl or "computer" in jtl
+        is_copy = "copy" in jtl
+        # Protection groups of an agent job; source jobs of a backup copy / SureBackup job
+        pg_ids = list(dict.fromkeys(i for c in j.get("computers") or [] for i in (c.get("protectionGroupId"), c.get("id"))
+                                    if isinstance(i, str) and nodes.get(i, {}).get("kind") == "agent")) if is_agent else []
+        src_jobs = [_obj(x) for x in ((j.get("sourceObjects") or {}).get("includes") or {}).get("jobs") or []]
+        src_jobs += [_obj(x) for x in (j.get("linkedJobs") or {}).get("includes") or []]
+        if is_agent:
+            sources = [nodes[p]["name"] for p in pg_ids]
+        elif src_jobs:
+            sources = [x.get("name") for x in src_jobs if x.get("name")]
+        else:
+            sources = sorted(hosts)
+        if is_agent or is_copy or "entraid" in jtl or "surebackup" in jtl:
+            proxies = "—"   # no backup proxy of their own, as PowerShell shows them
+        elif auto and not sel_proxies:
+            proxies = "Automatic"
+        else:
+            proxies = ", ".join(nodes[p]["name"] for p in sel_proxies)
+        objects = job_objects(j, server_names)
+        objects += [{"name": x.get("name"), "type": "Job", "location": "", "size": "", "excluded": False}
+                    for x in (j.get("linkedJobs") or {}).get("includes") or [] if x.get("name")]
+        job_rows.append({"name": name, "type": job_type_label(j), "disabled": j.get("isDisabled"),
                          "repository": (nodes.get(repo) or {}).get("name"),
-                         "sources": sorted(hosts), "proxies": "Automatic" if auto and not sel_proxies
-                         else ", ".join(nodes[p]["name"] for p in sel_proxies),
-                         "objects": job_objects(j, server_names)})
+                         "sources": sources, "proxies": proxies, "objects": objects})
+        label = name + (" (disabled)" if j.get("isDisabled") else "")
+        if "replica" in jtl:
+            # Source host -> proxies -> target host, as PowerShell draws it (the metadata repository is not drawn)
+            px = sel_proxies or proxies_by_type.get("ViProxy", [])
+            for h in hosts:
+                src = source_node(h, "hv" if "hyperv" in jtl else "vi")
+                for p in px:
+                    add_link(src, p, label, "auto")
+            dest = _obj((j.get("destination") or {}).get("host") or {})
+            if dest.get("name"):
+                replica_targets.append((px, dest["name"], dest.get("hostName"), label))
+            continue
         if repo not in nodes:
             continue
-        label = name + (" (disabled)" if j.get("isDisabled") else "")
         if "vsphere" in jtl or "vmware" in jtl or "vcd" in jtl or "clouddirector" in jtl:
             px = sel_proxies or proxies_by_type.get("ViProxy", [])
             for h in hosts:
@@ -921,8 +1011,7 @@ def build_model(raw, csv_rows=()):
                         add_link(p, repo, label)
                 else:            # on-host proxy
                     add_link(src, repo, label)
-        elif "agent" in jtl or "computer" in jtl:
-            pg_ids = [i for i in find_all(j, "id") if isinstance(i, str) and nodes.get(i, {}).get("kind") == "agent"]
+        elif is_agent:
             if not pg_ids:
                 pg_ids = [add_node("agents", "agent", "Veeam Agents", "Physical / virtual servers",
                                    badges=["A"])["id"]]
@@ -932,14 +1021,22 @@ def build_model(raw, csv_rows=()):
             px = sel_proxies or proxies_by_type.get("GeneralPurposeProxy", [])
             for p in px:
                 add_link(p, repo, label, "data" if sel_proxies else "auto")
-        elif "copy" in jtl:
-            src_repo = j.get("sourceRepositoryId") or next(iter(find_all(j.get("source") or {}, "backupRepositoryId")), None)
-            if src_repo in nodes:
-                add_link(src_repo, repo, label, "copy")
+        elif is_copy:
+            # Source repositories: those of the source jobs (sourceObjects.includes.jobs), the source
+            # repositories listed in the job, and the older sourceRepositoryId / source fields
+            src = (j.get("sourceObjects") or {}).get("includes") or {}
+            src_repos = [repo_of_job.get(x.get("id")) for x in src_jobs]
+            src_repos += [_obj(x).get("id") for x in src.get("repositories") or []]
+            src_repos.append(j.get("sourceRepositoryId") or next(iter(find_all(j.get("source") or {}, "backupRepositoryId")), None))
+            for sr in src_repos:
+                if sr in nodes:
+                    add_link(sr, repo, label, "copy")
 
-    # Agent backups from /backups (older API versions have no agent jobs)
+    # Agent backups from /backups, only when /jobs has no agent jobs (older API versions). Otherwise
+    # these are backups without a job (imported or orphaned), which PowerShell does not show either.
+    has_agent_jobs = any("agent" in _lc(j.get("type")) or "computer" in _lc(j.get("type")) for j in jobs)
     linked_repos_from_agents = {l["target"] for l in links.values() if nodes[l["source"]]["kind"] == "agent"}
-    for b in raw.get("backups") or []:
+    for b in [] if has_agent_jobs else raw.get("backups") or []:
         plat = _lc(b.get("platformName"))
         rid = b.get("repositoryId")
         if rid in nodes and ("physical" in plat or "agent" in plat) and rid not in linked_repos_from_agents:
@@ -989,14 +1086,21 @@ def build_model(raw, csv_rows=()):
                               "VMs": counts.get(h["name"], 0)})
 
     # ---- Which ESXi host each component runs on
-    place_by = placement_index(raw, csv_rows)
-    if place_by:
-        apply_placement(nodes, by_name, place_by, add_node, vbr_name)
+    place_by, place_short = placement_index(raw, csv_rows)
+    if place_by or place_short:
+        apply_placement(nodes, by_name, place_by, place_short, add_node, conn_host)
     elif raw.get("inventory"):
         warnings.append("The vSphere inventory was read, but it has no VM-to-host relation; component hosts "
                         "not matched (use the PowerShell version or --placement-csv)")
     elif any(n["kind"] == "vi_host" for n in nodes.values()):
         warnings.append("vSphere inventory unavailable; component hosts not matched (use --placement-csv)")
+
+    # ---- Replica targets: proxies -> the target host (ESXi hosts are known by now), else the vCenter it belongs to
+    for px, dest, dest_vc, label in replica_targets:
+        hosts_by_name = {_lc(n["name"]): n["id"] for n in nodes.values() if n["kind"] in ("vi_host", "hv_host")}
+        tgt = hosts_by_name.get(_lc(dest)) or hosts_by_name.get(_lc(dest_vc))
+        for p in px:
+            add_link(p, tgt, label, "copy")
 
     add_ips(nodes)
 
@@ -1017,7 +1121,19 @@ def build_model(raw, csv_rows=()):
     }
 
 
-def apply_placement(nodes, by_name, place_by, add_node, vbr_name):
+def find_placement(names, place_by, place_short):
+    """
+    Placement of the first name that matches: full names first, then IP addresses, then short names.
+    A short name is the weakest key: "vbr" is also the first label of an unrelated VM name like "VBR.WIN.Demo".
+    """
+    variants = [_lc(v) for nm in names for v in name_variants(nm) if v]
+    ips = [v for v in variants if _is_ip(v)]
+    full = [v for v in variants if not _is_ip(v)]
+    return (next((place_by[v] for v in full + ips if v in place_by), None)
+            or next((place_short[v] for v in full if v in place_short), None))
+
+
+def apply_placement(nodes, by_name, place_by, place_short, add_node, conn_host):
     """Set placement / runsOn on every component; create ESXi nodes discovered via vCenter."""
     for n in list(nodes.values()):
         if n["kind"] not in ("backup", "em", "vone", "proxy", "repo", "server"):
@@ -1027,13 +1143,9 @@ def apply_placement(nodes, by_name, place_by, add_node, vbr_name):
             names.append(n["details"]["Host"])
         if n["kind"] != "repo":
             names.append(n["name"])
-        if n["kind"] == "backup":
-            names.append(vbr_name)
-        hit = None
-        for nm in names:
-            hit = next((place_by[_lc(v)] for v in name_variants(nm) if _lc(v) in place_by), None)
-            if hit:
-                break
+        if n["kind"] == "backup" and conn_host and _lc(conn_host) not in LOCAL_HOSTS:
+            names.append(conn_host)   # the address we connected to (an IP matches the VM's guest IP)
+        hit = find_placement(names, place_by, place_short)
         if not hit:
             n["placement"] = {"host": None, "note": "Not found in the vSphere / Hyper-V inventory (physical or unmanaged)"}
             n["details"]["Runs on"] = "Unknown / physical"
@@ -1128,6 +1240,7 @@ def main():
             raw = collect(client)
         finally:
             client.logout()
+        raw["_meta"]["hostName"] = canonical_host(args.host)   # kept for --from-raw
         if args.em and args.em_user and not args.em_password:
             # A different EM account usually has its own password; Enter keeps the VBR password
             args.em_password = getpass.getpass(f"Password for EM user {args.em_user} (Enter = same as VBR): ") or None

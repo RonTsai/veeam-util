@@ -49,7 +49,7 @@ There are two collectors that produce the same diagram from one shared `template
 | vSphere versions | vCenter and ESXi | vCenter only (with `--vcenter-user`) |
 | Plug-in platforms (Proxmox VE, Nutanix AHV, HPE Morpheus VME) | Hosts and jobs | — (not in the REST API) |
 | Job protected objects | All job types, with full inventory paths | All but plug-in jobs; location is the host name |
-| Extras | Tape servers, replica jobs, SOBR capacity-tier offload | — |
+| Extras | Tape servers, Hyper-V replica jobs, SOBR capacity-tier offload | — |
 
 ## Files
 
@@ -159,7 +159,7 @@ Set-ExecutionPolicy -Scope Process Bypass
 
 | Parameter | Description |
 |---|---|
-| `-Server` | VBR server to connect to (default `localhost`) |
+| `-Server` | VBR server to connect to (default `localhost`). Ignored when the window is already connected, as the Veeam PowerShell Toolkit window is: the existing connection is used. |
 | `-Credential` | Credentials for `-Server` |
 | `-OutDir` | Base output folder (default `.\out`) |
 | `-NoTimestamp` | Overwrite `-OutDir` instead of creating a per-run subfolder |
@@ -177,7 +177,7 @@ Cmdlets used (Get-* / Find-* only):
 `Get-VBRBackupRepository [-ScaleOut]`, `Get-VBRObjectStorageRepository`, `Get-VBRTapeServer`,
 `Get-VBRProtectionGroup`, `Get-VBRDiscoveredComputer`, `Get-VBRJob`, `Get-VBRJobObject`,
 `Get-VBRComputerBackupJob`, `Get-VBRBackupCopyJob`, `Get-VBRUnstructuredBackupJob` (`Get-VBRNASBackupJob` on
-older versions), `Find-VBRViEntity`, `Find-VBRHvEntity`.
+older versions), `Get-VBREntraIDTenantBackupJob`, `Get-VBRSureBackupJob`, `Find-VBRViEntity`, `Find-VBRHvEntity`.
 
 A cmdlet that is missing in your version, or whose feature is not licensed, is skipped and listed as a
 warning at the top of the report.
@@ -302,7 +302,8 @@ Matching methods, highest priority first:
 | Veeam inventory (default) | `Find-VBRViEntity` / `Find-VBRHvEntity` | inventory REST API | Matches the VM name. |
 
 With the Veeam inventory, the VM name must match the component's hostname (FQDN or short name). Names that
-are IP addresses are first resolved through DNS. Components that are still not found are usually physical
+are IP addresses are first resolved through DNS. Full names are tried first, then IP addresses, then short
+names (the first label), so a VM named `VBR.WIN.Demo` does not catch a component named `vbr`. Components that are still not found are usually physical
 servers, or VMs whose name differs from their hostname. Add those with the CSV, or use PowerCLI
 (PowerShell) / `--vcenter-user` (Python).
 
@@ -338,11 +339,12 @@ highlighted in the diagram until you click the job again, even while you hover o
 
 | Job type | PowerShell | Python (REST) |
 |---|---|---|
-| VMware, Hyper-V, Cloud Director, replica | `Get-VBRJobObject` (type from `TypeDisplayName`, full inventory path) | `virtualMachines.includes` / `excludes.vms` (location is the host name) |
+| VMware, Hyper-V, Cloud Director, replica | `Get-VBRJobObject`, `Include` / `Exclude` entries (type from `TypeDisplayName`, full inventory path) | `virtualMachines.includes` / `excludes.vms` (location is the host name) |
 | Plug-in (Proxmox VE, Nutanix AHV, HPE Morpheus VME) | `Get-VBRJobObject` (no location) | — (not in the REST API) |
 | Agent | `BackupObject`: protection groups | `computers`: protection groups |
 | File share, object storage | `BackupObject`: shares and buckets, then their include / exclude File masks (and tag masks for buckets) | `objects`: the same |
 | Backup copy | Source jobs and repositories | `sourceObjects` |
+| SureBackup | Linked jobs | `linkedJobs` |
 
 The **Include / Exclude** column matches the VBR job settings: for VM jobs, an excluded object is on the
 job's **Exclusions** list; for file share jobs, the **File masks** (include and exclude) are listed as
