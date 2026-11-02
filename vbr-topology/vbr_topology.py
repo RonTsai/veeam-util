@@ -512,7 +512,7 @@ def collect_vcenter(args, raw, password):
 
 OBJECT_REPO_TYPES = {"amazons3", "s3compatible", "azureblob", "azurearchive", "googlecloud",
                      "ibmcloud", "wasabicloud", "amazons3glacier", "veeamdatacloudvault",
-                     "amazonsnowballedge", "s3"}
+                     "amazonsnowballedge", "s3", "smartobjects3"}   # smartobjects3: Object First
 SHARE_REPO_TYPES = {"smb", "nfs"}
 DEDUP_REPO_TYPES = {"ddboost", "exagrid", "hpstoreonce", "quantum", "infinidat", "fujitsu"}
 
@@ -825,7 +825,9 @@ def build_model(raw, csv_rows=()):
         used_hosts.add(hid)
         label = {"ViProxy": "VMware backup proxy", "HvProxy": "Hyper-V off-host proxy",
                  "GeneralPurposeProxy": "General-purpose proxy"}.get(t, t)
-        add_node(p["id"], "proxy", p.get("name") or host_name(hid) or "proxy", label, badges=["M"],
+        # General-purpose proxies are named after their server, as in PowerShell (REST calls them "Backup Proxy")
+        name = (host_name(hid) if t == "GeneralPurposeProxy" else None) or p.get("name") or host_name(hid) or "proxy"
+        add_node(p["id"], "proxy", name, label, badges=["M"],
                  details={"Type": t, "Host": host_name(hid), "Transport mode": srv.get("transportMode"),
                           "Max tasks": srv.get("maxTaskCount"), "Description": p.get("description"),
                           "_ptype": t})

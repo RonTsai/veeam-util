@@ -90,6 +90,15 @@
         "transportMode": "Network",
         "maxTaskCount": 4
       }
+    },
+    {
+      "id": "px-3",
+      "name": "Backup Proxy",
+      "type": "GeneralPurposeProxy",
+      "server": {
+        "hostId": "ms-repo1",
+        "maxTaskCount": 4
+      }
     }
   ],
   "repositories": [

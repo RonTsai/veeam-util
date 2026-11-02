@@ -6,6 +6,11 @@
 
 - PowerShell: a tape server whose host could not be read was also listed as a managed server without
   a role. Its managed server of the same name is now taken as its host.
+- PowerShell: object storage repositories that `Get-VBRBackupRepository` also returns (Amazon S3,
+  Veeam Vault, ...) were drawn as plain repositories; they are object storage now, as in Python.
+- Both: Object First (`SmartObjectS3`) is drawn as object storage.
+- Python: a general-purpose proxy is named after its server, as in PowerShell, instead of the REST
+  name `Backup Proxy`.
 
 ### Added
 

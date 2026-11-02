@@ -425,6 +425,9 @@ foreach ($sb in $sobrs) {
 }
 
 $dedupTypes = "DDBoost|ExaGrid|StoreOnce|Quantum|Infinidat|Fujitsu"
+# Object storage (S3, Azure, Veeam Vault, Object First, ...): Get-VBRBackupRepository returns most of them too,
+# before Get-VBRObjectStorageRepository, so they are classified here (Python: OBJECT_REPO_TYPES)
+$objectTypes = "S3|Azure(Blob|Archive)|Google|IBM|Wasabi|Vault|Snowball|Glacier|SmartObject"
 foreach ($r in $repos) {
     $id = Get-IdStr $r; $t = "$($r.Type)"
     $hid = Resolve-HostId $r; if ($hid) { [void]$UsedHosts.Add($hid) }
@@ -433,6 +436,7 @@ foreach ($r in $repos) {
     $gw = $null
     try { $gw = (@($r.GetActualGateways()) | ForEach-Object { $_.Name }) -join ", " } catch { }
     if ($t -match "Cifs|Smb|Nfs") { $kind = "repo"; $label = "NAS share · $t"; $badges = @() }
+    elseif ($t -match $objectTypes) { $kind = "object"; $label = "Object storage · $t"; $badges = @() }
     elseif ($t -match $dedupTypes) { $kind = "repo"; $label = "Dedup appliance · $t"; $badges = @() }
     else {
         $kind = "repo"; $badges = @("M")

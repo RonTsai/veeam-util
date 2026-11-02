@@ -36,7 +36,8 @@ function Get-VBRViProxy {
     New-Obj @{ Id = (gid "vpx2"); Name = "vbrpx02.corp.local"; Host = $H.px2; IsDisabled = $false; Options = [pscustomobject]@{ TransportMode = "Network"; MaxTasksCount = 4 } }
 }
 function Get-VBRHvProxy { New-Obj @{ Id = (gid "hvp"); Name = "hv01.corp.local"; Host = $H.hv1; Type = "OnHost"; MaxTasksCount = 4 } }
-function Get-VBRNASProxyServer { throw "not licensed" }
+# General-purpose proxy: named after its server (the REST API calls it "Backup Proxy")
+function Get-VBRNASProxyServer { New-Obj @{ Id = (gid "gpx"); Server = $H.repo1; ConcurrentTaskNumber = 4 } }
 function Get-VBRWANAccelerator { }
 function cont($t, $f) { New-Obj @{} @{ GetContainer = [scriptblock]::Create("[pscustomobject]@{ CachedTotalSpace = [pscustomobject]@{ InGigabytes = $t }; CachedFreeSpace = [pscustomobject]@{ InGigabytes = $f } }") } }
 function Get-VBRBackupRepository([switch]$ScaleOut) {
@@ -48,7 +49,7 @@ function Get-VBRBackupRepository([switch]$ScaleOut) {
     $global:R1 = New-Obj @{ Id = (gid "r1"); Name = "Repo01-ReFS"; Type = "WinLocal"; HostId = (gid "repo1"); FriendlyPath = "E:\Backups" } @{ GetContainer = { [pscustomobject]@{ CachedTotalSpace = [pscustomobject]@{ InGigabytes = 40000 }; CachedFreeSpace = [pscustomobject]@{ InGigabytes = 12000 } } } }
     $global:R2 = New-Obj @{ Id = (gid "r2"); Name = "LHR01"; Type = "LinuxHardened"; HostId = (gid "lhr1"); FriendlyPath = "/mnt/veeam" } @{ GetContainer = { [pscustomobject]@{ CachedTotalSpace = [pscustomobject]@{ InGigabytes = 100000 }; CachedFreeSpace = [pscustomobject]@{ InGigabytes = 61000 } } } }
     $global:R3 = New-Obj @{ Id = (gid "r3"); Name = "LHR02"; Type = "LinuxHardened"; HostId = (gid "lhr2"); FriendlyPath = "/mnt/veeam" }
-    $global:R1   # like VBR v12+: SOBR extents (R2, R3) are not returned
+    $global:R1; $global:R4   # like VBR v12+: SOBR extents (R2, R3) are not returned; object storage (R4) is
 }
 $global:R4 = New-Obj @{ Id = (gid "r4"); Name = "Wasabi-Offsite"; Type = "WasabiCloud"; BucketName = "veeam-offsite" }
 function Get-VBRObjectStorageRepository { $global:R4 }
