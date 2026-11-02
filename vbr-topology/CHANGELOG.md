@@ -1,5 +1,13 @@
 # Changelog: vbr-topology
 
+## Unreleased
+
+### Changed
+
+- Report: the diagram's horizontal scrollbar is always shown (Chrome, Edge, Safari), and a shade on
+  the left / right edge shows that the diagram continues that way. Overlay scrollbars (macOS,
+  Windows 11) used to stay hidden until you scrolled, so it was not clear that the diagram is wider.
+
 ## v1.5.0 (2026-11-02)
 
 ### Fixed

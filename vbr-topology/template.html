@@ -16,7 +16,20 @@
   .toolbar button, .toolbar label { font:inherit; font-size:13px; border:1px solid var(--line); background:#fff;
          color:var(--ink); padding:6px 12px; border-radius:6px; cursor:pointer; }
   .toolbar button:hover { border-color:var(--green); }
-  .canvas { margin:8px 16px; background:#fff; border:1px solid var(--line); border-radius:10px; overflow:auto; }
+  .canvasWrap { position:relative; margin:8px 16px; }
+  .canvas { background:#fff; border:1px solid var(--line); border-radius:10px; overflow:auto; }
+  /* Always-visible horizontal scrollbar (Chrome, Edge, Safari); Firefox gets its thin standard one */
+  .canvas::-webkit-scrollbar { height:12px; width:12px; }
+  .canvas::-webkit-scrollbar-track, .canvas::-webkit-scrollbar-corner { background:#f1f3f4; }
+  .canvas::-webkit-scrollbar-thumb { background:#b9c1c7; border-radius:6px; border:3px solid #f1f3f4; }
+  .canvas::-webkit-scrollbar-thumb:hover { background:#8e989f; }
+  @supports not selector(::-webkit-scrollbar) { .canvas { scrollbar-width:thin; scrollbar-color:#b9c1c7 #f1f3f4; } }
+  /* Edge shades while there is more to scroll to (set by updateShade) */
+  .canvasWrap::before, .canvasWrap::after { content:""; position:absolute; top:1px; bottom:13px; width:36px;
+         pointer-events:none; opacity:0; transition:opacity .2s; }
+  .canvasWrap::before { left:1px; border-radius:9px 0 0 0; background:linear-gradient(to right, rgba(38,48,56,.14), transparent); }
+  .canvasWrap::after { right:1px; border-radius:0 9px 0 0; background:linear-gradient(to left, rgba(38,48,56,.14), transparent); }
+  .canvasWrap.more-left::before, .canvasWrap.more-right::after { opacity:1; }
   .warn { margin:8px 28px; padding:10px 14px; background:#fff8e1; border:1px solid #f1d98a; border-radius:8px; font-size:13px; }
   section { padding:8px 28px 24px; }
   h2 { font-weight:500; font-size:18px; margin:18px 0 8px; }
@@ -53,7 +66,7 @@
   <label><input type="checkbox" id="showOther" checked> <span data-i18n="showOther"></span></label>
 </div>
 <div id="warnings"></div>
-<div class="canvas"><svg id="diagram" xmlns="http://www.w3.org/2000/svg"></svg></div>
+<div class="canvasWrap"><div class="canvas"><svg id="diagram" xmlns="http://www.w3.org/2000/svg"></svg></div></div>
 <section>
   <div id="placeSection" style="display:none">
     <h2 data-i18n="placeTitle"></h2>
@@ -410,7 +423,18 @@ function render() {
   svg.innerHTML = s;
   wireHover(svg);
   highlightSelJob();
+  updateShade();
 }
+
+// Shade the side(s) of the diagram with more to scroll to: overlay scrollbars (macOS, Windows 11)
+// stay hidden until you scroll, so a first-time viewer would not know the diagram is wider
+function updateShade() {
+  const c = document.querySelector(".canvas"), max = c.scrollWidth - c.clientWidth;
+  c.parentElement.classList.toggle("more-left", c.scrollLeft > 1);
+  c.parentElement.classList.toggle("more-right", c.scrollLeft < max - 1);
+}
+document.querySelector(".canvas").addEventListener("scroll", updateShade, { passive: true });
+window.addEventListener("resize", updateShade);
 
 function wireHover(svg) {
   const tip = document.getElementById("tip");
