@@ -49,7 +49,7 @@ There are two collectors that produce the same diagram from one shared `template
 | vSphere versions | vCenter and ESXi | vCenter only (with `--vcenter-user`) |
 | Plug-in platforms (Proxmox VE, Nutanix AHV, HPE Morpheus VME) | Hosts and jobs | — (not in the REST API) |
 | Job protected objects | All job types, with full inventory paths | All but plug-in jobs; location is the host name |
-| Extras | Tape servers, Hyper-V replica jobs, SOBR capacity-tier offload | — |
+| Extras | Tape servers, tape libraries and tape jobs, SureBackup virtual labs, Cloud Connect service providers, Hyper-V replica jobs, SOBR capacity-tier offload | — |
 
 ## Files
 
@@ -177,7 +177,8 @@ Cmdlets used (Get-* / Find-* only):
 `Get-VBRBackupRepository [-ScaleOut]`, `Get-VBRObjectStorageRepository`, `Get-VBRTapeServer`,
 `Get-VBRProtectionGroup`, `Get-VBRDiscoveredComputer`, `Get-VBRJob`, `Get-VBRJobObject`,
 `Get-VBRComputerBackupJob`, `Get-VBRBackupCopyJob`, `Get-VBRUnstructuredBackupJob` (`Get-VBRNASBackupJob` on
-older versions), `Get-VBREntraIDTenantBackupJob`, `Get-VBRSureBackupJob`, `Find-VBRViEntity`, `Find-VBRHvEntity`.
+older versions), `Get-VBREntraIDTenantBackupJob`, `Get-VBRSureBackupJob`, `Get-VBRVirtualLab`, `Get-VBRTapeLibrary`,
+`Get-VBRTapeJob`, `Get-VBRCloudProvider`, `Find-VBRViEntity`, `Find-VBRHvEntity`.
 
 A cmdlet that is missing in your version, or whose feature is not licensed, is skipped and listed as a
 warning at the top of the report.
@@ -344,7 +345,8 @@ highlighted in the diagram until you click the job again, even while you hover o
 | Agent | `BackupObject`: protection groups | `computers`: protection groups |
 | File share, object storage | `BackupObject`: shares and buckets, then their include / exclude File masks (and tag masks for buckets) | `objects`: the same |
 | Backup copy | Source jobs and repositories | `sourceObjects` |
-| SureBackup | Linked jobs | `linkedJobs` |
+| SureBackup | Linked jobs, application group (with its VMs) and virtual lab | `linkedJobs` |
+| Tape | Source jobs or file shares; the media pool is shown as the repository | — (PowerShell only) |
 
 The **Include / Exclude** column matches the VBR job settings: for VM jobs, an excluded object is on the
 job's **Exclusions** list; for file share jobs, the **File masks** (include and exclude) are listed as

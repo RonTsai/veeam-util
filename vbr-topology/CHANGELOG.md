@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+### Fixed
+
+- PowerShell: a tape server whose host could not be read was also listed as a managed server without
+  a role. Its managed server of the same name is now taken as its host.
+
+### Added
+
+- PowerShell: SureBackup virtual labs (`Get-VBRVirtualLab`), shown with the other servers and placed
+  on the ESXi / Hyper-V host they run on. SureBackup jobs list their application group (with its VMs)
+  and virtual lab.
+- PowerShell: tape libraries (`Get-VBRTapeLibrary`) with their tape server, drives and slots, and
+  tape jobs (`Get-VBRTapeJob`, Backup to tape / File to tape) in the Jobs table, with the media pool
+  as the target.
+- PowerShell: Cloud Connect service providers (`Get-VBRCloudProvider`), drawn with the repositories.
+  Not tested on a real provider yet (the lab has none).
+
 ### Changed
 
 - Report: the diagram's horizontal scrollbar is always shown (Chrome, Edge, Safari), and a shade on
@@ -161,7 +177,8 @@ First release.
 
 - Tested in one lab environment (VBR v13.1, vCenter 8.0.3, ESXi 7.0.3 and 8.0.3) and against the
   offline mocks only.
-- Python does not list tape servers yet; the REST endpoint for them still needs to be confirmed.
+- Python does not list tape servers, tape libraries, tape jobs, SureBackup virtual labs or Cloud
+  Connect service providers yet; their REST endpoints still need to be confirmed.
 - On VBR v13 REST, the inventory does not return VMs per host. Without `--vcenter-user`, Python
   usually cannot place components on ESXi hosts.
 - Without PowerCLI or `--vcenter-user`, components are matched by VM name only. Proxies registered

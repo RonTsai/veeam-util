@@ -173,6 +173,14 @@ $entraJobs   = Invoke-Safe "Get-VBREntraIDTenantBackupJob" {
 $sbJobs      = Invoke-Safe "Get-VBRSureBackupJob"          {
     if (Get-Command Get-VBRSureBackupJob -ErrorAction SilentlyContinue) { Get-VBRSureBackupJob }
 }
+$vlabs       = Invoke-Safe "Get-VBRVirtualLab"             {
+    if (Get-Command Get-VBRVirtualLab -ErrorAction SilentlyContinue) { Get-VBRVirtualLab }
+}
+$tapeLibs    = Invoke-Safe "Get-VBRTapeLibrary"            { Get-VBRTapeLibrary }
+$tapeJobs    = Invoke-Safe "Get-VBRTapeJob"                { Get-VBRTapeJob }
+$cloudProvs  = Invoke-Safe "Get-VBRCloudProvider"          {
+    if (Get-Command Get-VBRCloudProvider -ErrorAction SilentlyContinue) { Get-VBRCloudProvider }
+}
 
 $build = $null
 try { $build = (Get-VBRBackupServerInfo).Build.ToString() } catch { }
@@ -357,8 +365,46 @@ foreach ($w in $wans) {
     Add-Node $id "proxy" $w.Name "WAN accelerator" @("M") @{ Host = (Resolve-HostName $w); Description = $w.Description } | Out-Null
 }
 foreach ($t in $tapes) {
-    $id = Get-IdStr $t; [void]$UsedHosts.Add((Resolve-HostId $t))
-    Add-Node $id "server" $t.Name "Tape server" @("M") @{ Host = (Resolve-HostName $t); Description = $t.Description } | Out-Null
+    $id = Get-IdStr $t; $hid = Resolve-HostId $t; $hn = Resolve-HostName $t
+    # Tape servers may not expose their host; the managed server of the same name is then the host,
+    # so it is not listed a second time as a managed server without a role
+    if (-not $hid -and $t.Name -and $serverByName.ContainsKey($t.Name.ToLower())) { $s = $serverByName[$t.Name.ToLower()]; $hid = Get-IdStr $s; $hn = $s.Name }
+    if ($hid) { [void]$UsedHosts.Add($hid) }
+    Add-Node $id "server" $t.Name "Tape server" @("M") @{ Host = $hn; Description = $t.Description } | Out-Null
+}
+# Tape libraries: physical devices of a tape server (TapeServerId is the tape server's Id)
+foreach ($l in $tapeLibs) {
+    $tsId = "$(Get-Prop $l @('TapeServerId', 'TapeServer.Id'))"
+    $model = "$(Get-Prop $l @('Model'))"
+    Add-Node ("tapelib:" + (Get-IdStr $l)) "server" $l.Name ("Tape library" + $(if ($model) { " · $model" } else { "" })) @() @{
+        "Tape server" = $(if ((Test-Node $tsId)) { $Nodes[$tsId].name } else { $null }); Type = "$(Get-Prop $l @('Type'))"
+        Drives = @(@($l.Drives) | Where-Object { $_ }).Count; Slots = (Get-Prop $l @("Slots")); State = "$(Get-Prop $l @('State'))"
+        Description = $l.Description } | Out-Null
+}
+# Cloud Connect service providers this VBR uses (drawn with the repositories, as a backup target)
+foreach ($c in $cloudProvs) {
+    $rs = $c.Resources; if (-not $rs) { $rs = $c.Resource }
+    $res = (@(@($rs) | Where-Object { $_ } | ForEach-Object { "$(Get-Prop $_ @('RepositoryName', 'Name'))" }) | Where-Object { $_ }) -join ", "
+    $cn = "$(Get-Prop $c @('DNSName', 'Name', 'Address'))"; if (-not $cn) { $cn = "Cloud Connect provider" }
+    Add-Node ("cloud:" + (Get-IdStr $c)) "repo" $cn "Cloud Connect service provider" @() @{
+        Port = (Get-Prop $c @("Port")); "Cloud repositories" = $res; Description = $c.Description } | Out-Null
+}
+# SureBackup virtual labs: placed on the ESXi / Hyper-V host VBR deployed them to (Server)
+foreach ($v in $vlabs) {
+    $srv = Get-Prop $v @("Server", "Host")
+    $hn = "$(Get-Prop $v @('Server.Name', 'Host.Name'))"
+    if (-not $hn -and $srv) { $hn = "$srv" -replace '\s*\([0-9a-fA-F-]{36}\)$', '' }   # prints as "esx01.corp.local(<id>)"
+    $plat = "$(Get-Prop $v @('Platform'))"
+    $n = Add-Node ("vlab:" + (Get-IdStr $v)) "server" $v.Name "SureBackup virtual lab" @() @{ Platform = $plat; Description = $v.Description }
+    $hid = $null
+    $sid = Get-IdStr (Get-Prop $srv @("Id"))
+    if ($sid -and (Test-Node $sid)) { $hid = $sid }
+    elseif ($hn) { foreach ($x in $Nodes.Values) { if ($x.kind -in @("vi_host", "hv_host") -and $x.name -ieq $hn) { $hid = $x.id; break } } }
+    if ($hn) {
+        $n["placement"] = [ordered]@{ host = $hn; vm = $null; source = "Virtual lab host (VBR)"; platform = $(if ($plat -match "Hv|Hyper") { "hv" } else { "vi" }) }
+        if ($hid) { $n["runsOn"] = $hid }
+        $n.details["Runs on"] = $hn
+    }
 }
 
 # SOBR extent lookup
@@ -452,7 +498,7 @@ $JobRows = New-Object System.Collections.Generic.List[object]
 $jobRepo = @{}   # job id -> repo id (used to find backup copy sources)
 # These jobs are handled by their own cmdlets; skip them in Get-VBRJob to avoid duplicates
 $handledElsewhere = New-Object System.Collections.Generic.HashSet[string]
-foreach ($x in @($copyJobs) + @($agentJobs) + @($nasJobs) + @($entraJobs) + @($sbJobs)) { if ($x) { [void]$handledElsewhere.Add((Get-IdStr $x)) } }
+foreach ($x in @($copyJobs) + @($agentJobs) + @($nasJobs) + @($entraJobs) + @($sbJobs) + @($tapeJobs)) { if ($x) { [void]$handledElsewhere.Add((Get-IdStr $x)) } }
 
 foreach ($j in $jobs) {
     $jid = Get-IdStr $j
@@ -598,10 +644,25 @@ foreach ($x in $sbJobs) {
     $linked = @(@($lj) | Where-Object { $_ } | ForEach-Object { "$(Get-Prop $_ @('Job.Name', 'Name'))" } | Where-Object { $_ })
     # A SureBackup job with a virtual lab (and usually an application group); without one it is a content scan
     $vl = $x.PSObject.Properties["VirtualLab"]
-    $appGroup = "$(Get-Prop $x @('ApplicationGroup.Name', 'ApplicationGroup'))"
-    $JobRows.Add([ordered]@{ name = $x.Name; type = $(if ($vl -and $vl.Value) { "SureBackup" } else { "SureBackup (content scan)" })
+    $vlName = if ($vl -and $vl.Value) { "$(Get-Prop $vl.Value @('Name'))" } else { "" }
+    if (-not $vlName -and $vl -and $vl.Value) { $vlName = "$($vl.Value)" }
+    $ag = Get-Prop $x @("ApplicationGroup")
+    $appGroup = "$(Get-Prop $ag @('Name'))"; if (-not $appGroup -and $ag) { $appGroup = "$ag" }
+    $agVms = (@(@(Get-Prop $ag @("VM")) | Where-Object { $_ } | ForEach-Object { $vn = Get-Prop $_ @('Name'); if ($vn) { "$vn" } else { "$_" } }) | Where-Object { $_ }) -join ", "
+    $JobRows.Add([ordered]@{ name = $x.Name; type = $(if ($vlName) { "SureBackup" } else { "SureBackup (content scan)" })
         disabled = ($enabled -eq $false); repository = $null; sources = $linked; proxies = "—"
-        objects = @(@($linked | ForEach-Object { New-JobObject $_ "Job" }) + @($(if ($appGroup) { New-JobObject $appGroup "Application group" }))) })
+        objects = @(@($linked | ForEach-Object { New-JobObject $_ "Job" }) + @($(if ($appGroup) { New-JobObject $appGroup "Application group" $agVms })) +
+                    @($(if ($vlName) { New-JobObject $vlName "Virtual lab" }))) })
+}
+
+# Tape jobs: the target is a media pool (shown as the repository); sources are jobs or file shares
+foreach ($x in $tapeJobs) {
+    $tt = "$($x.Type)"
+    $type = switch -Regex ($tt) { '^BackupToTape$' { "Backup to tape" } '^FileToTape$' { "File to tape" } default { "Tape ($tt)" } }
+    $srcs = @(@($x.Object) | Where-Object { $_ } | ForEach-Object { "$(Get-Prop $_ @('Name', 'Path'))" } | Where-Object { $_ })
+    $JobRows.Add([ordered]@{ name = $x.Name; type = $type; disabled = ((Get-Prop $x @("Enabled", "JobEnabled")) -eq $false)
+        repository = "$(Get-Prop $x @('Target.Name', 'Target'))"; sources = $srcs; proxies = "—"
+        objects = @($srcs | ForEach-Object { New-JobObject $_ $(if ($tt -match "File") { "File share" } else { "Job" }) }) })
 }
 
 # Re-point links to SOBR extents at the SOBR itself
@@ -814,6 +875,8 @@ function Select-Ips($Addrs) {
 $placedCount = 0
 foreach ($n in @($Nodes.Values)) {
     if ($n.kind -notin @("backup", "em", "vone", "proxy", "repo", "server")) { continue }
+    # Virtual labs are placed already; tape libraries and Cloud Connect providers are not VMs
+    if ($n["placement"] -or $n.id -match '^(tapelib|cloud):') { continue }
     $names = @()
     if ($n.details["Host"]) { $names += $n.details["Host"] }
     if ($n.kind -ne "repo") { $names += $n.name }
@@ -850,7 +913,7 @@ Write-Host ("  [OK]   {0,-28} {1}" -f "Components placed", $placedCount)
 
 # IP addresses for the hover details: the VM's guest IPs (PowerCLI) when known, else DNS
 foreach ($n in @($Nodes.Values)) {
-    if ($n.kind -in @("agent", "sobr", "object") -or $n.details["IP"]) { continue }
+    if ($n.kind -in @("agent", "sobr", "object") -or $n.details["IP"] -or $n.id -match '^(vlab|tapelib):') { continue }
     $nm = if ($n.details["Host"]) { $n.details["Host"] } elseif ($n.kind -ne "repo") { $n.name } else { $null }
     if (-not $nm) { continue }
     $ip = $null

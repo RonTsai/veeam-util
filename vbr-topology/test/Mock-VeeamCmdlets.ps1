@@ -52,7 +52,24 @@ function Get-VBRBackupRepository([switch]$ScaleOut) {
 }
 $global:R4 = New-Obj @{ Id = (gid "r4"); Name = "Wasabi-Offsite"; Type = "WasabiCloud"; BucketName = "veeam-offsite" }
 function Get-VBRObjectStorageRepository { $global:R4 }
-function Get-VBRTapeServer { New-Obj @{ Id = (gid "tapesrv"); Name = "tape01.corp.local"; Host = $H.tape } }
+# No Host, as in the lab: the managed server of the same name must not be listed again
+function Get-VBRTapeServer { New-Obj @{ Id = (gid "tapesrv"); Name = "tape01.corp.local" } }
+function Get-VBRTapeLibrary {
+    New-Obj @{ Id = (gid "tlib"); Name = "HPE MSL3040"; Model = "MSL G3 Series"; TapeServerId = (gid "tapesrv"); Type = "Automated"
+        State = "Online"; Slots = 40; Drives = @("Tape0", "Tape1") }
+}
+# Object: the source jobs (Backup to tape) or file shares (File to tape)
+function Get-VBRTapeJob {
+    New-Obj @{ Id = (gid "tj1"); Name = "Weekly-to-Tape"; Type = "BackupToTape"; Enabled = $true; Target = [pscustomobject]@{ Name = "GFS Media Pool" }; Object = @($J2) }
+    New-Obj @{ Id = (gid "tj2"); Name = "Shares-to-Tape"; Type = "FileToTape"; Enabled = $false; Target = [pscustomobject]@{ Name = "Media Pool" }
+        Object = @([pscustomobject]@{ Path = "\\nas01.corp.local\projects" }) }
+}
+# Virtual lab on esx01; Server prints as "<name>(<id>)" in the real module
+function Get-VBRVirtualLab { New-Obj @{ Id = (gid "vlab"); Name = "Lab01"; Platform = "VMWare"; Server = $H.esx1 } }
+function Get-VBRCloudProvider {
+    New-Obj @{ Id = (gid "ccp"); DNSName = "cc.provider.example"; Port = 6180; Description = "Offsite backups"
+        Resources = @([pscustomobject]@{ RepositoryName = "Cloud-Repo-01" }) }
+}
 $PG1 = New-Obj @{ Id = (gid "pg1"); Name = "Physical Windows Servers"; Container = [pscustomobject]@{ Type = "IndividualComputers" } }
 $PG2 = New-Obj @{ Id = (gid "pg2"); Name = "Linux AD OU"; Container = [pscustomobject]@{ Type = "ADObjects" } }
 function Get-VBRProtectionGroup { $PG1; $PG2 }
@@ -103,7 +120,9 @@ function Get-VBREntraIDTenantBackupJob { New-Obj @{ Id = (gid "e1"); Name = "Ent
 # A content scan (no virtual lab, linked jobs) and a SureBackup job with a virtual lab and an application group
 function Get-VBRSureBackupJob {
     New-Obj @{ Id = (gid "sb1"); Name = "SureBackup-Prod"; IsEnabled = $false; LinkedJob = @([pscustomobject]@{ Job = $J1 }) }
-    New-Obj @{ Id = (gid "sb2"); Name = "SureBackup-AppGroup"; IsEnabled = $true; VirtualLab = "Lab01"; ApplicationGroup = "DC-AppGroup"; LinkedJob = @() }
+    New-Obj @{ Id = (gid "sb2"); Name = "SureBackup-AppGroup"; IsEnabled = $true; LinkedJob = @()
+        VirtualLab = [pscustomobject]@{ Name = "Lab01" }
+        ApplicationGroup = [pscustomobject]@{ Name = "DC-AppGroup"; VM = @([pscustomobject]@{ Name = "dc01" }, [pscustomobject]@{ Name = "dc02" }) } }
 }
 if (-not ("Mock.VBRNASSMBServer" -as [type])) { Add-Type -TypeDefinition "namespace Mock { public class VBRNASSMBServer { } }" }
 function Get-VBRNASBackupJob {
