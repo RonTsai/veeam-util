@@ -33,6 +33,9 @@ infrastructure topology". Its diagram follows the style of the "Backup architect
 - data-flow arrows derived from the job settings
 - the Veeam Data Mover Service (**M**) and Veeam Agent (**A**) badges
 - **which ESXi / Hyper-V host each component runs on**
+- ESXi hosts grouped by vSphere cluster; click a cluster title to collapse or expand it
+- scale-out repositories that open into their tiers: click a SOBR card to show its performance extents,
+  capacity tier and archive tier (with the object storage connection mode or gateway)
 
 Below the diagram, the report lists the component hosts, the jobs and the full infrastructure inventory.
 **Click a job** to list its protected objects (VMs, containers, protection groups, shares, exclusions)
@@ -49,7 +52,7 @@ There are two collectors that produce the same diagram from one shared `template
 | vSphere versions | vCenter and ESXi | vCenter only (with `--vcenter-user`) |
 | Plug-in platforms (Proxmox VE, Nutanix AHV, HPE Morpheus VME) | Hosts and jobs | — (not in the REST API) |
 | Job protected objects | All job types, with full inventory paths | All but plug-in jobs; location is the host name |
-| Extras | Tape servers, tape libraries and tape jobs, SureBackup virtual labs, Cloud Connect service providers, Hyper-V replica jobs, SOBR capacity-tier offload | — |
+| Extras | Tape servers, tape libraries and tape jobs, SureBackup virtual labs, Cloud Connect service providers, Hyper-V replica jobs | — |
 
 ## Files
 
@@ -289,6 +292,12 @@ example `ESXi: esx01.corp.local`. Anything not found shows as "Physical / unknow
 cards summarize where their extents run. Hovering an ESXi host highlights every component on it.
 The report also has a table grouped by host.
 
+ESXi hosts are grouped by **vSphere cluster** (from the Veeam inventory: `Find-VBRViEntity` in
+PowerShell, the inventory REST API in Python), with vCenter first and standalone hosts last. Click a
+cluster title to collapse the cluster into one card, and that card to expand it again. With more than
+12 clustered hosts, every cluster starts collapsed; links and hosted components of a collapsed cluster
+go to its card.
+
 Hovering a card also shows its **IP address**: the VM's guest IPs when PowerCLI (`-UsePowerCLI`) or the
 vCenter REST API (`--vcenter-user`) matched it ("VM guest"), otherwise what DNS returns for its name on
 the machine that builds the report ("DNS"). IPv4 addresses are preferred; loopback and link-local
@@ -325,7 +334,10 @@ Without PowerCLI, the script falls back to the Veeam inventory automatically.
 - **Agent job**: protection group → repository
 - **File share job**: general-purpose proxies → repository
 - **Backup copy, replica, SOBR offload**: blue dashed line
-- **SOBR extents**: merged into their SOBR
+- **SOBR extents**: merged into their SOBR. Click a SOBR card to show its tiers under it: performance
+  extents (with their hosts), capacity tier and archive tier. Object storage cards show their connection
+  mode: "Direct connection", or the gateway servers the data goes through (the first one and how many
+  more; hover for the full list).
 - **Sources without job information**: get a gray dashed "inferred" link to the proxies. ESXi hosts are skipped
   when a vCenter is present.
 - **Managed servers without a role**: listed under "Other servers"

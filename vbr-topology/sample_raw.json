@@ -135,6 +135,13 @@
       "type": "WasabiCloud",
       "bucket": {
         "bucketName": "veeam-offsite"
+      },
+      "account": {
+        "connectionSettings": {
+          "gatewayServerIds": [
+            "ms-repo1"
+          ]
+        }
       }
     },
     {
@@ -519,6 +526,14 @@
           "vbr01",
           "em01",
           "vbrpx01"
+        ]
+      },
+      "hostsByCluster": {
+        "Prod-Cluster": [
+          "esx01.corp.local"
+        ],
+        "DR-Cluster": [
+          "esx02.corp.local"
         ]
       }
     }

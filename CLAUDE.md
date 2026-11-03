@@ -36,7 +36,8 @@ Reply to the user in Traditional Chinese. Code, comments, console output and doc
   read-only inventory browser POST). Never add anything that changes VBR or vCenter.
 - **Keep the two collectors in parity.** Both produce the same model:
   - `nodes[]`: `id, kind, name, sub, badges, details`, optionally `placement, runsOn, usage,
-    inSobr, extents, placeLabel`
+    inSobr, extents, capacity, archive, placeLabel, cluster` (`cluster`: `{name, vcenter}` on ESXi hosts;
+    `capacity` / `archive`: a SOBR's object storage node ids)
   - `kind` is one of `backup, em, vone, agent, hv_host, vi_host, ext_host, proxy, repo, sobr, object, server`
     (`ext_host`: plug-in platforms such as Proxmox VE; PowerShell only, the REST API does not return them)
   - `links[]`: `source, target, kind (data | auto | copy | inferred), jobs`

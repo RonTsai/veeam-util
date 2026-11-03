@@ -109,6 +109,7 @@ const I18N = {
     kind_backup: "Backup server", kind_em: "Enterprise Manager", kind_vone: "Veeam ONE", kind_agent: "Veeam Agent",
     kind_hv_host: "Hyper-V", kind_vi_host: "VMware vSphere", kind_ext_host: "Plug-in platform", kind_proxy: "Proxy / WAN", kind_repo: "Repository",
     kind_sobr: "Scale-out repository", kind_object: "Object storage", kind_server: "Other managed server",
+    nHosts: "{n} hosts", nHost: "1 host", directMode: "Direct connection", clusterExpand: "▸ Click to expand", showTiers: "▸ Show tiers", hideTiers: "▾ Hide tiers",
   },
   zh: {
     pageTitle: "備份基礎架構拓撲",
@@ -129,6 +130,7 @@ const I18N = {
     thJob: "Job", thType: "類型", thSource: "來源", thProxy: "Proxy", thRepo: "Repository", thState: "狀態",
     enabled: "Enabled", disabled: "Disabled",
     kind_server: "其他受管伺服器", kind_ext_host: "Plug-in 平台",
+    nHosts: "{n} 台主機", nHost: "1 台主機", directMode: "直接連線 (Direct)", clusterExpand: "▸ 點一下展開", showTiers: "▸ 展開各層", hideTiers: "▾ 收合",
   },
 };
 // Collector text -> Traditional Chinese (exact match, also applied per " · " segment)
@@ -151,6 +153,8 @@ const DATA_ZH = {
   "Plug-in platform": "Plug-in 平台",
   "File share": "檔案共用", "SMB share": "SMB 共用", "NFS share": "NFS 共用",
   "Object storage": "物件儲存",
+  "Hosts": "主機",
+  "Connection mode": "連線模式",
   "Proxies of plug-in platforms (Proxmox VE, Nutanix AHV, HPE Morpheus VME) cannot be read through PowerShell or the REST API and are not shown.":
     "Plug-in 平台 (Proxmox VE、Nutanix AHV、HPE Morpheus VME) 的 proxy 無法透過 PowerShell 或 REST API 讀取，因此不會顯示。",
   "The vSphere inventory was read, but it has no VM-to-host relation; component hosts not matched (use the PowerShell version or --placement-csv)":
@@ -169,6 +173,7 @@ const DATA_ZH_RULES = [
     "VBR 無法連到 Hyper-V cluster $1。請確認叢集服務正在執行，或從 VBR 移除已不存在的 cluster。詳細: $2"],
   [/^vCenter REST \((.+)\)$/, "vCenter REST ($1)"],
   [/^ESXi hosts run different versions: (.*)$/, "ESXi 主機版本不一致: $1"],
+  [/^(\d+) hosts?$/, "$1 台主機"],
   // Where an IP address came from (hover details)
   [/^(.+) \(VM guest\)$/, "$1 (取自 VM)"],
   [/^(.+) \(DNS\)$/, "$1 (DNS 查詢)"],
@@ -236,6 +241,12 @@ const SVG_STYLE = `
   .badgeT { fill:#fff; font-size:12px; font-weight:700; }
   .gtitle { font-size:12px; fill:#7a858f; letter-spacing:.5px; }
   .legend text { font-size:12px; }
+  .frame { fill:#f4f7f9; stroke:#c9d3db; stroke-dasharray:4 3; }
+  .frame.sobr { fill:#f1faf4; stroke:#a8dcb7; }
+  .ftitle { font-size:12px; font-weight:700; fill:#4b555e; cursor:pointer; }
+  .tierLbl { font-size:10px; font-weight:600; fill:#0a7f2e; letter-spacing:.5px; }
+  .node.click { cursor:pointer; }
+  .more { font-size:10.5px; font-weight:600; fill:#1f8fd6; }
 `;
 
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c]));
@@ -249,7 +260,7 @@ function icon(kind, sub) {
       <rect x="22" y="22" width="10" height="10" fill="none" stroke="#fff" stroke-width="2.4"/>
       <path d="M22 8h10v10M8 22v10h10" fill="none" stroke="#fff" stroke-width="2.4"/>`;
     case "vi_host": case "hv_host": case "ext_host": {
-      const lbl = kind === "hv_host" ? "Hyper-V" : kind === "vi_host" ? (/^vCenter/.test(sub) ? "vCenter" : "ESXi")
+      const lbl = kind === "hv_host" ? "Hyper-V" : kind === "vi_host" ? (/^vCenter/.test(sub) ? "vCenter" : /^vSphere cluster/.test(sub) ? "Cluster" : "ESXi")
         : /^Proxmox/.test(sub) ? "Proxmox" : /^Nutanix/.test(sub) ? "AHV" : /Morpheus/.test(sub) ? "VME" : "Plug-in";
       let chips = "";
       for (let i = 0; i < 4; i++) chips += `<rect x="${i*11}" y="0" width="9" height="9" rx="1.5" fill="${d}"/>`;
@@ -278,12 +289,66 @@ function icon(kind, sub) {
   }
 }
 
+// vSphere clusters: ESXi hosts are grouped by cluster; a collapsed cluster is drawn as one card.
+// Many hosts (over 12): all clusters start collapsed. Clicking a cluster title toggles it.
+const clusterKey = n => n.cluster ? n.cluster.vcenter + "|" + n.cluster.name : null;
+let collapsed = null;
+// SOBRs opened to show their tiers: performance extents, capacity tier, archive tier
+const openSobr = new Set();
+const TIERS = [["extents", "Performance tier"], ["capacity", "Capacity tier"], ["archive", "Archive tier"]];
+const hasTiers = n => n.kind === "sobr" && TIERS.some(([k]) => (n[k] || []).some(id => MODEL.nodes.some(x => x.id === id)));
+// Hosts of a collapsed cluster -> the cluster card's id; the cluster cards themselves
+let alias = {}, EXTRA = [];
+
 function render() {
   const showInferred = document.getElementById("showInferred").checked;
   const showOther = document.getElementById("showOther").checked;
-  const nodes = MODEL.nodes.filter(n => !n.inSobr);
+  const tierOf = {};
+  MODEL.nodes.filter(n => openSobr.has(n.id)).forEach(sb => TIERS.forEach(([k, label]) =>
+    (sb[k] || []).forEach(id => tierOf[id] ??= { sobr: sb.id, tier: label })));
+  let nodes = MODEL.nodes.filter(n => !n.inSobr || tierOf[n.id]);
+  nodes.forEach(n => { n.tierOf = tierOf[n.id]; n.w = n.tierOf ? W - 16 : W; });
+
+  if (collapsed == null) collapsed = new Set(MODEL.nodes.filter(n => n.cluster).length > 12 ? MODEL.nodes.map(clusterKey).filter(Boolean) : []);
+  const clusters = {};
+  nodes.forEach(n => { const k = clusterKey(n); if (k) (clusters[k] ??= []).push(n); });
+  const vcCount = new Set(Object.values(clusters).map(hs => hs[0].cluster.vcenter)).size;
+  alias = {}; EXTRA = [];
+  Object.entries(clusters).forEach(([k, hs]) => {
+    if (!collapsed.has(k)) return;
+    const id = "cluster:" + k;
+    hs.forEach(h => alias[h.id] = id);
+    EXTRA.push({ id, kind: "vi_host", name: hs[0].cluster.name, sub: `vSphere cluster · ${hs.length} host${hs.length > 1 ? "s" : ""}`, cluster: hs[0].cluster,
+      isCluster: true, badges: [], w: W, placeLabel: t("clusterExpand"),
+      details: { vCenter: hs[0].cluster.vcenter, Hosts: hs.map(h => h.name).join(", ") } });
+  });
+  nodes = nodes.filter(n => !alias[n.id]).concat(EXTRA);
   const byId = Object.fromEntries(nodes.map(n => [n.id, n]));
-  const links = MODEL.links.filter(l => byId[l.source] && byId[l.target] && (showInferred || l.kind !== "inferred"));
+  // Links to hosts of a collapsed cluster go to the cluster card (merged, jobs combined)
+  const merged = {};
+  MODEL.links.forEach(l0 => {
+    const l = { ...l0, source: alias[l0.source] || l0.source, target: alias[l0.target] || l0.target };
+    const k = l.source + "|" + l.target + "|" + l.kind;
+    if (l.source === l.target) return;
+    if (merged[k]) merged[k].jobs = [...new Set([...merged[k].jobs, ...l.jobs])]; else merged[k] = l;
+  });
+  const links = Object.values(merged).filter(l => byId[l.source] && byId[l.target] && (showInferred || l.kind !== "inferred"));
+  // Column order: vCenter first, then each cluster, then standalone hosts; an open SOBR keeps its tiers under it
+  const groupKey = n => n.kind !== "vi_host" || !Object.keys(clusters).length ? ""
+    : n.cluster ? "1" + n.cluster.name.toLowerCase() + "|" + n.cluster.vcenter : /^ESXi|^Source host/.test(n.sub) ? "2" : "0";
+  const regroup = arr => {
+    arr.sort((a, b) => groupKey(a).localeCompare(groupKey(b)));
+    openSobr.forEach(id => {
+      const kids = arr.filter(n => n.tierOf?.sobr === id);
+      const at = arr.findIndex(n => n.id === id);
+      if (!kids.length || at < 0) return;
+      const tierIx = n => TIERS.findIndex(([, label]) => label === n.tierOf.tier);
+      kids.sort((a, b) => tierIx(a) - tierIx(b));
+      arr = arr.filter(n => !kids.includes(n));
+      arr.splice(arr.findIndex(n => n.id === id) + 1, 0, ...kids);
+    });
+    return arr;
+  };
 
   // --- columns
   const cols = COLS.map(c => ({ ...c, nodes: nodes.filter(n => c.kinds.includes(n.kind)) })).filter(c => c.nodes.length);
@@ -294,6 +359,7 @@ function render() {
     const score = n => { const ys = links.filter(l => l.source === n.id || l.target === n.id)
       .map(l => order[l.source === n.id ? l.target : l.source]); return ys.length ? ys.reduce((a,b)=>a+b)/ys.length : order[n.id]; };
     c.nodes.sort((a, b) => score(a) - score(b) || a.name.localeCompare(b.name));
+    c.nodes = regroup(c.nodes);
     c.nodes.forEach((n, k) => { n.row = k; order[n.id] = k; });
   });
 
@@ -311,8 +377,25 @@ function render() {
   cols.forEach((c, i) => { c.x = x; x += W + gapW[i + 1]; });
   const nMgmt = MODEL.nodes.filter(n => n.kind === "em" || n.kind === "vone").length;
   const totalW = Math.max(x, 900, gapW[0] + 80 + (nMgmt + 1) * (W + 50));
-  nodes.forEach(n => { if (n.col == null) return; n.x = cols[n.col].x; n.y = COL_TOP + n.row * (H + VGAP); });
-  const maxBottom = Math.max(COL_TOP + H, ...nodes.filter(n => n.col != null).map(n => n.y + H));
+  // Rows; a cluster or an open SOBR is framed, with room for the cluster title and the tier labels
+  const frames = [], tierLabels = [];
+  const frameOf = n => n.cluster ? "cl:" + clusterKey(n) : n.tierOf ? "sb:" + n.tierOf.sobr : openSobr.has(n.id) && hasTiers(n) ? "sb:" + n.id : "";
+  cols.forEach(c => {
+    let y = COL_TOP, prev = null, fr = null;
+    c.nodes.forEach(n => {
+      const g = frameOf(n), pg = prev ? frameOf(prev) : "";
+      if (prev) y = prev.y + H + (n.tierOf && g === pg ? 12 : VGAP);
+      if (prev && g !== pg && fr) { fr.y2 = prev.y + H + 10; frames.push(fr); fr = null; y += 14; }
+      if (g && g !== pg) { fr = { key: g, node: n, x: c.x - 8, y1: y }; y += g.startsWith("cl:") ? 30 : 10; }
+      if (n.tierOf && (!prev || prev.tierOf?.tier !== n.tierOf.tier || prev.tierOf?.sobr !== n.tierOf.sobr)) {
+        tierLabels.push({ x: c.x + 16, y: y + 9, text: n.tierOf.tier }); y += 18;
+      }
+      n.x = c.x + (n.tierOf ? 16 : 0); n.y = y;
+      prev = n;
+    });
+    if (fr) { fr.y2 = prev.y + H + 10; frames.push(fr); }
+  });
+  const maxBottom = Math.max(COL_TOP + H, ...nodes.filter(n => n.col != null).map(n => n.y + H), ...frames.map(f => f.y2));
 
   // channel x within each gap
   gapLinks.forEach((g, i) => {
@@ -348,6 +431,7 @@ function render() {
 
   // backup server
   const vbr = MODEL.nodes.find(n => n.kind === "backup");
+  MODEL.nodes.forEach(n => n.w ??= W);
   vbr.x = (cols[0]?.x ?? 60) + 40; vbr.y = 28;
   const mgmt = MODEL.nodes.filter(n => n.kind === "em" || n.kind === "vone");
   mgmt.forEach((n, i) => { n.x = vbr.x + (i + 1) * (W + 50); n.y = 28; });
@@ -363,9 +447,18 @@ function render() {
     c.nodes.forEach(n => s += `<path class="mgmt" d="M${sx} ${n.y + H / 2} H${n.x}"/>`);
   });
 
+  frames.forEach(f => {
+    s += `<rect class="frame${f.key.startsWith("sb:") ? " sobr" : ""}" x="${f.x}" y="${f.y1}" width="${W + 16}" height="${f.y2 - f.y1}" rx="10"/>`;
+    if (!f.key.startsWith("cl:")) return;
+    const k = clusterKey(f.node), c = f.node.cluster, open = !collapsed.has(k);
+    const label = c.name + (vcCount > 1 ? ` (${c.vcenter.split(".")[0]})` : "") + (open ? " · " + (clusters[k].length > 1 ? t("nHosts", { n: clusters[k].length }) : t("nHost")) : "");
+    s += `<text class="ftitle" data-cl="${esc(k)}" x="${f.x + 12}" y="${f.y1 + 19}">${open ? "▾" : "▸"} ${esc(trunc(label, 30))}</text>`;
+  });
+  tierLabels.forEach(l => s += `<text class="tierLbl" x="${l.x}" y="${l.y}">${esc(l.text.toUpperCase())}</text>`);
+
   links.forEach((l, i) => {
     const a = byId[l.source], b = byId[l.target];
-    const sx = a.x + W, tx = l.route === "same" ? b.x + W + 2 : b.x - 2;
+    const sx = a.x + a.w, tx = l.route === "same" ? b.x + b.w + 2 : b.x - 2;
     let d;
     if (l.route === "adj" || l.route === "same") d = `M${sx} ${l.sy} H${l.c1} V${l.ty} H${tx}`;
     else d = `M${sx} ${l.sy} H${l.c1} V${l.laneY} H${l.c2} V${l.ty} H${tx}`;
@@ -375,25 +468,33 @@ function render() {
       <path class="flow ${l.kind}" d="${d}" marker-end="url(#arr-${l.kind})"/><path class="hit" d="${d}"/></g>`;
   });
 
-  const place = n => {
-    if (n.placeLabel) return `<rect class="placeChip" x="56" y="45" width="${W - 66}" height="16" rx="4"/>
-      <text class="place" x="62" y="57">${esc(trunc(td(n.placeLabel), 30))}</text>`;
+  const place = (n, w) => {
+    // Object storage gateways: the first one (short name) and how many more; the full list is in the hover details
+    // In Direct connection mode the data does not go through the gateways: the chip says Direct
+    const gws = n.kind === "object" && n.details?.Gateway ? String(n.details.Gateway).split(/,\s*/) : [];
+    const gw1 = gws.length > 1 && !/^\d+\.\d+\.\d+\.\d+$/.test(gws[0]) ? gws[0].split(".")[0] : gws[0];
+    const direct = n.kind === "object" && /^direct$/i.test(n.details?.["Connection mode"] || "");
+    const chip = n.placeLabel || (direct ? t("directMode") : gws.length ? `Gateway: ${gw1}${gws.length > 1 ? ` +${gws.length - 1}` : ""}` : null);
+    if (chip) return `<rect class="placeChip" x="56" y="45" width="${w - 66}" height="16" rx="4"/>
+      <text class="place" x="62" y="57">${esc(trunc(td(chip), Math.round(30 * (w - 66) / (W - 66))))}</text>`;
     if (!n.placement) return "";
     const p = n.placement, unk = !p.host;
     const label = unk ? t("unknownHost") : `${p.platform === "hv" ? "Hyper-V" : "ESXi"}: ${p.host}`;
-    return `<rect class="placeChip${unk ? " unknown" : ""}" x="56" y="45" width="${W - 66}" height="16" rx="4"/>
-      <text class="place${unk ? " unknown" : ""}" x="62" y="57">${esc(trunc(label, 30))}</text>`;
+    return `<rect class="placeChip${unk ? " unknown" : ""}" x="56" y="45" width="${w - 66}" height="16" rx="4"/>
+      <text class="place${unk ? " unknown" : ""}" x="62" y="57">${esc(trunc(label, Math.round(30 * (w - 66) / (W - 66))))}</text>`;
   };
   const drawNode = n => {
-    const usage = n.usage != null ? `<rect x="58" y="${H - 11}" width="${W - 72}" height="4" rx="2" fill="#e6eaec"/>
-      <rect x="58" y="${H - 11}" width="${(W - 72) * Math.min(1, n.usage)}" height="4" rx="2" fill="${n.usage > .85 ? "#e0533d" : "#00b336"}"/>` : "";
-    const badges = (n.badges || []).map((b, k) => `<circle class="badge" cx="${W - 6 - k * 26}" cy="0" r="12"/>
-      <text class="badgeT" x="${W - 6 - k * 26}" y="4.5" text-anchor="middle">${esc(b)}</text>`).join("");
-    return `<g class="node" data-id="${esc(n.id)}" transform="translate(${n.x},${n.y})">
-      <rect class="card" width="${W}" height="${H}" rx="8"/>
+    const w = n.w || W;
+    const usage = n.usage != null ? `<rect x="58" y="${H - 11}" width="${w - 72}" height="4" rx="2" fill="#e6eaec"/>
+      <rect x="58" y="${H - 11}" width="${(w - 72) * Math.min(1, n.usage)}" height="4" rx="2" fill="${n.usage > .85 ? "#e0533d" : "#00b336"}"/>` : "";
+    const badges = (n.badges || []).map((b, k) => `<circle class="badge" cx="${w - 6 - k * 26}" cy="0" r="12"/>
+      <text class="badgeT" x="${w - 6 - k * 26}" y="4.5" text-anchor="middle">${esc(b)}</text>`).join("");
+    const toggle = hasTiers(n) ? `<text class="more" x="${w - 10}" y="${H - 6}" text-anchor="end">${esc(t(openSobr.has(n.id) ? "hideTiers" : "showTiers"))}</text>` : "";
+    return `<g class="node${n.isCluster || hasTiers(n) ? " click" : ""}" data-id="${esc(n.id)}" transform="translate(${n.x},${n.y})">
+      <rect class="card" width="${w}" height="${H}" rx="8"/>
       <g transform="translate(10,${(H - 40) / 2})">${icon(n.kind, n.sub)}</g>
       <text class="name" x="58" y="${HAS_PLACE ? 22 : 27}">${esc(trunc(n.name, 21))}</text>
-      <text class="sub" x="58" y="${HAS_PLACE ? 38 : 44}">${esc(trunc(td(n.sub), 27))}</text>${place(n)}${usage}${badges}</g>`;
+      <text class="sub" x="58" y="${HAS_PLACE ? 38 : 44}">${esc(trunc(td(n.sub), 27))}</text>${place(n, w)}${usage}${badges}${toggle}</g>`;
   };
   s += drawNode(vbr);
   mgmt.forEach(n => s += `<path class="mgmt" d="M${n.x + 30} ${n.y + H} V${BUS_Y}"/><circle class="dot" cx="${n.x + 30}" cy="${BUS_Y}" r="5"/>` + drawNode(n));
@@ -439,7 +540,9 @@ window.addEventListener("resize", updateShade);
 
 function wireHover(svg) {
   const tip = document.getElementById("tip");
-  const all = Object.fromEntries(MODEL.nodes.map(n => [n.id, n]));
+  const all = Object.fromEntries([...MODEL.nodes, ...EXTRA].map(n => [n.id, n]));
+  svg.querySelectorAll(".ftitle").forEach(x => x.addEventListener("click", () => {
+    const k = x.dataset.cl; collapsed.has(k) ? collapsed.delete(k) : collapsed.add(k); render(); }));
   svg.querySelectorAll(".node").forEach(g => {
     const n = all[g.dataset.id];
     g.addEventListener("mouseenter", () => {
@@ -449,15 +552,19 @@ function wireHover(svg) {
         l.classList.toggle("dim", !on); if (on) { rel.add(l.dataset.s); rel.add(l.dataset.t); }
       });
       // Placement: hovering a component lights up its ESXi host; hovering a host lights up everything on it
-      MODEL.nodes.forEach(o => { if (o.runsOn === n.id) rel.add(o.id); });
+      MODEL.nodes.forEach(o => { if (o.runsOn === n.id || alias[o.runsOn] === n.id) rel.add(o.id); });
       if (n.runsOn) rel.add(n.runsOn);
       svg.querySelectorAll(".node").forEach(o => o.classList.toggle("dim", !rel.has(o.dataset.id)));
       const rows = Object.entries(n.details || {}).filter(([k]) => !k.startsWith("_"))
         .map(([k, v]) => `<tr><td>${esc(td(k))}</td><td>${esc(td(v))}</td></tr>`).join("");
-      const hosted = MODEL.nodes.filter(o => o.runsOn === n.id);
+      const hosted = MODEL.nodes.filter(o => o.runsOn === n.id || alias[o.runsOn] === n.id);
       const hostedRow = hosted.length ? `<tr><td>${esc(t("hosted"))}</td><td>${hosted.map(o => esc(o.name)).join("<br>")}</td></tr>` : "";
       tip.innerHTML = `<b>${esc(n.name)}</b><br>${esc(td(n.sub))}<table>${rows}${hostedRow}</table>`;
       tip.style.display = "block";
+    });
+    g.addEventListener("click", () => {
+      if (n.isCluster) { collapsed.delete(clusterKey(n)); render(); }
+      else if (hasTiers(n)) { openSobr.has(n.id) ? openSobr.delete(n.id) : openSobr.add(n.id); render(); }
     });
     g.addEventListener("mousemove", e => { tip.style.left = Math.min(e.clientX + 14, innerWidth - 380) + "px"; tip.style.top = e.clientY + 14 + "px"; });
     g.addEventListener("mouseleave", () => { tip.style.display = "none"; highlightSelJob(); });

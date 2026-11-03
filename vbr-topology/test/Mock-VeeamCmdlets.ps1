@@ -51,7 +51,8 @@ function Get-VBRBackupRepository([switch]$ScaleOut) {
     $global:R3 = New-Obj @{ Id = (gid "r3"); Name = "LHR02"; Type = "LinuxHardened"; HostId = (gid "lhr2"); FriendlyPath = "/mnt/veeam" }
     $global:R1; $global:R4   # like VBR v12+: SOBR extents (R2, R3) are not returned; object storage (R4) is
 }
-$global:R4 = New-Obj @{ Id = (gid "r4"); Name = "Wasabi-Offsite"; Type = "WasabiCloud"; BucketName = "veeam-offsite" }
+$global:R4 = New-Obj @{ Id = (gid "r4"); Name = "Wasabi-Offsite"; Type = "WasabiCloud"; BucketName = "veeam-offsite" } @{
+    GetActualGateways = { [pscustomobject]@{ Name = "repo01.corp.local" } } }
 function Get-VBRObjectStorageRepository { $global:R4 }
 # No Host, as in the lab: the managed server of the same name must not be listed again
 function Get-VBRTapeServer { New-Obj @{ Id = (gid "tapesrv"); Name = "tape01.corp.local" } }
@@ -152,16 +153,19 @@ namespace Veeam.Backup.Core {
 }
 # Mock vCenter inventory (Hosts and Clusters view)
 function Find-VBRViEntity($Server, [switch]$HostsAndClusters) {
-    $p = "vcsa01.corp.local\DC01\Prod-Cluster"
+    # Two clusters: the report groups the hosts by cluster
+    $p = "vcsa01.corp.local\DC01\Prod-Cluster"; $q = "vcsa01.corp.local\DC01\DR-Cluster"
+    [pscustomobject]@{ Name = "Prod-Cluster";     Type = "Cluster"; Path = $p }
+    [pscustomobject]@{ Name = "DR-Cluster";       Type = "Cluster"; Path = $q }
     [pscustomobject]@{ Name = "esx01.corp.local"; Type = "Host"; Path = "$p\esx01.corp.local" }
-    [pscustomobject]@{ Name = "esx02.corp.local"; Type = "Host"; Path = "$p\esx02.corp.local" }
+    [pscustomobject]@{ Name = "esx02.corp.local"; Type = "Host"; Path = "$q\esx02.corp.local" }
     # Its first label is "vbr01" too: must not place the backup server (exact names win over short names)
-    [pscustomobject]@{ Name = "VBR01.WIN.Demo";   Type = "Vm";   Path = "$p\esx02.corp.local\VBR01.WIN.Demo" }
+    [pscustomobject]@{ Name = "VBR01.WIN.Demo";   Type = "Vm";   Path = "$q\esx02.corp.local\VBR01.WIN.Demo" }
     [pscustomobject]@{ Name = "vbr01";            Type = "Vm";   Path = "$p\esx01.corp.local\vbr01" }
     [pscustomobject]@{ Name = "em01";             Type = "Vm";   Path = "$p\esx01.corp.local\em01" }
     [pscustomobject]@{ Name = "vbrpx01";          Type = "Vm";   Path = "$p\esx01.corp.local\vbrpx01" }
-    [pscustomobject]@{ Name = "vbrpx02.corp.local"; Type = "Vm"; Path = "$p\esx02.corp.local\vbrpx02.corp.local" }
-    [pscustomobject]@{ Name = "lhr01";            Type = "Vm";   Path = "$p\esx02.corp.local\lhr01" }
-    [pscustomobject]@{ Name = "app-sql01";        Type = "Vm";   Path = "$p\esx02.corp.local\app-sql01" }
+    [pscustomobject]@{ Name = "vbrpx02.corp.local"; Type = "Vm"; Path = "$q\esx02.corp.local\vbrpx02.corp.local" }
+    [pscustomobject]@{ Name = "lhr01";            Type = "Vm";   Path = "$q\esx02.corp.local\lhr01" }
+    [pscustomobject]@{ Name = "app-sql01";        Type = "Vm";   Path = "$q\esx02.corp.local\app-sql01" }
 }
 function Find-VBRHvEntity($Server) { }

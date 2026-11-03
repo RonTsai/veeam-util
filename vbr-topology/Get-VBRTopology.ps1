@@ -453,6 +453,12 @@ foreach ($o in $objRepos) {
     $id = Get-IdStr $o
     Add-Node $id "object" $o.Name "Object storage · $($o.Type)" @() @{
         Type = "$($o.Type)"; Bucket = (Get-Prop $o @("AmazonBucket.Name", "Bucket.Name", "Container.Name", "BucketName")); Description = $o.Description } | Out-Null
+    # Connection mode (Direct, or through gateway servers) and the gateway servers; GetActualGateways() above
+    # does not cover repositories that only Get-VBRObjectStorageRepository returns (Veeam Vault)
+    $nd = $Nodes[$id]
+    if ("$($o.ConnectionType)") { $nd.details["Connection mode"] = "$($o.ConnectionType)" }
+    $gws = @(@($o.GatewayServer) | Where-Object { $_ } | ForEach-Object { $_.Name })
+    if ($gws.Count -and -not $nd.details["Gateway"]) { $nd.details["Gateway"] = $gws -join ", " }
 }
 foreach ($sb in $sobrs) {
     $sid = Get-IdStr $sb
@@ -468,8 +474,12 @@ foreach ($sb in $sobrs) {
         Description = $sb.Description }
     $n["extents"] = $extIds
     foreach ($e in $extIds) { if ((Test-Node $e)) { $Nodes[$e]["inSobr"] = $sid; $Nodes[$e].details["SOBR extent of"] = $sb.Name } }
-    # Capacity tier object storage: SOBR -> object (offload)
-    foreach ($ce in $capExt) { $cid = Get-IdStr (Get-Prop $ce @("Repository", "Id")); if ((Test-Node $cid)) { Add-Link $sid $cid "Capacity tier offload" "copy" } }
+    # Capacity / archive tier object storage, for the report's SOBR view; capacity tier: SOBR -> object (offload)
+    $capIds = @(); $archIds = @()
+    foreach ($ce in $capExt) { $cid = Get-IdStr (Get-Prop $ce @("Repository", "Id")); if ((Test-Node $cid)) { $capIds += $cid; Add-Link $sid $cid "Capacity tier offload" "copy" } }
+    foreach ($ae in $archExt) { $aid = Get-IdStr (Get-Prop $ae @("Repository", "Id")); if ((Test-Node $aid)) { $archIds += $aid } }
+    if ($capIds.Count) { $n["capacity"] = $capIds }
+    if ($archIds.Count) { $n["archive"] = $archIds }
 }
 
 foreach ($pg in $pgs) {
@@ -815,6 +825,7 @@ if ($UsePowerCLI) {
 }
 
 # 3) Veeam's own vSphere / Hyper-V inventory (matched by VM name)
+$hostCluster = @{}  # lowercase ESXi host name -> vSphere cluster (the report groups hosts by cluster)
 function Read-Inventory($Srv, [string]$Platform) {
     $ents = @()
     try {
@@ -833,6 +844,16 @@ function Read-Inventory($Srv, [string]$Platform) {
     }
     $hostNames = @{}
     foreach ($e in $ents) { if ("$($e.Type)" -match '^(Host|Esx|Server)') { $hostNames[$e.Name.ToLower()] = $e.Name } }
+    # vSphere clusters: a host whose parent path is a cluster's path belongs to that cluster
+    $clPaths = @{}
+    foreach ($e in $ents) {
+        if ("$($e.Type)" -match '^(Cluster|ClusterComputeResource)$' -and $e.Path) { $clPaths["$($e.Path)".TrimEnd('\', '/').ToLower()] = $e.Name }
+    }
+    foreach ($e in $ents) {
+        if ("$($e.Type)" -notmatch '^(Host|Esx)' -or -not $e.Path) { continue }
+        $cn = $clPaths[("$($e.Path)".TrimEnd('\', '/') -replace '[\\/][^\\/]*$', '').ToLower()]
+        if ($cn) { $hostCluster[$e.Name.ToLower()] = [ordered]@{ name = $cn; vcenter = $Srv.Name } }
+    }
     foreach ($h in $servers) { if ("$($h.Type)" -match '^(ESXi?|HvServer)$') { $hostNames[$h.Name.ToLower()] = $h.Name } }
     $n = 0
     foreach ($e in $ents) {
@@ -942,6 +963,13 @@ foreach ($n in @($Nodes.Values)) {
     Get-NameVariants $nm | Out-Null   # fills the DNS cache
     $he = $dnsCache[$nm]
     if ($he) { $found = Select-Ips $he.AddressList; if ($found) { $n.details["IP"] = "$found (DNS)" } }
+}
+
+# vSphere cluster of each ESXi host (the report groups hosts by cluster)
+foreach ($n in @($Nodes.Values)) {
+    if ($n.kind -ne "vi_host") { continue }
+    $c = $hostCluster[$n.name.ToLower()]
+    if ($c) { $n["cluster"] = $c; $n.details["Cluster"] = $c.name }
 }
 
 # SOBR: summarize where the extents live (extents themselves are not drawn)

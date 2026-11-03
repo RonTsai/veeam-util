@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### Added
+
+- Both: ESXi hosts are grouped by vSphere cluster in the diagram (new `cluster` field: name and
+  vCenter). Click a cluster title to collapse it into one card; with more than 12 clustered hosts, all
+  clusters start collapsed.
+- Both: click a SOBR card to show its tiers under it: performance extents, capacity tier and archive
+  tier (new SOBR fields `capacity` and `archive`, object storage node ids).
+- Both: object storage cards show their connection mode: "Direct connection", or the first gateway server
+  and how many more (`Gateway: gw01 +8`); the details list all gateways and the connection mode.
+  PowerShell reads them from `Get-VBRObjectStorageRepository` (`ConnectionType`, `GatewayServer`), which
+  also covers Veeam Vault; Python from `account.connectionSettings`.
+- Python: the SOBR capacity tier is linked to its object storage ("Capacity tier offload"), and the
+  SOBR details name it, as in PowerShell.
+
 ### Fixed
 
 - Python: VBR's own temporary repository (`/tmp/VeeamTempRepo<id>` on the appliance), which the console

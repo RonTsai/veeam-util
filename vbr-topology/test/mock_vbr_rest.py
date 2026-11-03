@@ -38,6 +38,7 @@ PATHS = {
 # VM vbr01 by its exact name
 INVENTORY = {"esx02.corp.local": ["VBR01.WIN.Demo", "vbrpx02.corp.local", "lhr01", "app-sql01"],
              "esx01.corp.local": ["vbr01", "em01", "vbrpx01"]}
+CLUSTERS = {"esx01.corp.local": "Prod-Cluster", "esx02.corp.local": "DR-Cluster"}   # host -> cluster
 
 
 class VbrHandler(BaseHTTPRequestHandler):
@@ -67,9 +68,12 @@ class VbrHandler(BaseHTTPRequestHandler):
         if self.path == "/api/v1/inventory/vcsa01.corp.local" and not os.environ.get("MOCK_NO_BROWSER"):
             # New inventory browser: flat object list with parent references
             spec = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
-            items = [{"inventoryObject": {"type": "Cluster", "name": "Prod", "objectId": "domain-c1"}}]
+            cids = {c: f"domain-c{k}" for k, c in enumerate(sorted(set(CLUSTERS.values())))}
+            items = [{"inventoryObject": {"type": "Cluster", "name": c, "objectId": i}} for c, i in cids.items()]
             for i, (h, vms) in enumerate(INVENTORY.items()):
-                items.append({"inventoryObject": {"type": "Host", "name": h, "objectId": f"host-{i}", "parentId": "domain-c1"}})
+                # like v13: the cluster is in the URN, not in a parent reference
+                items.append({"inventoryObject": {"type": "Host", "name": h, "objectId": f"host-{i}",
+                                                  "urn": f"vc:vcsa01.corp.local;cluster:{cids[CLUSTERS[h]]};esx:host-{i}"}})
                 items += [{"inventoryObject": {"type": "VirtualMachine", "name": vm, "objectId": f"vm-{i}-{j}", "parentId": f"host-{i}"}}
                           for j, vm in enumerate(vms)]
             p = spec.get("pagination", {})
@@ -87,7 +91,12 @@ class VbrHandler(BaseHTTPRequestHandler):
             return self.page(v, q) if isinstance(v, list) else self.send_json(v)
         if u.path == "/api/v1/inventory/vmware/hosts/vcsa01.corp.local" and not os.environ.get("MOCK_NO_LEGACY"):
             t = q.get("typeFilter", [""])[0]
-            if t == "Host":
+            if t == "Cluster":
+                items = [{"type": "Cluster", "hostName": "vcsa01.corp.local", "name": c} for c in sorted(set(CLUSTERS.values()))]
+            elif t == "Host" and "parentContainerNameFilter" in q:
+                c = q["parentContainerNameFilter"][0]
+                items = [{"type": "Host", "hostName": "vcsa01.corp.local", "name": h} for h in INVENTORY if CLUSTERS.get(h) == c]
+            elif t == "Host":
                 items = [{"type": "Host", "hostName": "vcsa01.corp.local", "name": h} for h in INVENTORY]
             elif "parentContainerNameFilter" in q and os.environ.get("MOCK_EMPTY_PARENT"):
                 items = []   # like v13: VMs are not direct children of hosts

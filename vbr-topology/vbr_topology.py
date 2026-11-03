@@ -273,7 +273,8 @@ def collect_inventory(client, raw):
                 if names:
                     vms_by_host[hn] = names
             if vms_by_host:
-                inventory[name] = {"method": "legacy", "vmsByHost": vms_by_host}
+                inventory[name] = {"method": "legacy", "vmsByHost": vms_by_host,
+                                   "hostsByCluster": legacy_clusters(client, base)}
                 print(f"  [OK]   Inventory {name:<16} {sum(map(len, vms_by_host.values()))} VMs / {len(vms_by_host)} hosts")
                 continue
             items += client.get_all(f"{base}&typeFilter=VirtualMachine")
@@ -295,6 +296,42 @@ def collect_inventory(client, raw):
         print(f"  [OK]   Inventory {name:<16} {len(items)} objects ("
               + ", ".join(f"{k or '?'}={v}" for k, v in sorted(kinds.items())) + ")")
     return inventory
+
+
+def legacy_clusters(client, base):
+    """Legacy inventory browser: cluster name -> its ESXi host names (one query per cluster)."""
+    out = {}
+    try:
+        for c in client.get_all(f"{base}&typeFilter=Cluster"):
+            cn = _obj(c).get("name")
+            if cn:
+                hosts = client.get_all(f"{base}&typeFilter=Host&parentContainerNameFilter={urllib.parse.quote(cn, safe='')}")
+                out[cn] = [_obj(h).get("name") for h in hosts if _obj(h).get("name")]
+    except Exception:  # noqa: BLE001
+        pass   # the clusters only group the report's hosts
+    return out
+
+
+def host_clusters(raw):
+    """
+    ESXi host name (lowercase) -> {"name": cluster, "vcenter": vCenter}, from the Veeam inventory:
+    host objects carry the cluster in their URN ("vc:...;cluster:domain-c15;esx:host-26") or as parent.
+    """
+    out = {}
+    for vc, inv in (raw.get("inventory") or {}).items():
+        for cn, hosts in (inv.get("hostsByCluster") or {}).items():
+            for h in hosts:
+                out[_lc(h)] = {"name": cn, "vcenter": vc}
+        objs = [_obj(i) for i in inv.get("items") or []]
+        clusters = {o.get("objectId"): o.get("name") for o in objs if _lc(o.get("type")) == "cluster" and o.get("objectId")}
+        for o in objs:
+            if _lc(o.get("type")) not in ("host", "esxi", "esxihost") or not o.get("name"):
+                continue
+            m = re.search(r"(?:^|;)cluster:([^;]+)", o.get("urn") or "")
+            cn = clusters.get(m.group(1)) if m else clusters.get(o.get("parentId"))
+            if cn:
+                out[_lc(o["name"])] = {"name": cn, "vcenter": vc}
+    return out
 
 
 def probe_port(host, port, timeout=2.0):
@@ -876,11 +913,13 @@ def build_model(raw, csv_rows=()):
         st = states.get(r["id"], {})
         hid = r.get("hostId") or (r.get("repository") or {}).get("hostId")
         gateways = find_all(r.get("share") or {}, "gatewayServerIds")
-        gw_names = [host_name(g) for gl in gateways for g in (gl or []) if host_name(g)]
         used_hosts.add(hid)
         for gl in gateways:
             used_hosts.update(gl or [])
         tl = _lc(t)
+        if tl in OBJECT_REPO_TYPES:
+            gateways += find_all(r.get("account") or {}, "gatewayServerIds")
+        gw_names = [host_name(g) for gl in gateways for g in (gl or []) if host_name(g)]
         if tl in OBJECT_REPO_TYPES:
             kind, label, badges = "object", f"Object storage · {t}", []
         elif tl in SHARE_REPO_TYPES:
@@ -900,6 +939,7 @@ def build_model(raw, csv_rows=()):
                    "Path": st.get("path") or (r.get("repository") or {}).get("path")
                    or (r.get("share") or {}).get("sharePath") or find_first(r, "bucketName"),
                    "Gateway": ", ".join(gw_names) or None,
+                   "Connection mode": find_first(r.get("account") or {}, "connectionType") if tl in OBJECT_REPO_TYPES else None,
                    "Capacity": fmt_gb(cap), "Free": fmt_gb(free),
                    "Description": r.get("description")}
         if r["id"] in sobr_extents:
@@ -914,12 +954,26 @@ def build_model(raw, csv_rows=()):
         ext_names = [(nodes.get(e.get("id")) or {}).get("name") or e.get("name") for e in ext]
         cap_tier = sb.get("capacityTier") or {}
         arch_tier = sb.get("archiveTier") or {}
+
+        def tier(t):
+            ids = [e.get("id") for e in t.get("extents") or [] if isinstance(e, dict)] + find_all(t, "extentId")
+            on = t.get("isEnabled") or t.get("enabled")
+            ids = [i for i in ids if i in nodes] if on else []
+            return ids, ", ".join(nodes[i]["name"] for i in ids) or ("Enabled" if on else "—")
+
+        cap_ids, cap_label = tier(cap_tier)
+        arch_ids, arch_label = tier(arch_tier)
         add_node(sb["id"], "sobr", sb.get("name"), f"Scale-out repository · {len(ext)} extents",
                  details={"Performance tier": ", ".join(filter(None, ext_names)),
-                          "Capacity tier": "Enabled" if cap_tier.get("isEnabled") or cap_tier.get("enabled") else "—",
-                          "Archive tier": "Enabled" if arch_tier.get("isEnabled") or arch_tier.get("enabled") else "—",
+                          "Capacity tier": cap_label, "Archive tier": arch_label,
                           "Description": sb.get("description")})
         nodes[sb["id"]]["extents"] = [e.get("id") for e in ext]
+        if cap_ids:
+            nodes[sb["id"]]["capacity"] = cap_ids
+        if arch_ids:
+            nodes[sb["id"]]["archive"] = arch_ids
+        for c in cap_ids:
+            add_link(sb["id"], c, "Capacity tier offload", "copy")
         for e in ext:
             if e.get("id") in nodes:
                 nodes[e["id"]]["details"]["SOBR extent of"] = sb.get("name")
@@ -1125,6 +1179,16 @@ def build_model(raw, csv_rows=()):
         tgt = hosts_by_name.get(_lc(dest)) or hosts_by_name.get(_lc(dest_vc))
         for f in froms:
             add_link(f, tgt, label, "copy")
+
+    # ---- vSphere cluster of each ESXi host (the report groups hosts by cluster)
+    clusters = host_clusters(raw)
+    for n in nodes.values():
+        if n["kind"] != "vi_host":
+            continue
+        c = clusters.get(_lc(n["name"]))
+        if c:
+            n["cluster"] = c
+            n["details"]["Cluster"] = c["name"]
 
     add_ips(nodes)
 
