@@ -150,12 +150,18 @@ self-signed certificate and turns off the CEIP prompt.
 ```powershell
 # Copy Get-VBRTopology.ps1 and template.html to the VBR server, then, as a VBR administrator:
 Set-ExecutionPolicy -Scope Process Bypass
+
+# Recommended: find each component's ESXi host through vCenter with PowerCLI (most accurate).
+# Prompts for the vCenter login.
+.\Get-VBRTopology.ps1 -UsePowerCLI
+
+# Without PowerCLI: component hosts are matched through the Veeam inventory (VM names)
 .\Get-VBRTopology.ps1
 
+# Other options
+.\Get-VBRTopology.ps1 -UsePowerCLI -VCenterUser readonly@vsphere.local   # asks only for the password
 .\Get-VBRTopology.ps1 -OutDir C:\Temp\vbr-topology
 .\Get-VBRTopology.ps1 -EnterpriseManager em01.corp.local        # add an EM manually
-.\Get-VBRTopology.ps1 -UsePowerCLI                                 # prompts for the vCenter login
-.\Get-VBRTopology.ps1 -UsePowerCLI -VCenterUser readonly@vsphere.local
 .\Get-VBRTopology.ps1 -PlacementCsv .\placement.csv
 .\Get-VBRTopology.ps1 -Server vbr02.corp.local -Credential (Get-Credential)   # remote VBR
 ```
@@ -214,11 +220,12 @@ There is no official cmdlet that returns the Enterprise Manager a VBR is registe
 ## Python version
 
 ```bash
-# Prompts for the password. --insecure because VBR uses a self-signed certificate by default.
-python3 vbr_topology.py --host vbr01.corp.local --user 'CORP\veeam-admin' --insecure --em em01.corp.local
-
-# Find each component's ESXi host by querying vCenter directly (recommended, most accurate)
+# Recommended: find each component's ESXi host by querying vCenter directly (most accurate).
+# Prompts for the passwords. --insecure because VBR uses a self-signed certificate by default.
 python3 vbr_topology.py --host vbr01.corp.local --user 'CORP\veeam-admin' --insecure --vcenter-user 'readonly@vsphere.local'
+
+# Without vCenter: component hosts are matched through the Veeam inventory; --em adds an Enterprise Manager
+python3 vbr_topology.py --host vbr01.corp.local --user 'CORP\veeam-admin' --insecure --em em01.corp.local
 
 # Password from an environment variable
 VBR_PASSWORD='***' python3 vbr_topology.py --host 10.0.0.10 --user admin --insecure
