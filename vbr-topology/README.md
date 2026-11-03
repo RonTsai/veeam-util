@@ -210,8 +210,7 @@ warning at the top of the report.
 There is no official cmdlet that returns the Enterprise Manager a VBR is registered to, so the script uses:
 
 1. `[Veeam.Backup.Core.SBackupOptions]::GetEnterpriseServerInfo()`: the EM registration stored on the VBR.
-   This is an undocumented internal API (community tools such as AsBuiltReport use it too) and may change
-   between versions.
+   This is an undocumented internal API and may change between versions.
 2. A local service check: EM or Veeam ONE installed on the VBR server itself.
 3. `-EnterpriseManager <host>`: manual fallback.
 
