@@ -545,8 +545,17 @@ foreach ($j in $jobs) {
     }
     if ($all -match "Replica") {
         $tgt = "$(Get-Prop $j @('Info.TargetHostId', 'TargetHostId'))"
+        if ($all -match "Hv|HyperV") {
+            # Hyper-V: off-host proxies when the job selects them, else the hosts' on-host proxies (host to host)
+            foreach ($h in $hosts) {
+                $src = Resolve-SourceNode $h "hv"
+                if ($sel.Count) { foreach ($p in $sel) { Add-Link $src $p $label "data" } } else { Add-Link $src $tgt $label "copy" }
+            }
+            foreach ($p in $sel) { Add-Link $p $tgt $label "copy" }
+            continue
+        }
         $px = if ($sel.Count) { $sel } else { $proxyByType.ViProxy }
-        foreach ($h in $hosts) { $src = Resolve-SourceNode $h $(if ($all -match "Hv|HyperV") { "hv" } else { "vi" }); foreach ($p in $px) { Add-Link $src $p $label "auto" } }
+        foreach ($h in $hosts) { $src = Resolve-SourceNode $h "vi"; foreach ($p in $px) { Add-Link $src $p $label "auto" } }
         foreach ($p in $px) { Add-Link $p $tgt $label "copy" }
         continue
     }
@@ -625,6 +634,14 @@ foreach ($n in $nasJobs) {
         $path = "$(Get-Prop $b @('Path', 'Container', 'Name'))"
         $srv = ""; try { $srv = $b.Server.GetType().Name } catch { }
         $kind = switch -Regex ($srv) { 'SMB' { "SMB share" } 'NFS' { "NFS share" } 'ObjectStorage|S3|Azure' { "Object storage" } default { "File share" } }
+        if ($kind -eq "Object storage") {
+            # "<bucket>/<folder>", as Python shows it (Path holds the folder only)
+            $bucket = "$(Get-Prop $b @('Container.Name', 'Bucket.Name', 'BucketName', 'ContainerName', 'Container', 'Bucket'))".Trim("/")
+            $path = $path.Trim("/")
+            if ($bucket -and $bucket -notmatch '^Veeam\.' -and $path -ne $bucket -and -not $path.StartsWith("$bucket/")) {
+                $path = (@($bucket, $path) | Where-Object { $_ }) -join "/"
+            }
+        } elseif ($path.Length -gt 3) { $path = $path.TrimEnd("\", "/") }   # no trailing separator (keeps "C:\")
         New-JobObject $path $kind
         foreach ($mk in @(@("InclusionMask", "File mask", $false), @("InclusionPathMask", "File mask", $false), @("ExclusionMask", "File mask", $true),
                           @("ExclusionPathMask", "File mask", $true), @("InclusionTagMask", "Tag mask", $false), @("ExclusionTagMask", "Tag mask", $true))) {

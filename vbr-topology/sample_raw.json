@@ -136,6 +136,15 @@
       "bucket": {
         "bucketName": "veeam-offsite"
       }
+    },
+    {
+      "id": "r-tmp",
+      "name": "Temp Local Repository",
+      "type": "LinuxLocal",
+      "hostId": "ms-vbr",
+      "repository": {
+        "path": "/tmp/VeeamTempRepo0f1e2d3c-4b5a-6978-8091-a2b3c4d5e6f7"
+      }
     }
   ],
   "repositoryStates": [
@@ -441,6 +450,49 @@
           }
         ],
         "excludes": []
+      }
+    },
+    {
+      "id": "j11",
+      "name": "Bucket-Backup",
+      "type": "ObjectStorageBackup",
+      "isDisabled": false,
+      "objects": [
+        {
+          "objectStorageServerId": "ms-s3",
+          "container": "veeam-bucket",
+          "path": "/Backup/data/"
+        }
+      ],
+      "storage": {
+        "backupRepositoryId": "r-1"
+      }
+    },
+    {
+      "id": "j12",
+      "name": "HyperV-Replica-DR",
+      "type": "HyperVReplica",
+      "isDisabled": false,
+      "virtualMachines": {
+        "includes": [
+          {
+            "inventoryObject": {
+              "hostName": "hv01.corp.local",
+              "name": "app01",
+              "type": "VirtualMachine"
+            }
+          }
+        ]
+      },
+      "destination": {
+        "host": {
+          "type": "Host",
+          "hostName": "hvclu01.corp.local",
+          "name": "hvclu01.corp.local"
+        }
+      },
+      "jobSettings": {
+        "metadataRepositoryId": "r-1"
       }
     }
   ],

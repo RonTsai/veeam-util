@@ -94,7 +94,10 @@ $J6 = job "j6" "VME-Daily" "VmbApiPolicyTempJob" "" "r1" @() $true @("VMECluster
 # Replica: the metadata repository is the target repository id; the replica goes to esx02
 $J7 = job "j7" "VMware-Replica-DR" "Replica" "EVmware" "r1" @() $true @("vcsa01.corp.local"); $J7.TypeToString = "VMware Replication"
 $J7.Info | Add-Member TargetHostId (gid "esx2")
-function Get-VBRJob { $J1; $J2; $J3; $J4; $J5; $J6; $J7 }
+# Hyper-V replica without off-host proxies: host to host (on-host proxies), not through the VMware proxies
+$J8 = job "j8" "HyperV-Replica-DR" "Replica" "EHyperV" "r1" @() $true @("hv01.corp.local"); $J8.TypeToString = "Hyper-V Replication"
+$J8.Info | Add-Member TargetHostId (gid "hvc")
+function Get-VBRJob { $J1; $J2; $J3; $J4; $J5; $J6; $J7; $J8 }
 # Job objects as Get-VBRJobObject returns them. Plug-in objects have no Location, only Object.Host.
 function jo($name, $disp, $loc, $hostName, $excl = $false, $size = "") {
     [pscustomobject]@{ Name = $name; Type = $(if ($excl) { "Exclude" } else { "Include" }); Location = $loc; TypeDisplayName = $disp
@@ -111,6 +114,7 @@ $J6 | Add-Member _objs @((jo "vme-app01" "Virtual Machine" "" "VMECluster"))
 # ExtendedChild: a VM VBR expanded itself (not set in the job), not listed in the report
 $J7 | Add-Member _objs @((jo "app-sql01" "Virtual Machine" "$vc\DC01\vm\app-sql01" $vc),
     ([pscustomobject]@{ Name = "app-sql02"; Type = "ExtendedChild"; Location = "$vc\DC01\vm\app-sql02"; TypeDisplayName = "Virtual Machine" }))
+$J8 | Add-Member _objs @((jo "app01" "Virtual Machine" "hv01.corp.local" "hv01.corp.local"))
 function Get-VBRJobObject($Job) { $Job._objs }
 function Get-VBRComputerBackupJob {
     New-Obj @{ Id = (gid "a1"); Name = "Agent-Windows"; OSPlatform = "Windows"; Mode = "ManagedByBackupServer"; JobEnabled = $true; BackupRepository = $global:R1; BackupObject = @($PG1) }
@@ -125,11 +129,15 @@ function Get-VBRSureBackupJob {
         VirtualLab = [pscustomobject]@{ Name = "Lab01" }
         ApplicationGroup = [pscustomobject]@{ Name = "DC-AppGroup"; VM = @([pscustomobject]@{ Name = "dc01" }, [pscustomobject]@{ Name = "dc02" }) } }
 }
-if (-not ("Mock.VBRNASSMBServer" -as [type])) { Add-Type -TypeDefinition "namespace Mock { public class VBRNASSMBServer { } }" }
+if (-not ("Mock.VBRNASSMBServer" -as [type])) { Add-Type -TypeDefinition "namespace Mock { public class VBRNASSMBServer { } public class VBRAmazonS3ObjectStorageServer { } }" }
 function Get-VBRNASBackupJob {
     New-Obj @{ Id = (gid "n1"); Name = "NAS-Shares"; JobEnabled = $true; ShortTermBackupRepository = $global:R1
         BackupObject = @([pscustomobject]@{ Path = "\\nas01.corp.local\projects"; Server = (New-Object Mock.VBRNASSMBServer)
                                             InclusionMask = @("*.docx", "*.xlsx"); ExclusionMask = @("\.snapshot", "*.tmp") }) }
+    # Object storage: Path is the folder only, the bucket is separate (shown as "<bucket>/<folder>")
+    New-Obj @{ Id = (gid "n2"); Name = "Bucket-Backup"; JobEnabled = $true; ShortTermBackupRepository = $global:R1
+        BackupObject = @([pscustomobject]@{ Path = "/Backup/data/"; Container = [pscustomobject]@{ Name = "veeam-bucket" }
+                                            Server = (New-Object Mock.VBRAmazonS3ObjectStorageServer) }) }
 }
 # Mock Enterprise Manager registration info
 if (-not ("Veeam.Backup.Core.SBackupOptions" -as [type])) {

@@ -1,5 +1,21 @@
 # Changelog: vbr-topology
 
+## Unreleased
+
+### Fixed
+
+- Python: VBR's own temporary repository (`/tmp/VeeamTempRepo<id>` on the appliance), which the console
+  and PowerShell do not list, was drawn as a Linux repository.
+- Python: when DNS (or a hosts file) only knows a short alias of the backup server (for example `vbr`),
+  the full name from `serverInfo` (for example `vbr-03.corp.local`) is shown instead. The appliance's
+  internal name (`vbr-1a2b3c4d`) is still not used.
+- Python: an Enterprise Manager that lists this VBR by its IP address (or by `serverInfo`'s name) showed
+  "Registered to this EM: No".
+- Both: Hyper-V replication jobs were drawn through the VMware proxies. They now go from the source
+  host to the target host (on-host proxies), or through the off-host proxies the job selects.
+- Both: file share paths no longer end with a separator, and object storage paths read
+  `<bucket>/<folder>` in both collectors (PowerShell left out the bucket, Python added a trailing `/`).
+
 ## v1.6.0 (2026-11-02)
 
 ### Fixed
@@ -212,8 +228,9 @@ First release.
 - Managed servers that are not hosts (file shares, Azure Blob / Azure accounts, Entra ID tenants) are
   listed by PowerShell as "other managed servers"; REST `managedServers` does not return them.
 - The backup server is named after the host used to connect, or its DNS name when that is a short name
-  or an IP. When DNS (or the hosts file) of the scanning machine only knows an alias, the alias is
-  shown; placement still finds the VM by the address.
+  or an IP. When DNS (or the hosts file) of the scanning machine only knows an alias, PowerShell shows
+  the alias (it has no other source for the name); Python shows the full name from `serverInfo` when
+  there is one. Placement still finds the VM by the address.
 - Repositories without a host of their own (object storage, dedup appliances) are placed on their
   gateway server by PowerShell (often the VBR server); Python shows them as "Unknown / physical".
 - Both collectors label object storage backup jobs `File backup`, as `Get-VBRUnstructuredBackupJob`

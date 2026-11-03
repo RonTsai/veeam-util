@@ -217,10 +217,10 @@ def job_objects(j, names):
              ("inclusionTagMask", "Tag mask", False), ("exclusionTagMask", "Tag mask", True))
     for o in j.get("objects") or []:
         if "objectStorageServerId" in o:
-            path = "/".join(x for x in (o.get("container"), o.get("path")) if x and x != "/")
+            path = "/".join(x.strip("/") for x in (o.get("container"), o.get("path")) if x and x != "/")
             add(path, "Object storage", names.get(o.get("objectStorageServerId")))
         else:
-            path = o.get("path")
+            path = (o.get("path") or "").rstrip("\\/") or o.get("path")   # no trailing backslash or slash, as PowerShell shows it
             add(path, "File share", names.get(o.get("fileServerId")))
         for key, typ, excluded in masks:
             for m in o.get(key) or []:
@@ -760,16 +760,29 @@ def build_model(raw, csv_rows=()):
     dns_name = meta.get("hostName") if "hostName" in meta else canonical_host(conn_host)  # older vbr_raw.json: resolve now
     vbr_name = (dns_name or (conn_host if conn_host and not _is_ip(conn_host) and _lc(conn_host) not in LOCAL_HOSTS else None)
                 or info.get("name") or conn_host or "VBR")
+    # A short name (an alias such as "vbr" from DNS or a hosts file) gives way to serverInfo.name when that
+    # is a full name (vbr-03.corp.local); the appliance's internal name (vbr-1a2b3c4d) does not
+    srv_name = info.get("name") or ""
+    if "." not in vbr_name and not _is_ip(vbr_name) and "." in srv_name and not _is_ip(srv_name):
+        vbr_name = srv_name
     add_node("vbr", "backup", vbr_name, f"Backup server · v{info.get('buildVersion', '?')}",
              details={"Build": info.get("buildVersion"), "Patches": ", ".join(info.get("patches") or []),
                       "Database": info.get("databaseVendor"), "VBR ID": info.get("vbrId"),
-                      "Connected as": conn_host if dns_name else None})
+                      "Connected as": conn_host if conn_host and _lc(conn_host) not in LOCAL_HOSTS
+                      and _lc(conn_host) != _lc(vbr_name) else None})
 
     # ---- Enterprise Manager (management tier, drawn next to the backup server)
+    # EM may list this VBR by its display name, the address we connected to (often an IP) or serverInfo.name
+    vbr_keys = set()
+    for k in (vbr_name, conn_host, info.get("name")):
+        if k:
+            vbr_keys.add(_lc(k))
+            if not _is_ip(k):
+                vbr_keys.add(_lc(k).split(".")[0])
     for em in raw.get("enterpriseManagers") or []:
         reg = em.get("registered")
-        is_reg = None if reg is None else any(_lc(r) in (_lc(vbr_name), _lc(vbr_name).split(".")[0]) or
-                                               _lc(r).split(".")[0] == _lc(vbr_name).split(".")[0] for r in reg)
+        is_reg = None if reg is None else any(_lc(r) in vbr_keys or (not _is_ip(r) and _lc(r).split(".")[0] in vbr_keys)
+                                              for r in reg)
         sub = "Enterprise Manager"
         if _lc(em["host"]) == _lc(urllib.parse.urlparse(meta.get("base", "")).hostname) or _lc(em["host"]) == _lc(vbr_name):
             sub += " · same host as VBR"
@@ -852,6 +865,10 @@ def build_model(raw, csv_rows=()):
         return f"{v:,.0f} GB" if isinstance(v, (int, float)) else None
 
     for r in raw.get("repositories") or []:
+        # VBR's own temporary repository (/tmp/VeeamTempRepo<id> on the appliance): the console and
+        # PowerShell do not list it
+        if "veeamtemprepo" in _lc((r.get("repository") or {}).get("path")):
+            continue
         t = r.get("type", "")
         st = states.get(r["id"], {})
         hid = r.get("hostId") or (r.get("repository") or {}).get("hostId")
@@ -936,7 +953,7 @@ def build_model(raw, csv_rows=()):
                 or next(iter(find_all(j, "metadataRepositoryId")), None))
 
     repo_of_job = {j.get("id"): job_repo(j) for j in jobs}
-    replica_targets = []   # (proxies, destination host, its vCenter, label): linked once ESXi hosts are known
+    replica_targets = []   # (proxies or source hosts, destination host, its vCenter, label): linked once ESXi hosts are known
     for j in jobs:
         jt = j.get("type", "")
         jtl = _lc(jt)
@@ -981,15 +998,17 @@ def build_model(raw, csv_rows=()):
                          "sources": sources, "proxies": proxies, "objects": objects})
         label = name + (" (disabled)" if j.get("isDisabled") else "")
         if "replica" in jtl:
-            # Source host -> proxies -> target host, as PowerShell draws it (the metadata repository is not drawn)
-            px = sel_proxies or proxies_by_type.get("ViProxy", [])
-            for h in hosts:
-                src = source_node(h, "hv" if "hyperv" in jtl else "vi")
+            # Source host -> proxies -> target host, as PowerShell draws it (the metadata repository is not drawn).
+            # Hyper-V: off-host proxies when the job selects them, else the hosts' on-host proxies (host to host)
+            hv = "hyperv" in jtl
+            px = sel_proxies or ([] if hv else proxies_by_type.get("ViProxy", []))
+            srcs = [source_node(h, "hv" if hv else "vi") for h in hosts]
+            for src in srcs:
                 for p in px:
-                    add_link(src, p, label, "auto")
+                    add_link(src, p, label, "data" if hv else "auto")
             dest = _obj((j.get("destination") or {}).get("host") or {})
             if dest.get("name"):
-                replica_targets.append((px, dest["name"], dest.get("hostName"), label))
+                replica_targets.append((px or srcs, dest["name"], dest.get("hostName"), label))
             continue
         if repo not in nodes:
             continue
@@ -1098,11 +1117,11 @@ def build_model(raw, csv_rows=()):
         warnings.append("vSphere inventory unavailable; component hosts not matched (use --placement-csv)")
 
     # ---- Replica targets: proxies -> the target host (ESXi hosts are known by now), else the vCenter it belongs to
-    for px, dest, dest_vc, label in replica_targets:
+    for froms, dest, dest_vc, label in replica_targets:
         hosts_by_name = {_lc(n["name"]): n["id"] for n in nodes.values() if n["kind"] in ("vi_host", "hv_host")}
         tgt = hosts_by_name.get(_lc(dest)) or hosts_by_name.get(_lc(dest_vc))
-        for p in px:
-            add_link(p, tgt, label, "copy")
+        for f in froms:
+            add_link(f, tgt, label, "copy")
 
     add_ips(nodes)
 
