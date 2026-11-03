@@ -11,6 +11,8 @@
   internal name (`vbr-1a2b3c4d`) is still not used.
 - Python: an Enterprise Manager that lists this VBR by its IP address (or by `serverInfo`'s name) showed
   "Registered to this EM: No".
+- Python: when the EM account sees no backup server at all (usually no EM role), "Registered to this EM"
+  is left unknown instead of "No", and the details say that no backup server is visible to the account.
 - Both: Hyper-V replication jobs were drawn through the VMware proxies. They now go from the source
   host to the target host (on-host proxies), or through the off-host proxies the job selects.
 - Both: file share paths no longer end with a separator, and object storage paths read

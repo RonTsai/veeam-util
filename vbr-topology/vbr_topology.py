@@ -63,6 +63,7 @@ ENDPOINTS = {
 }
 
 EM_REST_PORT = int(os.environ.get("EM_REST_PORT", "9398"))  # override for testing only
+EM_NONE_VISIBLE = "None visible to this account (check its Enterprise Manager role)"
 
 
 # --------------------------------------------------------------------------
@@ -781,14 +782,16 @@ def build_model(raw, csv_rows=()):
                 vbr_keys.add(_lc(k).split(".")[0])
     for em in raw.get("enterpriseManagers") or []:
         reg = em.get("registered")
-        is_reg = None if reg is None else any(_lc(r) in vbr_keys or (not _is_ip(r) and _lc(r).split(".")[0] in vbr_keys)
+        # An empty list usually means the EM account cannot see any backup server (no EM role), not that
+        # this VBR is not registered: leave "Registered to this EM" unknown
+        is_reg = None if not reg else any(_lc(r) in vbr_keys or (not _is_ip(r) and _lc(r).split(".")[0] in vbr_keys)
                                               for r in reg)
         sub = "Enterprise Manager"
         if _lc(em["host"]) == _lc(urllib.parse.urlparse(meta.get("base", "")).hostname) or _lc(em["host"]) == _lc(vbr_name):
             sub += " · same host as VBR"
         add_node(f"mgmt:em:{_lc(em['host'])}", "em", em["host"], sub, details={
             "Source": em.get("source"), "URL": f"https://{em['host']}:9443",
-            "Registered backup servers": ", ".join(reg) if reg else None,
+            "Registered backup servers": ", ".join(reg) if reg else (EM_NONE_VISIBLE if reg == [] else None),
             "Registered to this EM": {True: "Yes", False: "No"}.get(is_reg),
             "Verification": f"Failed: {em['error']}" if em.get("error") else ("OK" if em.get("connected") else None)})
 
