@@ -9,6 +9,7 @@ result/
 *.local.md
 *.local.ps1
 *.local.env
+*.local.cmd
 
 .DS_Store
 __pycache__/
