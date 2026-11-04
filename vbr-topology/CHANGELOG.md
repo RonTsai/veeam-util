@@ -222,6 +222,12 @@ First release.
   by IP, and VMs whose name differs from their hostname, show as "Physical / unknown host".
 - PowerShell detects Enterprise Manager through an undocumented VBR API
   (`SBackupOptions.GetEnterpriseServerInfo`), which may change between versions.
+- Some PowerShell data comes from .NET methods and internal classes that Veeam does not support (see
+  the [PowerShell FAQ](https://forums.veeam.com/viewtopic.php?f=26&t=89480) on the R&D Forums):
+  `GetHost()` (proxy and repository hosts), `GetContainer()` (repository capacity and free space),
+  `GetActualGateways()` (gateways), `GetTargetRepository()` and `GetProxy()` (job targets and proxies),
+  `GetPhysicalHost()` (plug-in platform type) and `Info.Info` (vCenter / ESXi versions). Each call is
+  wrapped, so a change in a VBR update leaves that detail empty instead of stopping the scan.
 - Hyper-V placement (`Find-VBRHvEntity`) has not been tested on a real Hyper-V environment.
 - The proxies (workers) of plug-in platforms (Proxmox VE, Nutanix AHV, HPE Morpheus VME) are not
   exposed through PowerShell (`GetChilds()` / `GetSubHosts()` return nothing) or the REST API, so the
