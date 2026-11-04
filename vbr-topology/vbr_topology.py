@@ -554,7 +554,12 @@ def collect_vcenter(args, raw, password):
 
 OBJECT_REPO_TYPES = {"amazons3", "s3compatible", "azureblob", "azurearchive", "googlecloud",
                      "ibmcloud", "wasabicloud", "amazons3glacier", "veeamdatacloudvault",
-                     "amazonsnowballedge", "s3", "smartobjects3"}   # smartobjects3: Object First
+                     "amazonsnowballedge", "s3", "smartobjects3",   # smartobjects3: Object First
+                     # REST 1.3-rev2 (ERepositoryType); s3integrated: Object First on VBR v13
+                     "s3integrated", "s3glaciercompatible", "veeamvault", "veeamdatacloudvaultarchive",
+                     "veeamdatacloudvaultawsexternal", "veeamdatacloudvaultazureexternal", "elevenelevens3",
+                     "amazons3external", "amazons3glacierexternal", "azurestorageexternal",
+                     "azurearchivestorageexternal", "googlecloudstorageexternal", "googlearchivestorageexternal"}
 SHARE_REPO_TYPES = {"smb", "nfs"}
 DEDUP_REPO_TYPES = {"ddboost", "exagrid", "hpstoreonce", "quantum", "infinidat", "fujitsu"}
 

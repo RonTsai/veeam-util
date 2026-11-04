@@ -19,6 +19,9 @@
 
 - Python: jobs and backup copies to a Data Domain or HPE StoreOnce repository now show it (REST
   1.3-rev2 returns deduplicating storage appliances).
+- Python: Object First on VBR v13 (`S3Integrated`), Veeam Data Cloud Vault archive and the other object
+  storage types of REST 1.3-rev2 were drawn as plain repositories; they are object storage now, as in
+  PowerShell.
 
 ## v1.7.0 (2026-11-03)
 
