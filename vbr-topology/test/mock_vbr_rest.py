@@ -32,6 +32,8 @@ PATHS = {
     "/api/v1/agents/protectionGroups": "protectionGroups",
     "/api/v1/jobs": "jobs",
     "/api/v1/backups": "backups",
+    "/api/v1/inventory/unstructuredDataServers": "unstructuredDataServers",
+    "/api/v1/inventory/entraId/tenants": "entraIdTenants",
 }
 # vCenter inventory: host -> VMs
 # "VBR01.WIN.Demo" comes first and its first label is "vbr01": the backup server must still match

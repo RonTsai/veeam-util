@@ -1,5 +1,25 @@
 # Changelog: vbr-topology
 
+## Unreleased
+
+### Added
+
+- Python: asks for REST API 1.3-rev2 first (VBR v13.1), then falls back to older versions.
+- Python: Hyper-V cluster member hosts (`managedServers?includeNestedHosts=true`), with their cluster in
+  the details, as in PowerShell.
+- Python: file shares, object storage accounts (`/inventory/unstructuredDataServers`) and Entra ID
+  tenants (`/inventory/entraId/tenants`) under "Other servers", as PowerShell lists them. File share
+  objects of a job now show the share as their location.
+- Python: Proxmox VE and Nutanix AHV jobs, which `/jobs` does not return, are listed from their backups
+  (`/backups`: name, type and repository). Their state is not known and shows as "—".
+- Python: Proxmox VE / Nutanix AHV hosts, if `managedServers` returns them (the 1.3-rev2 schema defines
+  `ProxmoxNode`, `ProxmoxCluster`, `NutanixCluster` and `PrismCentral`, but VBR v13.1 does not return them).
+
+### Fixed
+
+- Python: jobs and backup copies to a Data Domain or HPE StoreOnce repository now show it (REST
+  1.3-rev2 returns deduplicating storage appliances).
+
 ## v1.7.0 (2026-11-03)
 
 ### Added
@@ -215,7 +235,7 @@ First release.
 - Tested in one lab environment (VBR v13.1, vCenter 8.0.3, ESXi 7.0.3 and 8.0.3) and against the
   offline mocks only.
 - Python does not list tape servers, tape libraries, tape jobs, SureBackup virtual labs or Cloud
-  Connect service providers yet; their REST endpoints still need to be confirmed.
+  Connect service providers: the REST API (1.3-rev2) has no endpoints for them.
 - On VBR v13 REST, the inventory does not return VMs per host. Without `--vcenter-user`, Python
   usually cannot place components on ESXi hosts.
 - Without PowerCLI or `--vcenter-user`, components are matched by VM name only. Proxies registered
@@ -232,23 +252,22 @@ First release.
 - The proxies (workers) of plug-in platforms (Proxmox VE, Nutanix AHV, HPE Morpheus VME) are not
   exposed through PowerShell (`GetChilds()` / `GetSubHosts()` return nothing) or the REST API, so the
   report does not show them.
-- Python shows neither plug-in platforms nor ESXi versions: the VBR REST API does not return them, and
-  the vCenter REST API has no ESXi version.
+- Python shows neither plug-in platform hosts nor ESXi versions: the VBR REST API (v13.1) does not return
+  them, and the vCenter REST API has no ESXi version.
 - The plug-in platform IDs were taken from one lab; other plug-in versions may use other IDs.
-- The VBR REST API does not list plug-in platform jobs (Proxmox VE, Nutanix AHV, HPE Morpheus VME),
-  so the Python report has neither these jobs nor their objects.
+- The VBR REST API does not list plug-in platform jobs (Proxmox VE, Nutanix AHV, HPE Morpheus VME) in
+  `/jobs`. Python lists Proxmox VE and Nutanix AHV jobs from `/backups` (name and repository only: no
+  state, sources, objects or links); HPE Morpheus VME jobs are not shown.
 - Job object locations differ by collector: PowerShell shows the full inventory path, Python only
   the host name (vCenter / Hyper-V host).
 - The VBR REST API (v13.1) does not list Hyper-V replication jobs, Unix (Solaris, AIX) agent jobs or
   SureBackup jobs with a virtual lab (only content scans), so the Python report does not show them.
-- Deduplicating storage appliances (Data Domain, StoreOnce) are missing from REST `/repositories`, so
-  in Python, jobs and backup copies that target them have no repository or link.
 - Python only shows an Enterprise Manager given with `--em` (or installed on the VBR host): the REST
   API does not expose the EM registration.
-- Python shows a Hyper-V cluster without its member hosts, and no ESXi hosts of a vCenter whose login
-  was rejected: REST `managedServers` lists only the cluster and the vCenter.
-- Managed servers that are not hosts (file shares, Azure Blob / Azure accounts, Entra ID tenants) are
-  listed by PowerShell as "other managed servers"; REST `managedServers` does not return them.
+- Python shows no ESXi hosts of a vCenter whose login was rejected: REST `managedServers` lists only the
+  vCenter, even with `includeNestedHosts`.
+- Python does not show Azure Blob containers, which PowerShell lists as managed servers. It lists Veeam
+  Data Cloud Vault archive repositories (`VeeamDataCloudVaultArchive`), which PowerShell does not.
 - The backup server is named after the host used to connect, or its DNS name when that is a short name
   or an IP. When DNS (or the hosts file) of the scanning machine only knows an alias, PowerShell shows
   the alias (it has no other source for the name); Python shows the full name from `serverInfo` when

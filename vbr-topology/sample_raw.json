@@ -68,6 +68,26 @@
       "name": "tape01.corp.local",
       "type": "WindowsHost",
       "description": "Tape server"
+    },
+    {
+      "id": "ms-hvn1",
+      "name": "hvnode01.corp.local",
+      "type": "HvServer",
+      "status": "Available",
+      "parentHostId": "ms-hvc",
+      "parentHostName": "hvclu01.corp.local"
+    },
+    {
+      "id": "ms-pve1",
+      "name": "pve01.corp.local",
+      "type": "ProxmoxNode",
+      "status": "Available"
+    },
+    {
+      "id": "ms-ahv1",
+      "name": "ahv01.corp.local",
+      "type": "NutanixCluster",
+      "status": "Available"
     }
   ],
   "proxies": [
@@ -510,6 +530,22 @@
       "platformName": "WindowsPhysical",
       "repositoryId": "r-1",
       "jobId": null
+    },
+    {
+      "id": "b-pve",
+      "name": "Proxmox-Daily",
+      "platformName": "Proxmox",
+      "repositoryId": "r-1",
+      "jobId": "j13",
+      "jobType": "ProxmoxBackupJob"
+    },
+    {
+      "id": "b-ahv",
+      "name": "AHV-Daily",
+      "platformName": "Nutanix",
+      "repositoryId": "r-1",
+      "jobId": "j14",
+      "jobType": "NutanixAHVBackupJob"
     }
   ],
   "inventory": {
@@ -542,6 +578,35 @@
     {
       "host": "em01.corp.local",
       "source": "手動指定 (--em)"
+    }
+  ],
+  "unstructuredDataServers": [
+    {
+      "id": "fs-1",
+      "type": "SMBShare",
+      "name": "\\\\nas01.corp.local\\projects",
+      "path": "\\\\nas01.corp.local\\projects"
+    },
+    {
+      "id": "ms-s3",
+      "type": "S3Compatible",
+      "account": {
+        "friendlyName": "s3.corp.local"
+      }
+    },
+    {
+      "id": "fs-host",
+      "type": "FileServer",
+      "name": "repo01.corp.local",
+      "hostId": "ms-repo1"
+    }
+  ],
+  "entraIdTenants": [
+    {
+      "id": "t-1",
+      "name": "corp.onmicrosoft.com",
+      "azureTenantId": "00000000-0000-0000-0000-000000000001",
+      "region": "Global"
     }
   ]
 }

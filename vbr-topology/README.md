@@ -50,7 +50,7 @@ There are two collectors that produce the same diagram from one shared `template
 | Needs | Windows PowerShell 5.1 or PowerShell 7 | Python 3.8+, standard library only |
 | Enterprise Manager | Auto-detected | `--em <host>` (or auto, when EM is installed on the VBR host) |
 | vSphere versions | vCenter and ESXi | vCenter only (with `--vcenter-user`) |
-| Plug-in platforms (Proxmox VE, Nutanix AHV, HPE Morpheus VME) | Hosts and jobs | — (not in the REST API) |
+| Plug-in platforms (Proxmox VE, Nutanix AHV, HPE Morpheus VME) | Hosts and jobs | Proxmox VE and Nutanix AHV jobs only (name and repository, from `/backups`) |
 | Job protected objects | All job types, with full inventory paths | All but plug-in jobs; location is the host name |
 | Extras | Tape servers, tape libraries and tape jobs, SureBackup virtual labs, Cloud Connect service providers, Hyper-V replica jobs | — |
 
@@ -255,7 +255,8 @@ REST endpoints used:
 | Item | Endpoint |
 |---|---|
 | Backup server | `GET /api/v1/serverInfo` |
-| Managed servers (vCenter, ESXi, Hyper-V, Windows, Linux) | `GET /api/v1/backupInfrastructure/managedServers` |
+| Managed servers (vCenter, ESXi, Hyper-V clusters and their hosts, Windows, Linux) | `GET /api/v1/backupInfrastructure/managedServers?includeNestedHosts=true` |
+| File shares, object storage accounts, Entra ID tenants | `GET /api/v1/inventory/unstructuredDataServers`, `/api/v1/inventory/entraId/tenants` |
 | Proxies, WAN accelerators | `GET /api/v1/backupInfrastructure/proxies`, `/wanAccelerators` |
 | Repositories, capacity, SOBR | `GET /api/v1/backupInfrastructure/repositories`, `/repositories/states`, `/scaleOutRepositories` |
 | Agent protection groups | `GET /api/v1/agents/protectionGroups` |
@@ -277,8 +278,9 @@ itself, not its ESXi hosts, so **without `--vcenter-user` the Python report show
 only match components by VM name, if at all.
 
 The Python version shows the vCenter version (with `--vcenter-user`), but not ESXi versions or plug-in
-platforms (Proxmox VE, Nutanix AHV, HPE Morpheus VME): the VBR REST API does not return them. Use the
-PowerShell version for those.
+platform hosts (Proxmox VE, Nutanix AHV, HPE Morpheus VME): the VBR REST API does not return them. Proxmox
+VE and Nutanix AHV jobs are listed from their backups (`/backups`: name and repository, without state,
+sources or objects). Use the PowerShell version for the rest.
 
 ### Enterprise Manager
 
@@ -359,7 +361,7 @@ highlighted in the diagram until you click the job again, even while you hover o
 | Job type | PowerShell | Python (REST) |
 |---|---|---|
 | VMware, Hyper-V, Cloud Director, replica | `Get-VBRJobObject`, `Include` / `Exclude` entries (type from `TypeDisplayName`, full inventory path) | `virtualMachines.includes` / `excludes.vms` (location is the host name) |
-| Plug-in (Proxmox VE, Nutanix AHV, HPE Morpheus VME) | `Get-VBRJobObject` (no location) | — (not in the REST API) |
+| Plug-in (Proxmox VE, Nutanix AHV, HPE Morpheus VME) | `Get-VBRJobObject` (no location) | — (only the job, from `/backups`) |
 | Agent | `BackupObject`: protection groups | `computers`: protection groups |
 | File share, object storage | `BackupObject`: shares and buckets, then their include / exclude File masks (and tag masks for buckets) | `objects`: the same |
 | Backup copy | Source jobs and repositories | `sourceObjects` |

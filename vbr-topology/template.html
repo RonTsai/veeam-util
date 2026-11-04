@@ -597,7 +597,7 @@ function tables() {
         // count included objects only; File / Tag masks are filters, not objects
         has ? `<span class="count">(${objs.filter(o => !o.excluded && !/ mask$/.test(o.type)).length})</span>` : ""}</td><td>${esc(j.type)}</td>
         <td>${esc((j.sources || []).join(", "))}</td><td>${esc(j.proxies)}</td><td>${esc(j.repository)}</td>
-        <td>${esc(t(j.disabled ? "disabled" : "enabled"))}</td></tr>`;
+        <td>${esc((j.disabled == null ? "—" : t(j.disabled ? "disabled" : "enabled")))}</td></tr>`;
       const sub = has ? `<tr class="objs" data-for="${i}" hidden><td colspan="6"><table>${
         th(["objType", "objName", "objLocation", "objSize", "objMode"])}${objs.map(o => `<tr class="${o.excluded ? "ex" : ""}">
         <td>${esc(td(o.type))}</td><td>${esc(o.name)}</td><td>${esc(o.location)}</td><td>${esc(o.size)}</td>

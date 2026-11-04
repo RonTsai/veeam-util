@@ -45,13 +45,14 @@ import urllib.request
 
 # Tried newest to oldest; the first one the server accepts wins.
 # v13 -> 1.3-revX, v12.3 -> 1.2-revX, v12.1/12.2 -> 1.1-rev1/rev2, v12.0 -> 1.1-rev0
-API_VERSIONS = ["1.3-rev1", "1.3-rev0", "1.2-rev1", "1.2-rev0",
+API_VERSIONS = ["1.3-rev2", "1.3-rev1", "1.3-rev0", "1.2-rev1", "1.2-rev0",
                 "1.1-rev2", "1.1-rev1", "1.1-rev0", "1.0-rev2", "1.0-rev1"]
 
 # Endpoints to collect: key -> (path, paginated)
 ENDPOINTS = {
     "serverInfo":           ("/api/v1/serverInfo", False),
-    "managedServers":       ("/api/v1/backupInfrastructure/managedServers", True),
+    # includeNestedHosts: also the hosts inside a Hyper-V cluster (or vCenter), as PowerShell lists them
+    "managedServers":       ("/api/v1/backupInfrastructure/managedServers?includeNestedHosts=true", True),
     "proxies":              ("/api/v1/backupInfrastructure/proxies", True),
     "repositories":         ("/api/v1/backupInfrastructure/repositories", True),
     "repositoryStates":     ("/api/v1/backupInfrastructure/repositories/states", True),
@@ -60,6 +61,9 @@ ENDPOINTS = {
     "protectionGroups":     ("/api/v1/agents/protectionGroups", True),
     "jobs":                 ("/api/v1/jobs", True),
     "backups":              ("/api/v1/backups", True),
+    # Managed servers that are not hosts (file shares, object storage accounts, Entra ID tenants)
+    "unstructuredDataServers": ("/api/v1/inventory/unstructuredDataServers", True),
+    "entraIdTenants":       ("/api/v1/inventory/entraId/tenants", True),
 }
 
 EM_REST_PORT = int(os.environ.get("EM_REST_PORT", "9398"))  # override for testing only
@@ -562,7 +566,12 @@ JOB_TYPES = {"vspherebackup": "VMware Backup", "hypervbackup": "Hyper-V Backup",
              "vspherereplica": "VMware Replication", "hypervreplica": "Hyper-V Replication",
              "clouddirectorbackup": "Cloud Director Backup", "filebackup": "File backup",
              "objectstoragebackup": "File backup", "entraidtenantbackup": "Entra ID backup",
-             "surebackupcontentscan": "SureBackup (content scan)", "surebackup": "SureBackup"}
+             "surebackupcontentscan": "SureBackup (content scan)", "surebackup": "SureBackup",
+             "proxmoxbackupjob": "Proxmox Backup", "nutanixahvbackupjob": "Nutanix AHV Backup"}
+# Plug-in platform servers in REST 1.3-rev2+ (HPE Morpheus VME is not in the REST API)
+PLUGIN_SERVER_TYPES = {"ProxmoxNode": "Proxmox VE", "ProxmoxCluster": "Proxmox VE",
+                       "NutanixCluster": "Nutanix AHV", "PrismCentral": "Nutanix AHV"}
+PLUGIN_JOB_TYPES = {"proxmoxbackupjob": "Proxmox VE", "nutanixahvbackupjob": "Nutanix AHV"}
 AGENT_OS = {"windows": "Windows", "linux": "Linux", "mac": "Mac", "unix": "Unix", "solaris": "Unix", "aix": "Unix"}
 
 
@@ -578,6 +587,12 @@ def job_type_label(j):
         mode = "ManagedByAgent" if "policy" in m.group(2) else "ManagedByBackupServer"
         return f"Agent backup ({AGENT_OS[m.group(1)]}, {mode})"
     return t
+
+
+def unstructured_name(u):
+    """Display name of an unstructured data server: share name / path, or the object storage account."""
+    return (u.get("name") or u.get("path") or u.get("friendlyName") or find_first(u.get("account") or {}, "friendlyName")
+            or find_first(u.get("account") or {}, "serviceEndpoint") or u.get("type"))
 
 
 def canonical_host(name):
@@ -860,7 +875,13 @@ def build_model(raw, csv_rows=()):
             label = {"HvServer": "Hyper-V host", "HvCluster": "Hyper-V cluster", "SCVMM": "SCVMM"}.get(t, t)
             add_node(s["id"], "hv_host", s["name"], f"{label} · Source host", badges=["M"],
                      details={"Type": t, "Description": s.get("description"), "Status": s.get("status"),
+                              "Cluster": s.get("parentHostName"),
                               "Data Mover": "On-host proxy (Veeam Data Mover Service)"})
+            used_hosts.add(s["id"])
+        elif t in PLUGIN_SERVER_TYPES:
+            plat = PLUGIN_SERVER_TYPES[t]
+            add_node(s["id"], "ext_host", s["name"], f"{plat} · Source host",
+                     details={"Type": t, "Platform": plat, "Description": s.get("description"), "Status": s.get("status")})
             used_hosts.add(s["id"])
         elif t in ("CloudDirectorHost",):
             add_node(s["id"], "vi_host", s["name"], "VMware Cloud Director",
@@ -1003,13 +1024,16 @@ def build_model(raw, csv_rows=()):
     jobs = raw.get("jobs") or []
     job_rows = []
     server_names = {s["id"]: s.get("name") for s in servers.values()}
+    server_names.update({u["id"]: unstructured_name(u) for u in raw.get("unstructuredDataServers") or [] if u.get("id")})
 
     def job_repo(j):
         # Replicas keep only their metadata in a repository (jobSettings.metadataRepositoryId)
         return ((j.get("storage") or {}).get("backupRepositoryId") or next(iter(find_all(j, "backupRepositoryId")), None)
                 or next(iter(find_all(j, "metadataRepositoryId")), None))
 
-    repo_of_job = {j.get("id"): job_repo(j) for j in jobs}
+    # Plug-in jobs come without details (only id, name, type, isDisabled): their repository is in /backups
+    backup_repo = {b.get("jobId"): b.get("repositoryId") for b in raw.get("backups") or [] if b.get("jobId")}
+    repo_of_job = {j.get("id"): job_repo(j) or backup_repo.get(j.get("id")) for j in jobs}
     replica_targets = []   # (proxies or source hosts, destination host, its vCenter, label): linked once ESXi hosts are known
     for j in jobs:
         jt = j.get("type", "")
@@ -1054,6 +1078,12 @@ def build_model(raw, csv_rows=()):
                          "repository": (nodes.get(repo) or {}).get("name"),
                          "sources": sources, "proxies": proxies, "objects": objects})
         label = name + (" (disabled)" if j.get("isDisabled") else "")
+        if jtl in PLUGIN_JOB_TYPES:
+            # No sources in REST: every host of that platform gets an inferred link to the repository
+            for h in [n["id"] for n in nodes.values() if n["kind"] == "ext_host" and n["details"].get("Platform") == PLUGIN_JOB_TYPES[jtl]]:
+                if repo in nodes:
+                    add_link(h, repo, label, "inferred")
+            continue
         if "replica" in jtl:
             # Source host -> proxies -> target host, as PowerShell draws it (the metadata repository is not drawn).
             # Hyper-V: off-host proxies when the job selects them, else the hosts' on-host proxies (host to host)
@@ -1110,6 +1140,24 @@ def build_model(raw, csv_rows=()):
                 if sr in nodes:
                     add_link(sr, repo, label, "copy")
 
+    # Plug-in jobs (Proxmox VE, Nutanix AHV) that /jobs does not return: list them from their backups.
+    # Their state, sources and objects are not in /backups.
+    job_ids = {j.get("id") for j in jobs}
+    plugin_jobs = {}
+    for b in raw.get("backups") or []:
+        jid = b.get("jobId")
+        if jid and jid not in job_ids and _lc(b.get("jobType")) in PLUGIN_JOB_TYPES:
+            pj = plugin_jobs.setdefault(jid, {"name": b.get("name"), "type": b.get("jobType"), "repo": None})
+            if not pj["repo"] and b.get("repositoryId") in nodes:
+                pj["repo"] = b["repositoryId"]
+    for pj in plugin_jobs.values():
+        job_rows.append({"name": pj["name"], "type": job_type_label(pj), "disabled": None,
+                         "repository": (nodes.get(pj["repo"]) or {}).get("name"),
+                         "sources": [], "proxies": "—", "objects": []})
+        for h in [n["id"] for n in nodes.values() if n["kind"] == "ext_host" and n["details"].get("Platform") == PLUGIN_JOB_TYPES[_lc(pj["type"])]]:
+            if pj["repo"] in nodes:
+                add_link(h, pj["repo"], pj["name"], "inferred")
+
     # Agent backups from /backups, only when /jobs has no agent jobs (older API versions). Otherwise
     # these are backups without a job (imported or orphaned), which PowerShell does not show either.
     has_agent_jobs = any("agent" in _lc(j.get("type")) or "computer" in _lc(j.get("type")) for j in jobs)
@@ -1129,6 +1177,10 @@ def build_model(raw, csv_rows=()):
                 links.pop((l["source"], l["target"]), None)
                 l[end] = sb
                 links[(l["source"], l["target"])] = l
+
+    if any(n["kind"] == "ext_host" for n in nodes.values()):
+        warnings.append("Proxies of plug-in platforms (Proxmox VE, Nutanix AHV, HPE Morpheus VME) cannot be read "
+                        "through PowerShell or the REST API and are not shown.")
 
     # Sources with no job link -> inferred (dashed) links.
     # With a vCenter present, ESXi hosts are normally backed up through it, so skip them.
@@ -1150,6 +1202,17 @@ def build_model(raw, csv_rows=()):
             add_node(s["id"], "server", s["name"], f"Managed server · {s.get('type')}",
                      details={"Type": s.get("type"), "Description": s.get("description"),
                               "Status": s.get("status")})
+    # File shares, object storage accounts and Entra ID tenants, which PowerShell lists as managed servers
+    # (file servers are managed servers already)
+    for u in raw.get("unstructuredDataServers") or []:
+        if u.get("id") and u.get("type") != "FileServer" and u["id"] not in nodes:
+            add_node(u["id"], "server", unstructured_name(u), f"Managed server · {u.get('type')}",
+                     details={"Type": u.get("type"), "Path": u.get("path")})
+    for e in raw.get("entraIdTenants") or []:
+        if e.get("id") and e["id"] not in nodes:
+            add_node(e["id"], "server", e.get("name") or e.get("azureTenantId"), "Managed server · Entra ID tenant",
+                     details={"Type": "Entra ID tenant", "Tenant ID": e.get("azureTenantId"), "Region": e.get("region"),
+                              "Description": e.get("description")})
 
     # ---- ESXi hosts known to vCenter (VBR REST only lists the vCenter itself)
     for vc, data in (raw.get("vcenter") or {}).items():
