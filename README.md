@@ -2,7 +2,7 @@
 
 Utilities for Veeam Backup & Replication.
 
-**Author:** Ron Tsai @Veeam Taiwan
+**Author:** Ron Tsai
 
 | Tool | Description |
 |---|---|
