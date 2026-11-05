@@ -1,6 +1,6 @@
 # Changelog: vbr-topology
 
-## Unreleased
+## v1.10.0 (2026-11-05)
 
 ### Added
 - PowerShell: CDP proxies (`Get-VBRCDPProxy`), drawn with the backup proxies, with their cache path and size.
