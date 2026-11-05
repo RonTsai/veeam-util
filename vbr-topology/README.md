@@ -415,4 +415,4 @@ EM_REST_PORT=19398 VBR_PASSWORD=x VCENTER_PASSWORD=x python3 vbr_topology.py --h
 
 ## Known limitations
 
-See "Known limitations" in [CHANGELOG.md](CHANGELOG.md).
+See "Known limitations" at the top of [CHANGELOG.md](CHANGELOG.md).
