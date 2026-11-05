@@ -1,6 +1,6 @@
 # Changelog: vbr-topology
 
-## Unreleased
+## v1.9.0 (2026-11-05)
 
 ### Added
 
@@ -8,8 +8,17 @@
   even when the same server is also a hardened repository. PowerShell reads them with
   `Get-VBRApplicationBackupRepository` (name, host, ZFS pool / mount path, retention); Python finds their
   server through its `ApplicationBackupRepository` role in `managedServers`.
-- Both: the sources of a backup copy job also list its source repositories (for example a copy from an
+- Both: backup copies from an Application Backup Repository are linked to it. The job names the ABR's
+  virtual repository (another ID), so PowerShell matches it by name, and Python links it when the report
+  has one ABR.
+- Both: the sources of a backup copy job also list its source repositories (for example, a copy from an
   Application Backup Repository).
+
+### Thanks
+
+- Thanks to **Chris Childerhose** for testing the tool, reporting that an Application Backup Repository
+  on a hardened repository server showed up only as the hardened repository, and pointing to
+  `Get-VBRApplicationBackupRepository`.
 
 ## v1.8.0 (2026-11-04)
 
