@@ -1,13 +1,11 @@
 # veeam-util: notes for Claude
 
 Utilities for Veeam Backup & Replication. Author: Ron Tsai @Veeam Taiwan.
-Reply to the user in Traditional Chinese. Code, comments, console output and docs are in English.
+Code, comments, console output and docs are in English.
+The maintainer's personal working rules and lab notes are in `CLAUDE.local.md` (git-ignored), when present.
 
-## Working agreements
+## Rules for every change
 
-- **Ask before changing code.** Explain the proposed change and wait for approval.
-- **Show the commit plan before pushing**: the files, the commit message and any README changes.
-  Push only after the user says so.
 - **Never commit real environment data**: host names, IPs, user names, passwords, or scan output
   (`out/`, `vbr_raw.json`). Use `corp.local` style examples. Before committing, grep for anything
   that looks like a real host or IP.
@@ -15,12 +13,8 @@ Reply to the user in Traditional Chinese. Code, comments, console output and doc
   `*.local.env`). Never copy them into tracked files, commit messages or reports. If a credential is
   needed, ask the user, or read it from such a file or from an environment variable
   (`VBR_PASSWORD`, `EM_PASSWORD`, `VCENTER_PASSWORD`).
-- Tags are `<tool>-vX.Y.Z` (for example `vbr-topology-v1.0.0`). Releases are marked pre-release.
-  - Local session (Claude Code on the user's machine): Claude can create the tag and the GitHub
-    release with `git` and `gh`. First check the existing tags (`git tag -l`, `gh release list`),
-    confirm the version with the user, and move the CHANGELOG notes from "Unreleased" to that
-    version before tagging.
-  - Cloud session: tag pushes are blocked, so the user creates tags and releases in the GitHub UI.
+- Record changes under "Unreleased" in the tool's CHANGELOG. Releases are tagged `<tool>-vX.Y.Z`
+  (for example `vbr-topology-v1.0.0`) and marked pre-release; only the maintainer publishes them.
 
 ## Layout
 
@@ -102,9 +96,9 @@ page (and clicks the job), then use headless Chrome:
 (get W and H from `--dump-dom` with the script writing them into `<title>`). Look at both images, and
 grep `example.html` for real names, IPs and local paths before committing.
 
-The mocks follow the documented API shapes, but real responses can differ. The user tests on a
-real lab (VBR v13.1, vCenter 8.0.3, ESXi 7.0.3 and 8.0.3). When something fails there, ask for the
-console output or the relevant part of `vbr_raw.json`, with names masked.
+The mocks follow the documented API shapes, but real responses can differ. The code is tested on a
+real lab (VBR v13.1, vCenter 8.0.3, ESXi 7.0.3 and 8.0.3). When something fails on a real server, ask
+for the console output or the relevant part of `vbr_raw.json`, with names masked.
 
 ## Open items
 
