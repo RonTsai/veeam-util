@@ -156,6 +156,9 @@ $wans        = Invoke-Safe "Get-VBRWANAccelerator"         { Get-VBRWANAccelerat
 $repos       = Invoke-Safe "Get-VBRBackupRepository"       { Get-VBRBackupRepository }
 $sobrs       = Invoke-Safe "Get-VBRBackupRepository -SO"   { Get-VBRBackupRepository -ScaleOut }
 $objRepos    = Invoke-Safe "Get-VBRObjectStorageRepository" { Get-VBRObjectStorageRepository }
+# Application Backup Repositories (v13): Get-VBRBackupRepository does not return them
+$abrRepos    = Invoke-Safe "Get-VBRApplicationBackupRepository" {
+    if (Get-Command Get-VBRApplicationBackupRepository -ErrorAction SilentlyContinue) { Get-VBRApplicationBackupRepository } }
 $tapes       = Invoke-Safe "Get-VBRTapeServer"             { Get-VBRTapeServer }
 $pgs         = Invoke-Safe "Get-VBRProtectionGroup"        { Get-VBRProtectionGroup }
 $jobs        = Invoke-Safe "Get-VBRJob"                    { Get-VBRJob -WarningAction SilentlyContinue }
@@ -449,6 +452,13 @@ foreach ($r in $repos) {
         Capacity = (Format-GB $cap); Free = (Format-GB $free); Description = $r.Description }
     if ($cap) { $n["usage"] = [math]::Round(1 - ([double]$free / [double]$cap), 3) }
 }
+foreach ($a in $abrRepos) {
+    $hid = Get-IdStr (Get-Prop $a @("Server")); if ($hid) { [void]$UsedHosts.Add($hid) }
+    $path = (@("$($a.ZFSPool)", "$($a.MountPath)") | Where-Object { $_ }) -join "/"
+    Add-Node (Get-IdStr $a) "repo" $a.Name "Application Backup Repository" @("M") @{
+        Type = "ApplicationBackupRepository"; Host = (Get-Prop $a @("Server.Name")); Path = $path
+        "Retention (days)" = $a.RetentionDays; Description = $a.Description } | Out-Null
+}
 foreach ($o in $objRepos) {
     $id = Get-IdStr $o
     Add-Node $id "object" $o.Name "Object storage · $($o.Type)" @() @{
@@ -625,11 +635,20 @@ foreach ($c in $copyJobs) {
     $tgt = Get-IdStr (Get-Prop $c @("TargetRepository", "Target.Repository", "Repository", "BackupRepository"))
     $srcRepos = @()
     foreach ($sj in @($c.BackupJob)) { if ($sj) { $srcRepos += $jobRepo[(Get-IdStr $sj)] } }
-    foreach ($sr in @(Get-Prop $c @("SourceRepository", "Repository"))) { if ($sr -and (Get-IdStr $sr) -ne $tgt) { $srcRepos += (Get-IdStr $sr) } }
+    foreach ($sr in @(Get-Prop $c @("SourceRepository", "Repository"))) {
+        if (-not $sr -or (Get-IdStr $sr) -eq $tgt) { continue }
+        $sid = Get-IdStr $sr
+        # An Application Backup Repository appears here as its virtual repository (another id): match it by name
+        if (-not (Test-Node $sid)) {
+            $hit = @($Nodes.Values | Where-Object { $_.details["Type"] -eq "ApplicationBackupRepository" -and $_.name -eq "$($sr.Name)" })
+            if ($hit.Count -eq 1) { $sid = $hit[0].id }
+        }
+        $srcRepos += $sid
+    }
     foreach ($sr in $srcRepos) { if ($sr) { Add-Link $sr $tgt $c.Name "copy" } }
     $JobRows.Add([ordered]@{ name = $c.Name; type = "Backup copy ($($c.Mode))"; disabled = ($c.JobEnabled -eq $false)
         repository = $(if ((Test-Node "$tgt")) { $Nodes["$tgt"].name } else { $null })
-        sources = @($c.BackupJob | Where-Object { $_ } | ForEach-Object { $_.Name }); proxies = "—"
+        sources = @(@($c.BackupJob) + @(Get-Prop $c @("SourceRepository")) | Where-Object { $_ } | ForEach-Object { $_.Name }); proxies = "—"
         objects = @(@(@($c.BackupJob) | Where-Object { $_ } | ForEach-Object { New-JobObject "$($_.Name)" "Job" }) +
                     @(@(Get-Prop $c @("SourceRepository")) | Where-Object { $_ } | ForEach-Object { New-JobObject "$($_.Name)" "Repository" })) })
 }

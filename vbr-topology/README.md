@@ -183,7 +183,8 @@ Set-ExecutionPolicy -Scope Process Bypass
 
 Cmdlets used (Get-* / Find-* only):
 `Get-VBRServer`, `Get-VBRViProxy`, `Get-VBRHvProxy`, `Get-VBRNASProxyServer`, `Get-VBRWANAccelerator`,
-`Get-VBRBackupRepository [-ScaleOut]`, `Get-VBRObjectStorageRepository`, `Get-VBRTapeServer`,
+`Get-VBRBackupRepository [-ScaleOut]`, `Get-VBRObjectStorageRepository`, `Get-VBRApplicationBackupRepository`,
+`Get-VBRTapeServer`,
 `Get-VBRProtectionGroup`, `Get-VBRDiscoveredComputer`, `Get-VBRJob`, `Get-VBRJobObject`,
 `Get-VBRComputerBackupJob`, `Get-VBRBackupCopyJob`, `Get-VBRUnstructuredBackupJob` (`Get-VBRNASBackupJob` on
 older versions), `Get-VBREntraIDTenantBackupJob`, `Get-VBRSureBackupJob`, `Get-VBRVirtualLab`, `Get-VBRTapeLibrary`,

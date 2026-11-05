@@ -10,7 +10,7 @@ foreach ($s in @(
     @("vbr","vbr01.corp.local","Local"), @("vc","vcsa01.corp.local","VC"), @("hv1","hv01.corp.local","HvServer"),
     @("hvc","hvclu01.corp.local","HvCluster"), @("px1","vbrpx01.corp.local","Windows"), @("px2","vbrpx02.corp.local","Linux"),
     @("repo1","repo01.corp.local","Windows"), @("lhr1","lhr01.corp.local","Linux"), @("lhr2","lhr02.corp.local","Linux"),
-    @("tape","tape01.corp.local","Windows"), @("old","oldsrv.corp.local","Windows"))) {
+    @("tape","tape01.corp.local","Windows"), @("old","oldsrv.corp.local","Windows"), @("abr1","abr01.corp.local","Linux"))) {
     $H[$s[0]] = New-Obj @{ Id = (gid $s[0]); Name = $s[1]; Type = $s[2]; Description = ""; IsUnavailable = $false }
 }
 # vSphere version strings, as Get-VBRServer returns them in Info.Info (two ESXi versions -> mixed-version warning)
@@ -121,7 +121,17 @@ function Get-VBRComputerBackupJob {
     New-Obj @{ Id = (gid "a1"); Name = "Agent-Windows"; OSPlatform = "Windows"; Mode = "ManagedByBackupServer"; JobEnabled = $true; BackupRepository = $global:R1; BackupObject = @($PG1) }
     New-Obj @{ Id = (gid "a2"); Name = "Agent-Linux"; OSPlatform = "Linux"; Mode = "ManagedByBackupServer"; JobEnabled = $true; BackupRepository = (New-Obj @{ Id = (gid "sobr") }); BackupObject = @($PG2) }
 }
-function Get-VBRBackupCopyJob { New-Obj @{ Id = (gid "c1"); Name = "Copy-to-Wasabi"; Mode = "Periodic"; JobEnabled = $true; BackupJob = @($J2); TargetRepository = $global:R4 } }
+function Get-VBRBackupCopyJob {
+    New-Obj @{ Id = (gid "c1"); Name = "Copy-to-Wasabi"; Mode = "Periodic"; JobEnabled = $true; BackupJob = @($J2); TargetRepository = $global:R4 }
+    # From an Application Backup Repository (the source is a repository, not a job)
+    New-Obj @{ Id = (gid "c2"); Name = "ABR-to-Repo01"; Mode = "Immediate"; JobEnabled = $true; BackupJob = @()
+        SourceRepository = (New-Obj @{ Id = (gid "abrvirtual"); Name = "Application Backup Repository"; Type = "AbrVirtual" })
+        TargetRepository = $global:R1 }
+}
+# Application Backup Repository (v13); Server prints as "name(id)" like the real object
+$global:ABR = New-Obj @{ Id = (gid "abr"); Name = "Application Backup Repository"; ZFSPool = "veeam-stg-abr01"
+    MountPath = "Application_Backup_Repository"; RetentionDays = 2; Description = ""; Server = $H["abr1"] }
+function Get-VBRApplicationBackupRepository { $global:ABR }
 function Get-VBREntraIDTenantBackupJob { New-Obj @{ Id = (gid "e1"); Name = "EntraID-Tenant"; JobEnabled = $true } }
 # A content scan (no virtual lab, linked jobs) and a SureBackup job with a virtual lab and an application group
 function Get-VBRSureBackupJob {

@@ -88,6 +88,20 @@
       "name": "ahv01.corp.local",
       "type": "NutanixCluster",
       "status": "Available"
+    },
+    {
+      "id": "ms-abr1",
+      "name": "abr01.corp.local",
+      "type": "LinuxHost",
+      "status": "Available",
+      "optionalComponents": {
+        "optionalComponents": [
+          {
+            "optionalComponent": "ApplicationBackupRepository",
+            "displayName": "Application Backup Repository"
+          }
+        ]
+      }
     }
   ],
   "proxies": [
@@ -520,6 +534,29 @@
       },
       "jobSettings": {
         "metadataRepositoryId": "r-1"
+      }
+    },
+    {
+      "id": "j15",
+      "name": "ABR-to-Repo01",
+      "type": "BackupCopy",
+      "isDisabled": false,
+      "mode": "Immediate",
+      "sourceObjects": {
+        "includes": {
+          "jobs": [],
+          "repositories": [
+            {
+              "type": "AbrVirtual",
+              "id": "abrv-1",
+              "name": "Application Backup Repository"
+            }
+          ],
+          "backups": []
+        }
+      },
+      "target": {
+        "backupRepositoryId": "r-1"
       }
     }
   ],

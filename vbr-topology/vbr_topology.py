@@ -974,6 +974,14 @@ def build_model(raw, csv_rows=()):
         if isinstance(cap, (int, float)) and cap:
             n["usage"] = round(1 - (free or 0) / cap, 3)
 
+    # Application Backup Repositories: REST has no endpoint for them, only the role on their managed server
+    for s in servers.values():
+        comps = find_all(s.get("optionalComponents") or {}, "optionalComponent")
+        if "ApplicationBackupRepository" in comps:
+            add_node(f"abr:{s['id']}", "repo", s.get("name"), "Application Backup Repository", badges=["M"],
+                     details={"Type": "ApplicationBackupRepository", "Host": s.get("name")})
+            used_hosts.add(s["id"])
+
     for sb in raw.get("scaleOutRepositories") or []:
         perf = sb.get("performanceTier") or {}
         ext = perf.get("performanceExtents") or perf.get("extents") or []
@@ -1064,10 +1072,13 @@ def build_model(raw, csv_rows=()):
                                     if isinstance(i, str) and nodes.get(i, {}).get("kind") == "agent")) if is_agent else []
         src_jobs = [_obj(x) for x in ((j.get("sourceObjects") or {}).get("includes") or {}).get("jobs") or []]
         src_jobs += [_obj(x) for x in (j.get("linkedJobs") or {}).get("includes") or []]
+        # Backup copy from a repository (for example an Application Backup Repository)
+        src_repo_objs = [_obj(x) for x in ((j.get("sourceObjects") or {}).get("includes") or {}).get("repositories") or []]
         if is_agent:
             sources = [nodes[p]["name"] for p in pg_ids]
-        elif src_jobs:
-            sources = [x.get("name") for x in src_jobs if x.get("name")]
+        elif src_jobs or src_repo_objs:
+            sources = [x.get("name") or (nodes.get(x.get("id")) or {}).get("name") for x in src_jobs + src_repo_objs]
+            sources = [x for x in sources if x]
         else:
             sources = sorted(hosts)
         if is_agent or is_copy or "entraid" in jtl or "surebackup" in jtl:
@@ -1139,7 +1150,17 @@ def build_model(raw, csv_rows=()):
             # repositories listed in the job, and the older sourceRepositoryId / source fields
             src = (j.get("sourceObjects") or {}).get("includes") or {}
             src_repos = [repo_of_job.get(x.get("id")) for x in src_jobs]
-            src_repos += [_obj(x).get("id") for x in src.get("repositories") or []]
+            # A copy from an Application Backup Repository names its virtual repository (type AbrVirtual,
+            # another id). With one ABR in the report, that is the one; it also gives its name
+            abr_nodes = [n for n in nodes.values() if n["details"].get("Type") == "ApplicationBackupRepository"]
+            for x in src.get("repositories") or []:
+                o = _obj(x)
+                rid = o.get("id")
+                if rid not in nodes and o.get("type") == "AbrVirtual" and len(abr_nodes) == 1:
+                    rid = abr_nodes[0]["id"]
+                    if o.get("name") and abr_nodes[0]["name"] == abr_nodes[0]["details"].get("Host"):
+                        abr_nodes[0]["name"] = o["name"]
+                src_repos.append(rid)
             src_repos.append(j.get("sourceRepositoryId") or next(iter(find_all(j.get("source") or {}, "backupRepositoryId")), None))
             for sr in src_repos:
                 if sr in nodes:

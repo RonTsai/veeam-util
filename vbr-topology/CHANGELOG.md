@@ -1,5 +1,16 @@
 # Changelog: vbr-topology
 
+## Unreleased
+
+### Added
+
+- Both: Application Backup Repositories (VBR v13) are drawn with the repositories, on their own card
+  even when the same server is also a hardened repository. PowerShell reads them with
+  `Get-VBRApplicationBackupRepository` (name, host, ZFS pool / mount path, retention); Python finds their
+  server through its `ApplicationBackupRepository` role in `managedServers`.
+- Both: the sources of a backup copy job also list its source repositories (for example a copy from an
+  Application Backup Repository).
+
 ## v1.8.0 (2026-11-04)
 
 ### Added
@@ -269,6 +280,10 @@ First release.
   API does not expose the EM registration.
 - Python shows no ESXi hosts of a vCenter whose login was rejected: REST `managedServers` lists only the
   vCenter, even with `includeNestedHosts`.
+- Python knows little about Application Backup Repositories: the REST API has no endpoint for them, only
+  their server's role. A backup copy from an ABR names its virtual repository (type `AbrVirtual`, another
+  id); with one ABR in the report, Python links the copy to it and takes its name from there. With several
+  ABRs, the copy has no source link, and each ABR shows by its server name, without path or retention.
 - Python does not show Azure Blob containers, which PowerShell lists as managed servers. It lists Veeam
   Data Cloud Vault archive repositories (`VeeamDataCloudVaultArchive`), which PowerShell does not.
 - The backup server is named after the host used to connect, or its DNS name when that is a short name
