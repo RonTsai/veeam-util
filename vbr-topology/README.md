@@ -188,7 +188,10 @@ Cmdlets used (Get-* / Find-* only):
 `Get-VBRProtectionGroup`, `Get-VBRDiscoveredComputer`, `Get-VBRJob`, `Get-VBRJobObject`,
 `Get-VBRComputerBackupJob`, `Get-VBRBackupCopyJob`, `Get-VBRUnstructuredBackupJob` (`Get-VBRNASBackupJob` on
 older versions), `Get-VBREntraIDTenantBackupJob`, `Get-VBRSureBackupJob`, `Get-VBRVirtualLab`, `Get-VBRTapeLibrary`,
-`Get-VBRTapeJob`, `Get-VBRCloudProvider`, `Find-VBRViEntity`, `Find-VBRHvEntity`.
+`Get-VBRTapeJob`, `Get-VBRCloudProvider`, `Get-VBRCDPProxy`, `Get-VBRCDPPolicy`, `Get-VBRvCDReplicaJob`,
+`Get-VBREntraIDLogsBackupJob`, `Get-VBRNASBackupCopyJob`, `Get-VBRConfigurationBackupJob`, `Get-VBRBackup`,
+`Get-VBRRestorePoint`, `Get-VBRComputerBackupJobSession`, `Get-VBRNASBackupJobSession`, `Get-VBRSureBackupSession`,
+`Find-VBRViEntity`, `Find-VBRHvEntity`.
 
 A cmdlet that is missing in your version, or whose feature is not licensed, is skipped and listed as a
 warning at the top of the report.
@@ -261,7 +264,8 @@ REST endpoints used:
 | Proxies, WAN accelerators | `GET /api/v1/backupInfrastructure/proxies`, `/wanAccelerators` |
 | Repositories, capacity, SOBR | `GET /api/v1/backupInfrastructure/repositories`, `/repositories/states`, `/scaleOutRepositories` |
 | Agent protection groups | `GET /api/v1/agents/protectionGroups` |
-| Jobs and backups | `GET /api/v1/jobs`, `/api/v1/jobs/{id}`, `/api/v1/backups` |
+| Jobs and backups | `GET /api/v1/jobs`, `/api/v1/jobs/{id}`, `/api/v1/jobs/states`, `/api/v1/sessions`, `/api/v1/backups`, `/api/v1/backups/{id}/backupFiles`, `/api/v1/backupObjects`, `/api/v1/restorePoints` |
+| Configuration backup | `GET /api/v1/configBackup` |
 | vSphere inventory (placement) | `GET /api/v1/inventory/vmware/hosts/{vCenter}` (legacy), falling back to `POST /api/v1/inventory/{vCenter}` |
 
 vCenter REST API, with `--vcenter-user` (vCenter 7.0 U2+ via `/api`; older vCenters via `/rest`):
@@ -341,7 +345,11 @@ Without PowerCLI, the script falls back to the Veeam inventory automatically.
   since the plug-in proxies cannot be read. When the job's source is not a registered host (for example a
   Proxmox cluster name), every host of that platform gets an inferred (dashed) link.
 - **Agent job**: protection group → repository
-- **File share job**: general-purpose proxies → repository
+- **File share job**: general-purpose proxies → repository. A file backup copy: source job's repository →
+  target repository (blue dashed line)
+- **CDP policy** (PowerShell only): source host → CDP proxies → target host
+- **Configuration backup**: listed in the Jobs table; its target repository and encryption show on the
+  backup server card
 - **Backup copy, replica, SOBR offload**: blue dashed line
 - **SOBR extents**: merged into their SOBR. Click a SOBR card to show its tiers under it: performance
   extents (with their hosts), capacity tier and archive tier. Object storage cards show their connection
@@ -354,6 +362,14 @@ Without PowerCLI, the script falls back to the Veeam inventory automatically.
 ## Jobs and protected objects
 
 ![Jobs table with one job expanded](docs/images/report-jobs-en.png)
+
+Each job also shows its last run and last result (Success / Warning / Failed), as the VBR console's Jobs
+view.
+
+The **Backups** table lists the backups as the VBR console's Backups view does: one row per backup (storage
+snapshots and backups whose job no longer exists included) with its job, repository, platform, creation
+time, restore points, last backup and size on disk. Click a backup to see the same per object (a VM
+backed up as two objects, for example after it was registered again, has two rows, as in the console).
 
 Click a job in the **Jobs** table to expand its protected objects: type, name, location, size, and
 whether the object is included or excluded (excluded rows are struck through). The job's links stay

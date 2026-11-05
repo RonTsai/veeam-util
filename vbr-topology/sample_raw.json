@@ -558,6 +558,26 @@
       "target": {
         "backupRepositoryId": "r-1"
       }
+    },
+    {
+      "id": "j16",
+      "name": "EntraID-AuditLogs",
+      "type": "EntraIDAuditLogBackup",
+      "isDisabled": false,
+      "tenant": {
+        "tenantId": "t-1"
+      },
+      "storage": {
+        "backupRepositoryId": "r-1"
+      }
+    },
+    {
+      "id": "j17",
+      "name": "NAS-Shares-Copy",
+      "type": "FileBackupCopy",
+      "isDisabled": false,
+      "primaryJobId": "j7",
+      "backupRepositoryId": "r-4"
     }
   ],
   "backups": [
@@ -566,7 +586,9 @@
       "name": "Agent Backup Job 99",
       "platformName": "WindowsPhysical",
       "repositoryId": "r-1",
-      "jobId": null
+      "jobId": null,
+      "creationTime": "2026-03-01T08:00:00",
+      "repositoryName": "Repo01-ReFS"
     },
     {
       "id": "b-pve",
@@ -574,7 +596,10 @@
       "platformName": "Proxmox",
       "repositoryId": "r-1",
       "jobId": "j13",
-      "jobType": "ProxmoxBackupJob"
+      "jobType": "ProxmoxBackupJob",
+      "creationTime": "2026-08-01T21:00:00",
+      "platformId": "01208ee8-47fe-4ea8-8727-5115874da1ad",
+      "repositoryName": "Repo01-ReFS"
     },
     {
       "id": "b-ahv",
@@ -582,7 +607,41 @@
       "platformName": "Nutanix",
       "repositoryId": "r-1",
       "jobId": "j14",
-      "jobType": "NutanixAHVBackupJob"
+      "jobType": "NutanixAHVBackupJob",
+      "creationTime": "2026-10-25T01:00:00",
+      "platformId": "799a5a3e-ae1e-4eaf-86eb-8a9acc2670e2",
+      "repositoryName": "Repo01-ReFS"
+    },
+    {
+      "id": "b-j1",
+      "name": "VMware-Prod-Daily",
+      "platformName": "VMware",
+      "repositoryId": "sobr-1",
+      "jobId": "j1",
+      "jobType": "VSphereBackup",
+      "creationTime": "2026-10-20T22:00:00",
+      "repositoryName": "SOBR-Immutable"
+    },
+    {
+      "id": "b-j2",
+      "name": "VMware-Dev",
+      "platformName": "VMware",
+      "repositoryId": "r-1",
+      "jobId": "j2",
+      "jobType": "VSphereBackup",
+      "creationTime": "2026-10-26T23:00:00",
+      "repositoryName": "Repo01-ReFS"
+    },
+    {
+      "id": "b-ahv-snap",
+      "name": "AHV-Daily",
+      "platformName": "Nutanix",
+      "repositoryId": "00000000-0000-0000-0000-000000000000",
+      "repositoryName": "Snapshot",
+      "jobId": "j14",
+      "jobType": "NutanixAHVBackupJob",
+      "creationTime": "2026-10-28T01:00:00",
+      "platformId": "799a5a3e-ae1e-4eaf-86eb-8a9acc2670e2"
     }
   ],
   "inventory": {
@@ -645,5 +704,314 @@
       "azureTenantId": "00000000-0000-0000-0000-000000000001",
       "region": "Global"
     }
-  ]
+  ],
+  "configBackup": {
+    "isEnabled": true,
+    "backupRepositoryId": "r-1",
+    "restorePointsToKeep": 10,
+    "encryption": {
+      "isEnabled": true,
+      "passwordId": "pw-1"
+    }
+  },
+  "backupFiles": {
+    "b-j1": [
+      {
+        "objectIds": [
+          "b-j1-o2"
+        ],
+        "restorePointIds": [
+          "b-j1-o2-p0"
+        ],
+        "backupSize": 5368709120,
+        "creationTime": "2026-10-20T22:00:00-07:00"
+      },
+      {
+        "objectIds": [
+          "b-j1-o0"
+        ],
+        "restorePointIds": [
+          "b-j1-o0-p0"
+        ],
+        "backupSize": 128849018880,
+        "creationTime": "2026-10-25T22:00:00-07:00"
+      },
+      {
+        "objectIds": [
+          "b-j1-o0"
+        ],
+        "restorePointIds": [
+          "b-j1-o0-p1"
+        ],
+        "backupSize": 8589934592,
+        "creationTime": "2026-10-26T22:00:00-07:00"
+      },
+      {
+        "objectIds": [
+          "b-j1-o0"
+        ],
+        "restorePointIds": [
+          "b-j1-o0-p2"
+        ],
+        "backupSize": 8589934592,
+        "creationTime": "2026-10-27T22:00:00-07:00"
+      },
+      {
+        "objectIds": [
+          "b-j1-o1"
+        ],
+        "restorePointIds": [
+          "b-j1-o1-p0"
+        ],
+        "backupSize": 42949672960,
+        "creationTime": "2026-10-25T22:00:00-07:00"
+      },
+      {
+        "objectIds": [
+          "b-j1-o1"
+        ],
+        "restorePointIds": [
+          "b-j1-o1-p1"
+        ],
+        "backupSize": 3221225472,
+        "creationTime": "2026-10-26T22:00:00-07:00"
+      },
+      {
+        "objectIds": [
+          "b-j1-o1"
+        ],
+        "restorePointIds": [
+          "b-j1-o1-p2"
+        ],
+        "backupSize": 3221225472,
+        "creationTime": "2026-10-27T22:00:00-07:00"
+      }
+    ],
+    "b-j2": [
+      {
+        "objectIds": [
+          "b-j2-o0"
+        ],
+        "restorePointIds": [
+          "b-j2-o0-p0"
+        ],
+        "backupSize": 32212254720,
+        "creationTime": "2026-10-26T23:00:00-07:00"
+      },
+      {
+        "objectIds": [
+          "b-j2-o0"
+        ],
+        "restorePointIds": [
+          "b-j2-o0-p1"
+        ],
+        "backupSize": 2147483648,
+        "creationTime": "2026-10-27T23:00:00-07:00"
+      }
+    ],
+    "b-ahv": [
+      {
+        "objectIds": [
+          "b-ahv-o0"
+        ],
+        "restorePointIds": [
+          "b-ahv-o0-p0"
+        ],
+        "backupSize": 21474836480,
+        "creationTime": "2026-10-25T01:00:00-07:00"
+      },
+      {
+        "objectIds": [
+          "b-ahv-o0"
+        ],
+        "restorePointIds": [
+          "b-ahv-o0-p1"
+        ],
+        "backupSize": 1073741824,
+        "creationTime": "2026-10-26T01:00:00-07:00"
+      },
+      {
+        "objectIds": [
+          "b-ahv-o0"
+        ],
+        "restorePointIds": [
+          "b-ahv-o0-p2"
+        ],
+        "backupSize": 1073741824,
+        "creationTime": "2026-10-27T01:00:00-07:00"
+      }
+    ],
+    "b-ahv-snap": [
+      {
+        "objectIds": [
+          "b-ahv-o0"
+        ],
+        "restorePointIds": [
+          "b-ahv-snap-p0"
+        ],
+        "backupSize": 0,
+        "creationTime": "2026-10-28T01:00:00-07:00"
+      }
+    ]
+  },
+  "backupObjects": [
+    {
+      "id": "b-ahv-o0",
+      "name": "web01",
+      "type": "VM",
+      "platformName": "Nutanix",
+      "backupId": "b-ahv-c0",
+      "restorePointsCount": 3,
+      "size": 21474836480
+    },
+    {
+      "id": "b-j1-o0",
+      "name": "app-sql01",
+      "type": "VM",
+      "platformName": "VMware",
+      "backupId": "b-j1",
+      "restorePointsCount": 3
+    },
+    {
+      "id": "b-j1-o1",
+      "name": "app-web01",
+      "type": "VM",
+      "platformName": "VMware",
+      "backupId": "b-j1",
+      "restorePointsCount": 3
+    },
+    {
+      "id": "b-j2-o0",
+      "name": "dev01",
+      "type": "VM",
+      "platformName": "VMware",
+      "backupId": "b-j2",
+      "restorePointsCount": 2
+    },
+    {
+      "id": "b-j1-o2",
+      "name": "app-sql01",
+      "type": "VM",
+      "platformName": "VMware",
+      "backupId": "b-j1-old",
+      "restorePointsCount": 1
+    }
+  ],
+  "restorePoints": [
+    {
+      "id": "b-j1-o2-p0",
+      "creationTime": "2026-10-20T22:02:00-07:00"
+    },
+    {
+      "id": "b-j1-o0-p0",
+      "creationTime": "2026-10-25T22:02:00-07:00"
+    },
+    {
+      "id": "b-j1-o0-p1",
+      "creationTime": "2026-10-26T22:02:00-07:00"
+    },
+    {
+      "id": "b-j1-o0-p2",
+      "creationTime": "2026-10-27T22:02:00-07:00"
+    },
+    {
+      "id": "b-j1-o1-p0",
+      "creationTime": "2026-10-25T22:02:00-07:00"
+    },
+    {
+      "id": "b-j1-o1-p1",
+      "creationTime": "2026-10-26T22:02:00-07:00"
+    },
+    {
+      "id": "b-j1-o1-p2",
+      "creationTime": "2026-10-27T22:02:00-07:00"
+    },
+    {
+      "id": "b-j2-o0-p0",
+      "creationTime": "2026-10-26T23:02:00-07:00"
+    },
+    {
+      "id": "b-j2-o0-p1",
+      "creationTime": "2026-10-27T23:02:00-07:00"
+    }
+  ],
+  "restorePointTimes": {
+    "b-j1-o2-p0": "2026-10-20T22:02:00-07:00",
+    "b-j1-o0-p0": "2026-10-25T22:02:00-07:00",
+    "b-j1-o0-p1": "2026-10-26T22:02:00-07:00",
+    "b-j1-o0-p2": "2026-10-27T22:02:00-07:00",
+    "b-j1-o1-p0": "2026-10-25T22:02:00-07:00",
+    "b-j1-o1-p1": "2026-10-26T22:02:00-07:00",
+    "b-j1-o1-p2": "2026-10-27T22:02:00-07:00",
+    "b-j2-o0-p0": "2026-10-26T23:02:00-07:00",
+    "b-j2-o0-p1": "2026-10-27T23:02:00-07:00"
+  },
+  "jobStates": [
+    {
+      "id": "j1",
+      "name": "VMware-Prod-Daily",
+      "lastRun": "2026-10-27T22:00:00-07:00",
+      "lastResult": "Success"
+    },
+    {
+      "id": "j2",
+      "name": "VMware-Dev",
+      "lastRun": "2026-10-27T23:00:00-07:00",
+      "lastResult": "Warning"
+    },
+    {
+      "id": "j3",
+      "name": "HyperV-Daily",
+      "lastRun": "2026-10-27T21:00:00-07:00",
+      "lastResult": "Failed"
+    },
+    {
+      "id": "j4",
+      "name": "Agent-Windows",
+      "lastRun": "2026-10-27T20:00:00-07:00",
+      "lastResult": "Success"
+    },
+    {
+      "id": "j7",
+      "name": "NAS-Shares",
+      "lastRun": "2026-10-27T19:00:00-07:00",
+      "lastResult": "Success"
+    },
+    {
+      "id": "j10",
+      "name": "SureBackup-Prod",
+      "lastRun": "2026-10-26T08:00:00-07:00",
+      "lastResult": "Success"
+    }
+  ],
+  "sessions": [
+    {
+      "id": "s-ahv",
+      "jobId": "j14",
+      "sessionType": "BackupJob",
+      "creationTime": "2026-10-27T01:00:00-07:00",
+      "result": {
+        "result": "Success"
+      }
+    },
+    {
+      "id": "s-cfg",
+      "jobId": null,
+      "sessionType": "ConfigurationBackup",
+      "creationTime": "2026-10-27T10:00:00-07:00",
+      "result": {
+        "result": "Success"
+      }
+    }
+  ],
+  "lastSessions": {
+    "j14": {
+      "lastRun": "2026-10-27 01:00",
+      "lastResult": "Success"
+    },
+    "configBackup": {
+      "lastRun": "2026-10-27 10:00",
+      "lastResult": "Success"
+    }
+  }
 }

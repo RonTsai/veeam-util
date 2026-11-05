@@ -1,5 +1,40 @@
 # Changelog: vbr-topology
 
+## Unreleased
+
+### Added
+- PowerShell: CDP proxies (`Get-VBRCDPProxy`), drawn with the backup proxies, with their cache path and size.
+- PowerShell: CDP policies (`Get-VBRCDPPolicy`), drawn as source host → CDP proxies → target host, and Cloud
+  Director replication jobs that `Get-VBRJob` does not return (`Get-VBRvCDReplicaJob`, listed only).
+- Both: the configuration backup (`Get-VBRConfigurationBackupJob`, REST `/api/v1/configBackup`) is listed in
+  the Jobs table; its target repository and encryption show on the backup server card.
+- Both: file backup copy jobs are linked from their source job's repository to their target.
+- Both: the Jobs table shows each job's last run and last result (Success / Warning / Failed), as the VBR
+  console's Jobs view. PowerShell reads them with `FindLastSession()` on `Get-VBRJob` jobs and the session
+  cmdlets of agent, file share, SureBackup and Entra ID jobs (tape jobs and the configuration backup: their
+  `LastResult`); Python from `/api/v1/jobs/states`, and `/api/v1/sessions` for plug-in platform jobs and the
+  configuration backup.
+- Both: a Backups table, as the VBR console's Backups view: one row per backup (storage snapshots and
+  backups whose job no longer exists included; backups without restore points left out by PowerShell) with
+  its job, repository, platform, creation time, restore points, last backup (the newest restore point; Python
+  reads `/api/v1/restorePoints` for it) and size on disk, and the same per object when expanded (a VM backed
+  up as two objects, for example after it was registered again, has two rows). PowerShell reads them with
+  `Get-VBRBackup` and `Get-VBRRestorePoint` (plug-in platform backups, which `Get-VBRRestorePoint` refuses,
+  with `FindChildBackups()` and `GetAllChildrenStorages()`), Python from `/api/v1/backups/{id}/backupFiles`
+  (one request per backup) and `/api/v1/backupObjects`. Checked against the console on VBR v13.1.
+- Python: the jobs of plug-in platforms (Nutanix AHV, Proxmox VE, HPE Morpheus VME), which `/jobs` does not
+  return, are found by job type or platform ID in `/backups` and list the VMs in their backups (from
+  `/api/v1/backupObjects`).
+
+### Changed
+- PowerShell: Entra ID audit log backups and file backup copies, which `Get-VBRUnstructuredBackupJob` also
+  returns, are no longer labeled `File backup`. They are told apart with `Get-VBREntraIDLogsBackupJob` and
+  `Get-VBRNASBackupCopyJob`, and labeled `Entra ID audit log backup` and `File backup copy`, as in Python.
+- Python: the `EntraIDAuditLogBackup` and `FileBackupCopy` job types get the same labels.
+- PowerShell: a job object size of `0 B` (no estimate, as for plug-in platform VMs) is left empty.
+- Python: proxies of type `NutanixAHV` and `PVE` are shown as "Nutanix AHV worker" and "Proxmox VE worker".
+  REST 1.3-rev2 lists these types, but VBR v13.1 does not return the workers yet.
+
 ## v1.9.0 (2026-11-05)
 
 ### Added
@@ -269,7 +304,9 @@ First release.
   the [PowerShell FAQ](https://forums.veeam.com/viewtopic.php?f=26&t=89480) on the R&D Forums):
   `GetHost()` (proxy and repository hosts), `GetContainer()` (repository capacity and free space),
   `GetActualGateways()` (gateways), `GetTargetRepository()` and `GetProxy()` (job targets and proxies),
-  `GetPhysicalHost()` (plug-in platform type) and `Info.Info` (vCenter / ESXi versions). Each call is
+  `GetPhysicalHost()` (plug-in platform type), `Info.Info` (vCenter / ESXi versions), `GetStorage()`
+  (size of a restore point's backup file), `FindChildBackups()` / `GetAllChildrenStorages()` (restore
+  points of plug-in platform backups) and `FindLastSession()` (a job's last run and result). Each call is
   wrapped, so a change in a VBR update leaves that detail empty instead of stopping the scan.
 - Hyper-V placement (`Find-VBRHvEntity`) has not been tested on a real Hyper-V environment.
 - The proxies (workers) of plug-in platforms (Proxmox VE, Nutanix AHV, HPE Morpheus VME) are not
@@ -283,8 +320,11 @@ First release.
   state, sources, objects or links); HPE Morpheus VME jobs are not shown.
 - Job object locations differ by collector: PowerShell shows the full inventory path, Python only
   the host name (vCenter / Hyper-V host).
-- The VBR REST API (v13.1) does not list Hyper-V replication jobs, Unix (Solaris, AIX) agent jobs or
-  SureBackup jobs with a virtual lab (only content scans), so the Python report does not show them.
+- The VBR REST API (v13.1) does not list Hyper-V replication jobs, Unix (Solaris, AIX) agent jobs,
+  SureBackup jobs with a virtual lab (only content scans), CDP proxies, CDP policies or Cloud Director
+  replication jobs, so the Python report does not show them.
+- The CDP policy and Cloud Director replication properties PowerShell reads have only been tested against
+  the mocks: the lab has no CDP policy or Cloud Director replication job.
 - Python only shows an Enterprise Manager given with `--em` (or installed on the VBR host): the REST
   API does not expose the EM registration.
 - Python shows no ESXi hosts of a vCenter whose login was rejected: REST `managedServers` lists only the
@@ -305,5 +345,18 @@ First release.
   does not tell them apart.
 - Object type names differ slightly by collector (`Vapp` / `vApp`, `Virtual machine` / `Virtual
   Machine` for Hyper-V), and PowerShell lists the computers of an agent job as `Protection group`.
+- Restore points of plug-in platform backups come from unsupported .NET methods in PowerShell (see above).
+- The Backups table can differ by collector: REST lists storage-snapshot backups and file share / object
+  storage / Entra ID backups (without restore points), which `Get-VBRBackup` may not return; neither collector
+  lists the backups inside an Application Backup Repository.
+- PowerShell takes a backup's creation time from its oldest backup file, as `CreationTime` can be the date
+  of a VBR upgrade; for a copied or imported backup the console shows a later date.
+- Cloud Director backups in PowerShell show VM names with a suffix (`DC-01-ZDsW`) and count each VM's
+  restore points from the vApp's, so they can differ from the console; Python matches it.
+- Entra ID tenant backups show no restore point count in either collector (REST returns none).
+- As in the console, a job shows no last result without a last run time, and none (N/A) for agent policies the
+  agent manages itself. PowerShell finds no last run time for tape jobs, the configuration backup or, on VBR
+  v13.1, Entra ID tenant backups (no session cmdlet), so these show neither; Python does not list tape jobs.
+- Backup copies from an Application Backup Repository report a size on disk of 0 in both collectors.
 - Entra ID tenant backup jobs have no enabled / disabled state in PowerShell (only `EnableSchedule`),
   so they always show as enabled.

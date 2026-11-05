@@ -11,6 +11,7 @@ Serves the objects from sample_raw.json plus a legacy vSphere inventory.
 import base64
 import json
 import os
+import re
 import ssl
 import sys
 import threading
@@ -34,6 +35,10 @@ PATHS = {
     "/api/v1/backups": "backups",
     "/api/v1/inventory/unstructuredDataServers": "unstructuredDataServers",
     "/api/v1/inventory/entraId/tenants": "entraIdTenants",
+    "/api/v1/configBackup": "configBackup",
+    "/api/v1/backupObjects": "backupObjects",
+    "/api/v1/restorePoints": "restorePoints",
+    "/api/v1/jobs/states": "jobStates",
 }
 # vCenter inventory: host -> VMs
 # "VBR01.WIN.Demo" comes first and its first label is "vbr01": the backup server must still match
@@ -91,6 +96,14 @@ class VbrHandler(BaseHTTPRequestHandler):
         if u.path in PATHS:
             v = RAW[PATHS[u.path]]
             return self.page(v, q) if isinstance(v, list) else self.send_json(v)
+        if u.path == "/api/v1/sessions":
+            items = [x for x in RAW.get("sessions", [])
+                     if ("jobIdFilter" not in q or x.get("jobId") == q["jobIdFilter"][0])
+                     and ("typeFilter" not in q or x.get("sessionType") in q["typeFilter"])]
+            return self.page(sorted(items, key=lambda x: x["creationTime"], reverse=True), q)
+        m = re.match(r"^/api/v1/backups/([^/]+)/backupFiles$", u.path)
+        if m:
+            return self.page(RAW.get("backupFiles", {}).get(m.group(1), []), q)
         if u.path == "/api/v1/inventory/vmware/hosts/vcsa01.corp.local" and not os.environ.get("MOCK_NO_LEGACY"):
             t = q.get("typeFilter", [""])[0]
             if t == "Cluster":

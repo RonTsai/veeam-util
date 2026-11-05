@@ -36,14 +36,17 @@
   table { border-collapse:collapse; width:100%; background:#fff; font-size:13px; border:1px solid var(--line); }
   th, td { text-align:left; padding:6px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
   th { background:#eef2f3; font-weight:600; }
-  #jobTable tr.job.has { cursor:pointer; }
-  #jobTable tr.job.has:hover td { background:#f3faf5; }
-  #jobTable tr.job.open td { background:#e7f7ec; }
+  table.jtab tr.job.has { cursor:pointer; }
+  table.jtab td.num { text-align:right; white-space:nowrap; }
+  table.jtab td.nowrap { white-space:nowrap; }
+  td.result.success { color:#0a7f2e; } td.result.warning { color:#b26b00; } td.result.failed { color:#c62828; }
+  table.jtab tr.job.has:hover td { background:#f3faf5; }
+  table.jtab tr.job.open td { background:#e7f7ec; }
   .caret { display:inline-block; width:16px; color:var(--mute); }
   .count { color:var(--mute); font-size:12px; margin-left:6px; }
   .hint { color:var(--mute); font-size:13px; margin:-4px 0 8px; }
-  #jobTable tr.objs > td { background:#fafbfb; padding:6px 10px 12px 36px; }
-  #jobTable tr.objs table { width:auto; min-width:60%; }
+  table.jtab tr.objs > td { background:#fafbfb; padding:6px 10px 12px 36px; }
+  table.jtab tr.objs table { width:auto; min-width:60%; }
   #jobTable tr.objs tr.ex td { color:#a3acb3; text-decoration:line-through; }
   #tip { position:fixed; pointer-events:none; background:#263038; color:#fff; font-size:12px; padding:8px 10px;
          border-radius:6px; max-width:360px; display:none; z-index:10; line-height:1.5; }
@@ -74,7 +77,12 @@
   </div>
   <h2 data-i18n="jobsTitle"></h2>
   <p class="hint" data-i18n="objHint"></p>
-  <table id="jobTable"></table>
+  <table id="jobTable" class="jtab"></table>
+  <div id="backupSection" style="display:none">
+    <h2 data-i18n="backupsTitle"></h2>
+    <p class="hint" data-i18n="backupsHint"></p>
+    <table id="backupTable" class="jtab"></table>
+  </div>
   <h2 data-i18n="invTitle"></h2>
   <table id="invTable"></table>
 </section>
@@ -105,6 +113,10 @@ const I18N = {
     thKind: "Kind", thName: "Name", thRole: "Role / type", thDetails: "Details",
     thHost: "ESXi / Hyper-V host", thComponent: "Component", thRoleShort: "Role", thVm: "VM name", thMatched: "Matched by",
     thJob: "Job", thType: "Type", thSource: "Sources", thProxy: "Proxy", thRepo: "Repository", thState: "State",
+    thPoints: "Restore points", thLast: "Last backup", thDisk: "On disk",
+    thLastRun: "Last run", thLastResult: "Last result",
+    backupsTitle: "Backups", backupsHint: "As the VBR console's Backups view lists them, including storage snapshots and backups whose job no longer exists. Click a backup to see its VMs.",
+    thBackup: "Backup", thPlatform: "Platform", thCreated: "Created",
     enabled: "Enabled", disabled: "Disabled",
     kind_backup: "Backup server", kind_em: "Enterprise Manager", kind_vone: "Veeam ONE", kind_agent: "Veeam Agent",
     kind_hv_host: "Hyper-V", kind_vi_host: "VMware vSphere", kind_ext_host: "Plug-in platform", kind_proxy: "Proxy / WAN", kind_repo: "Repository",
@@ -128,6 +140,10 @@ const I18N = {
     thKind: "類別", thName: "名稱", thRole: "角色 / 類型", thDetails: "詳細",
     thHost: "ESXi / Hyper-V 主機", thComponent: "元件", thRoleShort: "角色", thVm: "VM 名稱", thMatched: "比對來源",
     thJob: "Job", thType: "類型", thSource: "來源", thProxy: "Proxy", thRepo: "Repository", thState: "狀態",
+    thPoints: "還原點", thLast: "最新備份", thDisk: "佔用空間",
+    thLastRun: "上次執行", thLastResult: "上次結果",
+    backupsTitle: "Backups", backupsHint: "與 VBR 主控台的 Backups 畫面相同，包含儲存快照，以及 job 已不存在的備份。點一下備份可看各台 VM。",
+    thBackup: "備份", thPlatform: "平台", thCreated: "建立時間",
     enabled: "Enabled", disabled: "Disabled",
     kind_server: "其他受管伺服器", kind_ext_host: "Plug-in 平台",
     nHosts: "{n} 台主機", nHost: "1 台主機", directMode: "直接連線 (Direct)", clusterExpand: "▸ 點一下展開", showTiers: "▸ 展開各層", hideTiers: "▾ 收合",
@@ -156,6 +172,8 @@ const DATA_ZH = {
   "Hosts": "主機",
   "Connection mode": "連線模式",
   "Retention (days)": "保留天數",
+  "Config backup target": "組態備份目標", "Config backup encrypted": "組態備份加密",
+  "Cache path": "快取路徑", "Cache size": "快取大小",
   "Proxies of plug-in platforms (Proxmox VE, Nutanix AHV, HPE Morpheus VME) cannot be read through PowerShell or the REST API and are not shown.":
     "Plug-in 平台 (Proxmox VE、Nutanix AHV、HPE Morpheus VME) 的 proxy 無法透過 PowerShell 或 REST API 讀取，因此不會顯示。",
   "The vSphere inventory was read, but it has no VM-to-host relation; component hosts not matched (use the PowerShell version or --placement-csv)":
@@ -174,6 +192,7 @@ const DATA_ZH_RULES = [
     "VBR 無法連到 Hyper-V cluster $1。請確認叢集服務正在執行，或從 VBR 移除已不存在的 cluster。詳細: $2"],
   [/^vCenter REST \((.+)\)$/, "vCenter REST ($1)"],
   [/^ESXi hosts run different versions: (.*)$/, "ESXi 主機版本不一致: $1"],
+  [/^Restore points of (\d+) backups could not be read: (.*)\. Error: (.*)$/s, "無法讀取 $1 個備份的還原點: $2。錯誤: $3"],
   [/^(\d+) hosts?$/, "$1 台主機"],
   // Where an IP address came from (hover details)
   [/^(.+) \(VM guest\)$/, "$1 (取自 VM)"],
@@ -591,15 +610,18 @@ function tables() {
         <td>${esc(td(n.placement.source || n.placement.note || ""))}</td></tr>`).join("")).join("");
   }
   // Jobs with protected objects expand on click (see toggleJob)
-  document.getElementById("jobTable").innerHTML = th(["thJob", "thType", "thSource", "thProxy", "thRepo", "thState"]) +
+  // Size on disk in bytes -> GB / TB
+  const fmtBytes = v => v == null ? "—" : v >= 1024 ** 4 ? (v / 1024 ** 4).toFixed(1) + " TB" : (v / 1024 ** 3).toFixed(1) + " GB";
+  document.getElementById("jobTable").innerHTML = th(["thJob", "thType", "thSource", "thProxy", "thRepo", "thLastRun", "thLastResult", "thState"]) +
     (MODEL.jobs || []).map((j, i) => {
       const objs = j.objects || [], has = objs.length > 0;
       const row = `<tr class="job${has ? " has" : ""}" data-i="${i}"><td><span class="caret">${has ? "▸" : ""}</span>${esc(j.name)}${
         // count included objects only; File / Tag masks are filters, not objects
         has ? `<span class="count">(${objs.filter(o => !o.excluded && !/ mask$/.test(o.type)).length})</span>` : ""}</td><td>${esc(j.type)}</td>
         <td>${esc((j.sources || []).join(", "))}</td><td>${esc(j.proxies)}</td><td>${esc(j.repository)}</td>
+        <td class="nowrap">${esc(j.lastRun ?? "—")}</td><td class="result ${esc((j.lastResult || "").toLowerCase())}">${esc(j.lastResult ?? "—")}</td>
         <td>${esc((j.disabled == null ? "—" : t(j.disabled ? "disabled" : "enabled")))}</td></tr>`;
-      const sub = has ? `<tr class="objs" data-for="${i}" hidden><td colspan="6"><table>${
+      const sub = has ? `<tr class="objs" data-for="${i}" hidden><td colspan="8"><table>${
         th(["objType", "objName", "objLocation", "objSize", "objMode"])}${objs.map(o => `<tr class="${o.excluded ? "ex" : ""}">
         <td>${esc(td(o.type))}</td><td>${esc(o.name)}</td><td>${esc(o.location)}</td><td>${esc(o.size)}</td>
         <td>${esc(t(o.excluded ? "objExclude" : "objInclude"))}</td></tr>`).join("")}</table></td></tr>` : "";
@@ -607,7 +629,28 @@ function tables() {
     }).join("");
   document.querySelectorAll("#jobTable tr.job.has").forEach(tr => tr.onclick = () => toggleJob(tr));
   showSelJob();
+  // Backups, as the VBR console's Backups view lists them; each expands to its VMs
+  const bks = MODEL.backups || [];
+  document.getElementById("backupSection").style.display = bks.length ? "" : "none";
+  document.getElementById("backupTable").innerHTML = th(["thBackup", "thJob", "thRepo", "thPlatform", "thCreated", "thPoints", "thLast", "thDisk"]) +
+    bks.map((b, i) => {
+      const objs = b.objects || [], has = objs.length > 0, open = openBackups.has(i);
+      return `<tr class="job${has ? " has" : ""}${open ? " open" : ""}" data-i="${i}"><td><span class="caret">${has ? (open ? "▾" : "▸") : ""}</span>${esc(b.name)}${
+        has ? `<span class="count">(${objs.length})</span>` : ""}</td><td>${esc(b.job ?? "—")}</td><td>${esc(b.repository ?? "—")}</td><td>${esc(b.platform ?? "—")}</td>
+        <td class="nowrap">${esc(b.created ?? "—")}</td><td class="num">${esc(b.restorePoints ?? "—")}</td><td class="nowrap">${esc(b.lastBackup ?? "—")}</td>
+        <td class="num">${esc(fmtBytes(b.onDisk))}</td></tr>` + (has ? `<tr class="objs" data-for="${i}"${open ? "" : " hidden"}><td colspan="8"><table>${
+        th(["thVm", "thPoints", "thLast", "thDisk"])}${objs.map(o => `<tr><td>${esc(o.name)}</td><td class="num">${esc(o.restorePoints ?? "—")}</td>
+        <td class="nowrap">${esc(o.lastBackup ?? "—")}</td><td class="num">${esc(fmtBytes(o.onDisk))}</td></tr>`).join("")}</table></td></tr>` : "");
+    }).join("");
+  document.querySelectorAll("#backupTable tr.job.has").forEach(tr => tr.onclick = () => {
+    const i = +tr.dataset.i, on = !openBackups.has(i);
+    on ? openBackups.add(i) : openBackups.delete(i);
+    tr.classList.toggle("open", on); tr.querySelector(".caret").textContent = on ? "▾" : "▸";
+    document.querySelector(`#backupTable tr.objs[data-for="${i}"]`).hidden = !on;
+  });
 }
+// Expanded rows of the Backups table (several at a time; kept across re-renders)
+const openBackups = new Set();
 
 // The expanded job (index into MODEL.jobs), or null. One job at a time; it survives re-renders,
 // and node hovers fall back to its highlight when the mouse leaves.

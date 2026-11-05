@@ -184,6 +184,24 @@ $tapeJobs    = Invoke-Safe "Get-VBRTapeJob"                { Get-VBRTapeJob }
 $cloudProvs  = Invoke-Safe "Get-VBRCloudProvider"          {
     if (Get-Command Get-VBRCloudProvider -ErrorAction SilentlyContinue) { Get-VBRCloudProvider }
 }
+$cdpProxies  = Invoke-Safe "Get-VBRCDPProxy"               {
+    if (Get-Command Get-VBRCDPProxy -ErrorAction SilentlyContinue) { Get-VBRCDPProxy }
+}
+$cdpPolicies = Invoke-Safe "Get-VBRCDPPolicy"              {
+    if (Get-Command Get-VBRCDPPolicy -ErrorAction SilentlyContinue) { Get-VBRCDPPolicy }
+}
+$vcdReplicas = Invoke-Safe "Get-VBRvCDReplicaJob"          {
+    if (Get-Command Get-VBRvCDReplicaJob -ErrorAction SilentlyContinue) { Get-VBRvCDReplicaJob }
+}
+# Get-VBRUnstructuredBackupJob also returns these two; they only tell which of its jobs they are
+$entraLogJobs = Invoke-Safe "Get-VBREntraIDLogsBackupJob"  {
+    if (Get-Command Get-VBREntraIDLogsBackupJob -ErrorAction SilentlyContinue) { Get-VBREntraIDLogsBackupJob }
+}
+$nasCopyJobs = Invoke-Safe "Get-VBRNASBackupCopyJob"       {
+    if (Get-Command Get-VBRNASBackupCopyJob -ErrorAction SilentlyContinue) { Get-VBRNASBackupCopyJob -WarningAction SilentlyContinue }
+}
+$cfgJobs     = Invoke-Safe "Get-VBRConfigurationBackupJob" { Get-VBRConfigurationBackupJob }
+$backups     = Invoke-Safe "Get-VBRBackup"                 { Get-VBRBackup }
 
 $build = $null
 try { $build = (Get-VBRBackupServerInfo).Build.ToString() } catch { }
@@ -339,7 +357,7 @@ function Resolve-HostId($obj) {
     try { return $obj.GetHost().Id.ToString() } catch { return $null }
 }
 
-$proxyByType = @{ ViProxy = @(); HvProxy = @(); GeneralPurposeProxy = @() }
+$proxyByType = @{ ViProxy = @(); HvProxy = @(); GeneralPurposeProxy = @(); CdpProxy = @() }
 
 foreach ($p in $viProxies) {
     $id = Get-IdStr $p; [void]$UsedHosts.Add((Resolve-HostId $p))
@@ -362,6 +380,20 @@ foreach ($p in $gpProxies) {
     [void]$UsedHosts.Add((Get-IdStr $srv))
     Add-Node $id "proxy" $name "General-purpose proxy" @("M") @{ Type = "GeneralPurposeProxy"; "Max tasks" = (Get-Prop $p @("ConcurrentTaskNumber", "MaxTasksCount")) } | Out-Null
     $proxyByType.GeneralPurposeProxy += $id
+}
+# CDP proxies (VMware CDP), named after their server as general-purpose proxies are
+foreach ($p in $cdpProxies) {
+    $sid = "$(Get-Prop $p @('ServerId', 'Server.Id'))"
+    $srv = $(if ($sid -and $serverById.ContainsKey($sid)) { $serverById[$sid] } else { $null })
+    if ($sid) { [void]$UsedHosts.Add($sid) }
+    $id = "cdp:" + (Get-IdStr $p)
+    $en = Get-Prop $p @("IsEnabled", "Enabled")
+    $cache = "$(Get-Prop $p @('CacheSize'))"; $unit = "$(Get-Prop $p @('CacheSizeUnit'))"
+    Add-Node $id "proxy" $(if ($srv) { $srv.Name } else { $p.Name }) "CDP proxy" @("M") @{
+        Type = "CdpProxy"; Host = $(if ($srv) { $srv.Name } else { $null }); "Cache path" = (Get-Prop $p @("CachePath"))
+        "Cache size" = $(if ($cache -and $unit) { "$cache $unit" } else { $cache }); Disabled = $(if ($null -ne $en) { -not $en } else { $null })
+        Description = $p.Description } | Out-Null
+    $proxyByType.CdpProxy += $id
 }
 foreach ($w in $wans) {
     $id = Get-IdStr $w; [void]$UsedHosts.Add((Resolve-HostId $w))
@@ -522,7 +554,7 @@ $JobRows = New-Object System.Collections.Generic.List[object]
 $jobRepo = @{}   # job id -> repo id (used to find backup copy sources)
 # These jobs are handled by their own cmdlets; skip them in Get-VBRJob to avoid duplicates
 $handledElsewhere = New-Object System.Collections.Generic.HashSet[string]
-foreach ($x in @($copyJobs) + @($agentJobs) + @($nasJobs) + @($entraJobs) + @($sbJobs) + @($tapeJobs)) { if ($x) { [void]$handledElsewhere.Add((Get-IdStr $x)) } }
+foreach ($x in @($copyJobs) + @($agentJobs) + @($nasJobs) + @($entraJobs) + @($entraLogJobs) + @($nasCopyJobs) + @($sbJobs) + @($tapeJobs) + @($cdpPolicies)) { if ($x) { [void]$handledElsewhere.Add((Get-IdStr $x)) } }
 
 foreach ($j in $jobs) {
     $jid = Get-IdStr $j
@@ -548,8 +580,10 @@ foreach ($j in $jobs) {
     $auto = Get-Prop $j @("Options.JobOptions.SourceProxyAutoDetect")
     if ($auto -eq $true) { $sel = @() }
     $jobObjs = @($objs | ForEach-Object {
+        # "0 B" means no estimate (plug-in platform VMs report no size): leave it empty
+        $size = "$(Get-Prop $_ @('ApproxSizeString'))"; if ($size -match '^0(\.0+)?\s*[KMGTP]?B$') { $size = "" }
         New-JobObject "$($_.Name)" "$(Get-Prop $_ @('TypeDisplayName', 'Object.ViType', 'Object.Type'))" "$($_.Location)" `
-            "$(Get-Prop $_ @('ApproxSizeString'))" ("$($_.Type)" -eq "Exclude") })
+            $size ("$($_.Type)" -eq "Exclude") })
 
     $JobRows.Add([ordered]@{ name = $j.Name; type = $(if ($typeStr) { $typeStr } else { $type }); disabled = $disabled
         repository = $(if ((Test-Node $repo)) { $Nodes[$repo].name } else { $null }); sources = @($hosts)
@@ -653,9 +687,39 @@ foreach ($c in $copyJobs) {
                     @(@(Get-Prop $c @("SourceRepository")) | Where-Object { $_ } | ForEach-Object { New-JobObject "$($_.Name)" "Repository" })) })
 }
 
-# File share / NAS backup
-foreach ($n in $nasJobs) {
-    $repo = Get-IdStr (Get-Prop $n @("ShortTermBackupRepository", "BackupRepository", "StorageRepository"))
+# File share / NAS backup. Get-VBRUnstructuredBackupJob also returns file backup copies and Entra ID
+# audit log backups; those are told apart by their own cmdlets (or the copy's class name)
+$idSet = { param($xs) $h = New-Object System.Collections.Generic.HashSet[string]; foreach ($x in $xs) { if ($x) { [void]$h.Add((Get-IdStr $x)) } }; , $h }
+$entraLogIds = & $idSet $entraLogJobs
+$nasCopyIds = & $idSet $nasCopyJobs
+$nasRepo = @{}
+foreach ($n in @($nasJobs) + @($entraLogJobs) + @($nasCopyJobs)) {
+    if ($n) { $nasRepo[(Get-IdStr $n)] = Get-IdStr (Get-Prop $n @("ShortTermBackupRepository", "BackupRepository", "StorageRepository", "TargetRepository", "Repository")) }
+}
+$nasSeen = New-Object System.Collections.Generic.HashSet[string]
+foreach ($n in @($nasJobs) + @($entraLogJobs) + @($nasCopyJobs)) {
+    if (-not $n) { continue }
+    $nid = Get-IdStr $n
+    if (-not $nasSeen.Add($nid)) { continue }
+    $repo = $nasRepo[$nid]
+    $enabled = Get-Prop $n @("JobEnabled", "IsEnabled", "Enabled")
+    if ($entraLogIds.Contains($nid)) {
+        $JobRows.Add([ordered]@{ name = $n.Name; type = "Entra ID audit log backup"; disabled = ($enabled -eq $false)
+            repository = $(if ((Test-Node "$repo")) { $Nodes["$repo"].name } else { $null }); sources = @(); proxies = "—"; objects = @() })
+        continue
+    }
+    if ($nasCopyIds.Contains($nid) -or "$($n.GetType().Name)" -match "Copy") {
+        $src = @(Get-Prop $n @("BackupJob", "SourceJob", "PrimaryJob", "SourceBackupJob", "Job"))[0]
+        $srcName = "$(Get-Prop $src @('Name'))"
+        $sid = Get-IdStr $src
+        $sr = $(if ($sid) { $nasRepo[$sid] } else { $null })
+        if ($sr) { Add-Link $sr $repo $n.Name "copy" }
+        $JobRows.Add([ordered]@{ name = $n.Name; type = "File backup copy"; disabled = ($enabled -eq $false)
+            repository = $(if ((Test-Node "$repo")) { $Nodes["$repo"].name } else { $null })
+            sources = @($srcName | Where-Object { $_ }); proxies = "—"
+            objects = @($srcName | Where-Object { $_ } | ForEach-Object { New-JobObject $_ "Job" }) })
+        continue
+    }
     foreach ($p in $proxyByType.GeneralPurposeProxy) { Add-Link $p $repo $n.Name "auto" }
     # Each share or bucket, then its include / exclude masks (VBR: File masks; buckets also have tag masks)
     $nasObjs = @(foreach ($b in @($n.BackupObject)) {
@@ -677,7 +741,7 @@ foreach ($n in $nasJobs) {
             foreach ($m in @(Get-Prop $b @($mk[0]))) { if ($m) { New-JobObject "$m" $mk[1] $path "" $mk[2] } }
         }
     })
-    $JobRows.Add([ordered]@{ name = $n.Name; type = "File backup"; disabled = ($n.JobEnabled -eq $false)
+    $JobRows.Add([ordered]@{ name = $n.Name; type = "File backup"; disabled = ($enabled -eq $false)
         repository = $(if ((Test-Node "$repo")) { $Nodes["$repo"].name } else { $null }); sources = @(); proxies = "Automatic"
         objects = $nasObjs })
 }
@@ -713,6 +777,216 @@ foreach ($x in $tapeJobs) {
     $JobRows.Add([ordered]@{ name = $x.Name; type = $type; disabled = ((Get-Prop $x @("Enabled", "JobEnabled")) -eq $false)
         repository = "$(Get-Prop $x @('Target.Name', 'Target'))"; sources = $srcs; proxies = "—"
         objects = @($srcs | ForEach-Object { New-JobObject $_ $(if ($tt -match "File") { "File share" } else { "Job" }) }) })
+}
+
+# CDP policies (VMware CDP): source hosts -> CDP proxies -> target host, as replicas are drawn
+foreach ($x in $cdpPolicies) {
+    $enabled = Get-Prop $x @("IsEnabled", "Enabled", "JobEnabled")
+    $label = $x.Name + $(if ($enabled -eq $false) { " (disabled)" } else { "" })
+    $objs = @(@(Get-Prop $x @("Entity", "Objects", "Object", "BackupObject")) | Where-Object { $_ })
+    $hosts = New-Object System.Collections.Generic.HashSet[string]
+    foreach ($o in $objs) { $h = "$(Get-Prop $o @('Host.Name', 'Object.Host.Name', 'HostName'))"; if ($h) { [void]$hosts.Add($h) } }
+    $tgt = Get-IdStr (Get-Prop $x @("Server", "TargetHost", "Host"))
+    $repo = Get-IdStr (Get-Prop $x @("MetadataRepository", "BackupRepository"))
+    $px = @($proxyByType.CdpProxy)
+    foreach ($h in $hosts) { $src = Resolve-SourceNode $h "vi"; foreach ($p in $px) { Add-Link $src $p $label "auto" } }
+    foreach ($p in $px) { Add-Link $p $tgt $label "copy" }
+    $JobRows.Add([ordered]@{ name = $x.Name; type = "CDP policy"; disabled = ($enabled -eq $false)
+        repository = $(if ((Test-Node "$repo")) { $Nodes["$repo"].name } else { $null }); sources = @($hosts); proxies = "Automatic"
+        objects = @($objs | ForEach-Object { New-JobObject "$(Get-Prop $_ @('Name'))" "Virtual machine" "$(Get-Prop $_ @('Host.Name', 'Object.Host.Name', 'HostName'))" }) })
+}
+
+# Cloud Director replication jobs that Get-VBRJob does not return (listed only)
+$jobIds = & $idSet $jobs
+foreach ($x in $vcdReplicas) {
+    if (-not $x -or $jobIds.Contains((Get-IdStr $x))) { continue }
+    $enabled = Get-Prop $x @("IsScheduleEnabled", "IsEnabled", "Enabled", "JobEnabled")
+    $JobRows.Add([ordered]@{ name = $x.Name; type = "Cloud Director Replication"; disabled = ($enabled -eq $false); repository = $null
+        sources = @(); proxies = "—"; objects = @() })
+}
+
+# Configuration backup: listed, and its target shown on the backup server (the diagram has no
+# links from the backup server)
+foreach ($x in $cfgJobs) {
+    $repo = Get-IdStr (Get-Prop $x @("Repository", "BackupRepository", "Target"))
+    $enabled = Get-Prop $x @("Enabled", "IsEnabled", "JobEnabled")
+    $name = "$($x.Name)"; if (-not $name) { $name = "Backup Configuration Job" }
+    if ((Test-Node "$repo")) { $Nodes["vbr"].details["Config backup target"] = $Nodes["$repo"].name }
+    $enc = Get-Prop $x @("EncryptionOptions.Enabled", "EncryptionOptions.Enable", "EncryptionOptions")
+    if ($enc -is [bool]) { $Nodes["vbr"].details["Config backup encrypted"] = $(if ($enc) { "Yes" } else { "No" }) }
+    $JobRows.Add([ordered]@{ name = $name; type = "Configuration backup"; disabled = ($enabled -eq $false)
+        repository = $(if ((Test-Node "$repo")) { $Nodes["$repo"].name } else { $null }); sources = @($vbrName); proxies = "—"; objects = @() })
+}
+
+# Backups (as the VBR console's Backups view lists them) and, per job, restore points, last backup and
+# size on disk. Per backup and VM: the restore points, the newest one and the size of the backup files.
+# - Plug-in platform backups (JobType VmbApiPolicyTempJob: Nutanix AHV, Proxmox VE, HPE Morpheus VME):
+#   Get-VBRRestorePoint refuses them, so their per-VM child backups and backup files are read with
+#   FindChildBackups() and GetAllChildrenStorages() (one file per restore point)
+# - Other backups: Get-VBRRestorePoint, with the size from GetStorage()
+# These methods are not supported by Veeam; when they fail the values stay empty. As in the VBR console,
+# each object of a backup is its own row (one VM can be several objects, for example after it was registered
+# again), backups without restore points are not listed, and job totals leave out backups kept only as
+# storage snapshots. Get-VBRBackup can also return child backups: a backup whose restore points are all in
+# another one is left out.
+$idByName = @{}
+foreach ($x in @($jobs) + @($agentJobs) + @($copyJobs) + @($nasJobs) + @($entraJobs) + @($entraLogJobs) + @($nasCopyJobs) +
+               @($sbJobs) + @($tapeJobs) + @($cdpPolicies) + @($vcdReplicas)) { if ($x -and $x.Name) { $idByName[$x.Name] = Get-IdStr $x } }
+$nameById = @{}; foreach ($k in $idByName.Keys) { $nameById[$idByName[$k]] = $k }
+$typeByJob = @{}; foreach ($r in $JobRows) { $i = $idByName[$r.name]; if ($i) { $typeByJob["$i"] = "$($r.type)" } }
+$rpFailed = [ordered]@{}   # backup id -> name (only backups of jobs in the report)
+$rpError = $null
+$childIds = @{}
+$vmsByBackup = [ordered]@{}   # backup id -> object key -> @{ Name; Points; First; Last; Files }
+$fmtTime = { param($t) if ($t) { ([datetime]$t).ToString("yyyy-MM-dd HH:mm", [Globalization.CultureInfo]::InvariantCulture) } else { $null } }
+function Add-BackupPoint($Vms, [string]$Key, [string]$Vm, [string]$PointId, $Time, $File) {
+    if (-not $Key) { $Key = $Vm }
+    if (-not $Vms.Contains($Key)) { $Vms[$Key] = @{ Name = $Vm; Points = @{}; First = $null; Last = $null; Files = @{} } }
+    $v = $Vms[$Key]
+    $ptId = $(if ($PointId) { $PointId } else { [guid]::NewGuid().ToString() })
+    $v.Points[$ptId] = $true
+    if ($Time -and (-not $v.Last -or $Time -gt $v.Last)) { $v.Last = $Time }
+    # First: the oldest backup file, as the console's creation time (the restore point's time if no file)
+    $ft = Get-Prop $File @("CreationTime"); if (-not $ft) { $ft = $Time }
+    if ($ft -and (-not $v.First -or $ft -lt $v.First)) { $v.First = $ft }
+    $fid = "$(Get-Prop $File @('Id'))"
+    if ($fid) { try { $v.Files[$fid] = [int64]$File.Stats.BackupSize } catch { } }
+}
+function Get-BackupTotals($Vms) {
+    $files = @{}; $max = 0; $last = $null
+    foreach ($v in $Vms.Values) {
+        foreach ($k in $v.Files.Keys) { $files[$k] = $v.Files[$k] }
+        if ($v.Points.Count -gt $max) { $max = $v.Points.Count }
+        if ($v.Last -and (-not $last -or $v.Last -gt $last)) { $last = $v.Last }
+    }
+    $size = $null; if ($files.Count) { $size = [int64]0; foreach ($x in $files.Values) { $size += $x } }
+    return [ordered]@{ restorePoints = $(if ($max) { $max } else { $null }); lastBackup = (& $fmtTime $last); onDisk = $size }
+}
+foreach ($b in @($backups | Where-Object { $_ -and "$($_.JobType)" -eq "VmbApiPolicyTempJob" })) {
+    $vms = [ordered]@{}; $vmsByBackup["$($b.Id)"] = $vms
+    try { $children = @($b.FindChildBackups()); $files = @($b.GetAllChildrenStorages()) }
+    catch { if ($typeByJob["$(Get-Prop $b @('JobId'))"]) { $rpFailed["$($b.Id)"] = "$($b.Name)"; if (-not $rpError) { $rpError = $_.Exception.Message } }; continue }
+    $vmOf = @{}
+    foreach ($c in $children) {
+        if (-not $c) { continue }
+        $cid = "$($c.Id)"; $childIds[$cid] = $true
+        # A child backup is named "<VM> Backup" or "<VM> Backup <n>"
+        $vn = "$(Get-Prop $c @('VmName', 'ObjectName'))"; if (-not $vn) { $vn = "$($c.Name)" -replace ' Backup( \d+)?$', '' }
+        $vmOf[$cid] = $vn
+    }
+    foreach ($f in $files) {
+        if (-not $f) { continue }
+        $bid = "$($f.BackupId)"
+        Add-BackupPoint $vms $bid $(if ($vmOf.ContainsKey($bid)) { $vmOf[$bid] } else { $bid }) "$($f.Id)" (Get-Prop $f @("CreationTime")) $f
+    }
+}
+foreach ($b in $backups) {
+    if (-not $b -or "$($b.JobType)" -eq "VmbApiPolicyTempJob" -or $childIds.ContainsKey("$($b.Id)")) { continue }
+    $vms = [ordered]@{}; $vmsByBackup["$($b.Id)"] = $vms
+    $rps = @()
+    try { $rps = @(Get-VBRRestorePoint -Backup $b) }
+    catch { if ($typeByJob["$(Get-Prop $b @('JobId'))"]) { $rpFailed["$($b.Id)"] = "$($b.Name)"; if (-not $rpError) { $rpError = $_.Exception.Message } }; continue }
+    foreach ($rp in $rps) {
+        $f = $null; try { $f = $rp.GetStorage() } catch { }
+        Add-BackupPoint $vms "$(Get-Prop $rp @('ObjectId'))" "$(Get-Prop $rp @('Name', 'VmName'))" "$(Get-Prop $rp @('Id'))" (Get-Prop $rp @("CreationTime")) $f
+    }
+}
+# Child backups returned on their own (a plug-in child has no children of its own to read)
+foreach ($c in @($childIds.Keys)) { $rpFailed.Remove($c); $vmsByBackup.Remove($c) }
+if ($rpFailed.Count) {
+    $script:Warnings.Add("Restore points of $($rpFailed.Count) backups could not be read: $((@($rpFailed.Values) | Sort-Object -Unique) -join ', '). Error: $rpError")
+}
+# Child backups returned on their own: all their restore points are in another backup
+$pointsOf = @{}
+foreach ($k in $vmsByBackup.Keys) { $h = @{}; foreach ($v in $vmsByBackup[$k].Values) { foreach ($p in $v.Points.Keys) { $h[$p] = $true } }; $pointsOf[$k] = $h }
+$order = @($vmsByBackup.Keys); $dropped = @{}
+for ($i = 0; $i -lt $order.Count; $i++) {
+    $bp = $pointsOf[$order[$i]]; if (-not $bp.Count) { continue }
+    for ($j = 0; $j -lt $order.Count; $j++) {
+        if ($i -eq $j -or $dropped[$order[$j]]) { continue }
+        $ap = $pointsOf[$order[$j]]
+        if ($ap.Count -lt $bp.Count -or ($ap.Count -eq $bp.Count -and $j -gt $i)) { continue }
+        $all = $true; foreach ($p in $bp.Keys) { if (-not $ap.ContainsKey($p)) { $all = $false; break } }
+        if ($all) { $dropped[$order[$i]] = $true; break }
+    }
+}
+$backupById = @{}; foreach ($b in $backups) { if ($b) { $backupById["$($b.Id)"] = $b } }
+$BackupRows = New-Object System.Collections.Generic.List[object]
+$platformMap = @{ vmware = "VMware"; hyperv = "Hyper-V"; vcd = "VMware Cloud Director"; clouddirector = "VMware Cloud Director"
+    endpoint = "Windows"; windowsphysical = "Windows"; linuxphysical = "Linux"; unixphysical = "Unix"; solarisphysical = "Unix"
+    macphysical = "Mac"; nas = "Unstructured data"; unstructureddata = "Unstructured data"; entraid = "Microsoft Entra ID"
+    abrbackup = "Application backup repository" }
+foreach ($k in $vmsByBackup.Keys) {
+    if ($dropped[$k] -or -not $vmsByBackup[$k].Count) { continue }
+    $b = $backupById[$k]; $vms = $vmsByBackup[$k]
+    # Its job: JobId, or the job of the same name (a backup copy's backups can name another id)
+    $jid = "$(Get-Prop $b @('JobId'))"
+    if (-not $nameById[$jid] -and $idByName["$($b.Name)"]) { $jid = $idByName["$($b.Name)"] }
+    $repoId = "$(Get-Prop $b @('RepositoryId'))"
+    $isSnapshot = $repoId -match '^[0-]+$'
+    $repo = $(if ((Test-Node $repoId)) { $Nodes[$repoId].name } else { $null })
+    if (-not $repo) { try { $repo = "$($b.GetRepository().Name)" } catch { } }
+    if (-not $repo -and $isSnapshot) { $repo = "Snapshot" }
+    # Platform: the plug-in platform ID, else the platform name
+    $pfId = "$(Get-Prop $b @('PlatformId', 'BackupPlatform.PlatformId'))"
+    $pf = ("$(Get-Prop $b @('Platform', 'BackupPlatform.Platform'))" -replace '^E(?=[A-Z])', '')
+    if ($PluginPlatforms.ContainsKey($pfId)) { $pf = $PluginPlatforms[$pfId] }
+    elseif ($platformMap.ContainsKey($pf.ToLower())) { $pf = $platformMap[$pf.ToLower()] }
+    elseif ("$($b.JobType)" -eq "VmbApiPolicyTempJob" -or $pf -eq "CustomPlatform") {
+        $jt = $typeByJob[$jid]
+        $pf = $(if ($jt -match "Nutanix|AHV") { "Nutanix AHV" } elseif ($jt -match "Proxmox") { "Proxmox VE" } elseif ($jt -match "Morpheus") { "HPE Morpheus VME" }
+                elseif ($jt -match '^Agent backup \((\w+)') { $Matches[1] }
+                elseif ("$($b.JobType)" -match "Copy|BackupSync") { "Image-level" } else { "Plug-in" })
+    }
+    # Created: the oldest backup file, as the console shows it (CreationTime can be the date of an upgrade)
+    $first = $null; foreach ($v in $vms.Values) { if ($v.First -and (-not $first -or $v.First -lt $first)) { $first = $v.First } }
+    if (-not $first) { $first = Get-Prop $b @("CreationTime") }
+    $row = [ordered]@{ name = "$($b.Name)"; job = $nameById[$jid]; created = (& $fmtTime $first); repository = $repo
+        platform = $(if ($pf) { $pf } else { $null }) }
+    if ($vms.Count) { $t = Get-BackupTotals $vms; foreach ($x in $t.Keys) { $row[$x] = $t[$x] } }
+    $row["objects"] = @($vms.Keys | Sort-Object { "$($vms[$_].Name)".ToLower() }, { $_ } | ForEach-Object {
+        $o = [ordered]@{ name = $vms[$_].Name }; $t = Get-BackupTotals @{ $_ = $vms[$_] }; foreach ($x in $t.Keys) { $o[$x] = $t[$x] }; $o })
+    $BackupRows.Add($row)
+}
+$BackupRows = @($BackupRows | Sort-Object { "$($_.name)".ToLower() }, { "$($_.repository)" })
+
+# Last run and result of each job, from its newest session:
+# - Get-VBRJob jobs (VMware, Hyper-V, Cloud Director, plug-in platforms, replicas, backup copies):
+#   FindLastSession(), which Veeam does not support
+# - agent, file share, SureBackup and Entra ID jobs: their own session cmdlets
+# - tape jobs and the configuration backup: their LastResult and, when there is one, last run time
+$lastByJob = @{}
+function Add-LastSession([string]$JobId, $Time, $Result) {
+    if (-not $JobId -or -not $Time) { return }
+    $cur = $lastByJob[$JobId]
+    if (-not $cur -or $Time -gt $cur.Time) { $lastByJob[$JobId] = @{ Time = $Time; Result = "$Result" } }
+}
+foreach ($j in $jobs) {
+    if (-not $j) { continue }
+    try { $s = $j.FindLastSession(); if ($s) { Add-LastSession (Get-IdStr $j) (Get-Prop $s @("CreationTime")) (Get-Prop $s @("Result")) } } catch { }
+}
+foreach ($cmd in @("Get-VBRComputerBackupJobSession", "Get-VBRNASBackupJobSession", "Get-VBRSureBackupSession",
+                   "Get-VBREntraIDTenantBackupJobSession", "Get-VBREntraIDLogsBackupJobSession")) {
+    if (-not (Get-Command $cmd -ErrorAction SilentlyContinue)) { continue }
+    $sessions = Invoke-Safe $cmd ([scriptblock]::Create("$cmd -WarningAction SilentlyContinue"))
+    foreach ($s in $sessions) {
+        if ($s) { Add-LastSession "$(Get-Prop $s @('JobId', 'Job.Id'))" (Get-Prop $s @("CreationTime", "StartTime")) (Get-Prop $s @("Result")) }
+    }
+}
+$resultByJob = @{}
+foreach ($x in @($tapeJobs) + @($cfgJobs)) {
+    if (-not $x) { continue }
+    $key = $(if ($cfgJobs -contains $x) { "cfg" } else { Get-IdStr $x })
+    $res = "$(Get-Prop $x @('LastResult'))"; if ($res) { $resultByJob[$key] = $res }
+    Add-LastSession $key (Get-Prop $x @("LastRun", "LastRunTime", "LastRunLocal")) $res
+}
+foreach ($r in $JobRows) {
+    $jid = $(if ($r.type -eq "Configuration backup") { "cfg" } else { "$($idByName[$r.name])" })
+    $ls = $lastByJob[$jid]
+    $res = $(if ($ls) { $ls.Result } else { $resultByJob[$jid] })
+    # As in the console: no result without a run time, and none for policies the agent manages itself (N/A)
+    $r["lastRun"] = $(if ($ls) { & $fmtTime $ls.Time } else { $null })
+    $r["lastResult"] = $(if ($ls -and $res -and $res -ne "None" -and $r.type -notmatch "ManagedByAgent") { $res } else { $null })
 }
 
 # Re-point links to SOBR extents at the SOBR itself
@@ -1026,6 +1300,7 @@ $model = [ordered]@{
     nodes = $nodeList
     links = $linkList
     jobs = $JobRows
+    backups = $BackupRows
     warnings = $script:Warnings
 }
 

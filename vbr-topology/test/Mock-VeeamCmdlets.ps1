@@ -98,6 +98,14 @@ $J7.Info | Add-Member TargetHostId (gid "esx2")
 # Hyper-V replica without off-host proxies: host to host (on-host proxies), not through the VMware proxies
 $J8 = job "j8" "HyperV-Replica-DR" "Replica" "EHyperV" "r1" @() $true @("hv01.corp.local"); $J8.TypeToString = "Hyper-V Replication"
 $J8.Info | Add-Member TargetHostId (gid "hvc")
+# Last sessions (FindLastSession() on Get-VBRJob objects; session cmdlets for the others), as in sample_raw.json
+function lastsess($job, $time, $result) {
+    $job | Add-Member -Force -MemberType ScriptMethod -Name FindLastSession -Value ([scriptblock]::Create("[pscustomobject]@{ CreationTime = [datetime]'$time'; Result = '$result' }"))
+}
+lastsess $J1 "2026-10-27 22:00" "Success"; lastsess $J2 "2026-10-27 23:00" "Warning"; lastsess $J3 "2026-10-27 21:00" "Failed"; lastsess $J4 "2026-10-27 01:00" "Success"
+function Get-VBRComputerBackupJobSession { [pscustomobject]@{ JobId = (gid "a1"); CreationTime = [datetime]"2026-10-27 20:00"; Result = "Success" } }
+function Get-VBRNASBackupJobSession { [pscustomobject]@{ JobId = (gid "n1"); CreationTime = [datetime]"2026-10-27 19:00"; Result = "Success" } }
+function Get-VBRSureBackupSession { [pscustomobject]@{ JobId = (gid "sb1"); CreationTime = [datetime]"2026-10-26 08:00"; Result = "Success" } }
 function Get-VBRJob { $J1; $J2; $J3; $J4; $J5; $J6; $J7; $J8 }
 # Job objects as Get-VBRJobObject returns them. Plug-in objects have no Location, only Object.Host.
 function jo($name, $disp, $loc, $hostName, $excl = $false, $size = "") {
@@ -149,6 +157,55 @@ function Get-VBRNASBackupJob {
     New-Obj @{ Id = (gid "n2"); Name = "Bucket-Backup"; JobEnabled = $true; ShortTermBackupRepository = $global:R1
         BackupObject = @([pscustomobject]@{ Path = "/Backup/data/"; Container = [pscustomobject]@{ Name = "veeam-bucket" }
                                             Server = (New-Object Mock.VBRAmazonS3ObjectStorageServer) }) }
+}
+# v13 Get-VBRUnstructuredBackupJob also returns Entra ID audit log backups and file backup copies
+function Get-VBRUnstructuredBackupJob { Get-VBRNASBackupJob; Get-VBREntraIDLogsBackupJob; Get-VBRNASBackupCopyJob }
+function Get-VBREntraIDLogsBackupJob { New-Obj @{ Id = (gid "e2"); Name = "EntraID-AuditLogs"; JobEnabled = $true; ShortTermBackupRepository = $global:R1 } }
+function Get-VBRNASBackupCopyJob {
+    New-Obj @{ Id = (gid "n4"); Name = "NAS-Shares-Copy"; JobEnabled = $true; BackupJob = [pscustomobject]@{ Id = (gid "n1"); Name = "NAS-Shares" }
+        TargetRepository = $global:R4 }
+}
+# A CDP proxy, a CDP policy (sql01 on esx01 -> esx02) and the configuration backup
+function Get-VBRCDPProxy { New-Obj @{ Id = (gid "cdp1"); Name = "vbrpx02.corp.local"; ServerId = (gid "px2"); CachePath = "/var/lib/veeam/veeam-cdp"; CacheSize = 100; CacheSizeUnit = "GB"; IsEnabled = $true; Description = "" } }
+function Get-VBRCDPPolicy {
+    New-Obj @{ Id = (gid "cdpp1"); Name = "CDP-SQL"; IsEnabled = $true; Entity = [pscustomobject]@{ Name = "app-sql01"; Host = $H.esx1 }
+        Server = $H.esx2; MetadataRepository = $global:R1 }
+}
+function Get-VBRvCDReplicaJob { }
+function Get-VBRConfigurationBackupJob { New-Obj @{ Name = "Backup Configuration Job"; Enabled = $true; Repository = $global:R1; EncryptionOptions = $true; LastResult = "Success" } }
+# Backups and restore points (one backup file per restore point), matching sample_raw.json "backupFiles".
+# app-sql01 has a point from an older chain (another object in VBR, same VM name: its own row)
+function rpoint($name, $time, $gb, $obj = $name) {
+    # The restore point is 2 minutes after its backup file was created (as in VBR)
+    New-Obj @{ Id = [guid]::NewGuid(); Name = $name; ObjectId = (gid "obj-$obj"); CreationTime = ([datetime]$time).AddMinutes(2) } @{ GetStorage = [scriptblock]::Create("[pscustomobject]@{ Id = [guid]::NewGuid(); CreationTime = [datetime]'$time'; Stats = [pscustomobject]@{ BackupSize = [int64]$gb * 1GB } }") }
+}
+$global:RPs = @{
+    "j1" = @((rpoint "app-sql01" "2026-10-20 22:00" 5 "app-sql01-old"), (rpoint "app-sql01" "2026-10-25 22:00" 120), (rpoint "app-sql01" "2026-10-26 22:00" 8), (rpoint "app-sql01" "2026-10-27 22:00" 8), (rpoint "app-web01" "2026-10-25 22:00" 40), (rpoint "app-web01" "2026-10-26 22:00" 3), (rpoint "app-web01" "2026-10-27 22:00" 3))
+    "j2" = @((rpoint "dev01" "2026-10-26 23:00" 30), (rpoint "dev01" "2026-10-27 23:00" 2))
+}
+# Plug-in platform backup (j4): per-VM child backups and their backup files, read with internal methods
+$global:AhvChild = New-Obj @{ Id = (gid "bj4c"); Name = "web01 Backup"; JobId = (gid "j4"); JobType = "VmbApiPolicyTempJob" }
+function ahvfile($time, $gb) { [pscustomobject]@{ Id = [guid]::NewGuid(); BackupId = (gid "bj4c"); CreationTime = [datetime]$time; Stats = [pscustomobject]@{ BackupSize = [int64]$gb * 1GB } } }
+$global:AhvFiles = @((ahvfile "2026-10-25 01:00" 20), (ahvfile "2026-10-26 01:00" 1), (ahvfile "2026-10-27 01:00" 1))
+# j1 also has a per-machine child backup that returns the same restore points (counted once); an old
+# backup without a job in the report fails and is not reported. Like VBR, Get-VBRRestorePoint refuses
+# plug-in platform backups
+function Get-VBRBackup {
+    New-Obj @{ Id = (gid "bj1"); JobId = (gid "j1"); Name = "VMware-Prod-Daily"; JobType = "Backup"; Platform = "EVmware"; RepositoryId = (gid "sobr"); CreationTime = [datetime]"2026-06-01 22:00" }
+    New-Obj @{ Id = (gid "bj2"); JobId = (gid "j2"); Name = "VMware-Dev"; JobType = "Backup"; Platform = "EVmware"; RepositoryId = (gid "r1"); CreationTime = [datetime]"2026-07-01 23:00" }
+    New-Obj @{ Id = (gid "bj1c"); JobId = (gid "j1"); Name = "VMware-Prod-Daily (child)"; JobType = "Backup"; Platform = "EVmware"; RepositoryId = (gid "sobr") }
+    New-Obj @{ Id = (gid "bj4"); JobId = (gid "j4"); Name = "AHV-Daily"; JobType = "VmbApiPolicyTempJob"; Platform = "ECustomPlatform"
+        PlatformId = [guid]"799a5a3e-ae1e-4eaf-86eb-8a9acc2670e2"; RepositoryId = (gid "r1"); CreationTime = [datetime]"2026-08-01 01:00" } @{
+        FindChildBackups = { @($global:AhvChild) }; GetAllChildrenStorages = { $global:AhvFiles } }
+    $global:AhvChild
+    New-Obj @{ Id = (gid "bold"); JobId = (gid "oldjob"); Name = "Old-Backup"; JobType = "Backup"; Platform = "EVmware"; RepositoryId = (gid "r1"); CreationTime = [datetime]"2025-01-15 22:00" }
+}
+function Get-VBRRestorePoint($Backup) {
+    if ("$($Backup.JobType)" -eq "VmbApiPolicyTempJob" -or $Backup.Id -eq (gid "bj4c") -or $Backup.Id -eq (gid "bold")) {
+        throw "Cannot get restore points from backup $($Backup.Name), because it is encrypted or created by an enterprise application plug-in."
+    }
+    $k = @($global:RPs.Keys | Where-Object { (gid $_) -eq $Backup.JobId })[0]
+    if ($k) { $global:RPs[$k] }
 }
 # Mock Enterprise Manager registration info
 if (-not ("Veeam.Backup.Core.SBackupOptions" -as [type])) {

@@ -64,6 +64,11 @@ ENDPOINTS = {
     # Managed servers that are not hosts (file shares, object storage accounts, Entra ID tenants)
     "unstructuredDataServers": ("/api/v1/inventory/unstructuredDataServers", True),
     "entraIdTenants":       ("/api/v1/inventory/entraId/tenants", True),
+    "configBackup":         ("/api/v1/configBackup", False),
+    # Last run and result of each job
+    "jobStates":            ("/api/v1/jobs/states", True),
+    # Backed-up objects (VM names of plug-in platform jobs, which /jobs does not return)
+    "backupObjects":        ("/api/v1/backupObjects", True),
 }
 
 EM_REST_PORT = int(os.environ.get("EM_REST_PORT", "9398"))  # override for testing only
@@ -183,8 +188,154 @@ def collect(client):
             pass
     if details:
         raw["jobs"] = [details.get(j["id"], j) for j in raw["jobs"]]
+    collect_backup_files(client, raw)
+    collect_last_sessions(client, raw)
     raw["inventory"] = collect_inventory(client, raw)
     return raw
+
+
+def collect_backup_files(client, raw):
+    """
+    The backup files of each backup (one request per backup), for the restore points, latest backup
+    and size on disk of each job. Only the fields the report uses are kept.
+    """
+    backups = [b for b in raw.get("backups") or [] if b.get("id")]
+    if not backups:
+        return
+
+    def files_of(b):
+        try:
+            return b["id"], [{k: f.get(k) for k in ("id", "objectIds", "restorePointIds", "backupSize", "creationTime")}
+                             for f in client.get_all(f"/api/v1/backups/{b['id']}/backupFiles")]
+        except Exception as e:  # noqa: BLE001 - one backup failing must not stop the scan
+            return b["id"], e
+
+    files, errors = {}, []
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        for bid, res in pool.map(files_of, backups):
+            if isinstance(res, Exception):
+                errors.append(res)
+            else:
+                files[bid] = res
+    raw["backupFiles"] = files
+    print(f"  [OK]   {'backupFiles':<22} {sum(len(f) for f in files.values())} in {len(files)} backups")
+    # Restore point times: the console shows an object's newest restore point, not its newest file
+    try:
+        raw["restorePointTimes"] = {p["id"]: p.get("creationTime") for p in client.get_all("/api/v1/restorePoints")
+                                    if p.get("id")}
+        print(f"  [OK]   {'restorePoints':<22} {len(raw['restorePointTimes'])}")
+    except Exception as e:  # noqa: BLE001
+        raw["_errors"]["restorePoints"] = str(e)
+        print(f"  [skip] {'restorePoints':<22} {e}")
+    if errors:
+        raw["_errors"]["backupFiles"] = f"{len(errors)} of {len(backups)} backups failed: {errors[-1]}"
+        print(f"  [skip] {'backupFiles':<22} {raw['_errors']['backupFiles']}")
+
+
+def _ts(v):
+    """ISO time -> 'yyyy-MM-dd HH:mm' (server time, as given)."""
+    return v[:16].replace("T", " ") if v else None
+
+
+def backup_job_id(b, job_ids_by_name, known_ids):
+    """The job of a backup: its jobId, or the job of the same name when jobId is not a known job (a
+    backup copy's backups can name another id)."""
+    jid = b.get("jobId")
+    if jid not in known_ids and b.get("name") in job_ids_by_name:
+        return job_ids_by_name[b["name"]]
+    return jid
+
+
+def collect_last_sessions(client, raw):
+    """
+    The last session of the jobs /jobs/states does not cover (plug-in platform jobs, found in /backups)
+    and of the configuration backup: one request each, newest session first.
+    """
+    known = {x.get("id") for x in raw.get("jobStates") or []} | {j.get("id") for j in raw.get("jobs") or []}
+    wanted = {b.get("jobId") for b in raw.get("backups") or [] if b.get("jobId") and b.get("jobId") not in known}
+    queries = {jid: f"jobIdFilter={jid}" for jid in wanted}
+    if raw.get("configBackup"):
+        queries["configBackup"] = "typeFilter=ConfigurationBackup"
+    if not queries:
+        return
+
+    def last(item):
+        key, q = item
+        try:
+            res = client._request("GET", f"/api/v1/sessions?{q}&orderColumn=CreationTime&orderAsc=false&limit=1")
+            s = (res.get("data") or [None])[0] if isinstance(res, dict) else None
+        except Exception:  # noqa: BLE001 - the job just shows no last run
+            return key, None
+        if not s:
+            return key, None
+        r = s.get("result")
+        return key, {"lastRun": _ts(s.get("creationTime")), "lastResult": r.get("result") if isinstance(r, dict) else r}
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        raw["lastSessions"] = {k: v for k, v in pool.map(last, queries.items()) if v}
+    print(f"  [OK]   {'last sessions':<22} {len(raw['lastSessions'])}")
+
+
+def backup_stats(raw):
+    """
+    Per backup, its objects as the VBR console's Backups view lists them: backup id -> {object key:
+    {"name", "points": restore point ids, "count": restore points when no files say, "last": newest file
+    time, "files": {file id: size}}}. One VM can be several objects (for example after it was registered
+    again); each is its own row, as in the console. Objects come from the backup files; objects without
+    files (file shares, object storage, Entra ID) take their restore point count from /backupObjects.
+    """
+    if "backupFiles" not in raw:
+        return {}
+    point_times = raw.get("restorePointTimes") or {}
+    object_list = [o for o in raw.get("backupObjects") or [] if o.get("id")]
+    objects = {o["id"]: o for o in object_list}
+    # The console's count of an object is /backupObjects' restorePointsCount. Its backupId names a child
+    # backup that /backups does not list, so it is used only when the object is in one backup and has one
+    # entry; otherwise the restore points are counted from the files (a vApp's files hold all its VMs)
+    entries, in_backups = {}, {}
+    for o in object_list:
+        entries[o["id"]] = entries.get(o["id"], 0) + 1
+    for bid, fs in (raw["backupFiles"] or {}).items():
+        for f in fs or []:
+            for oid in f.get("objectIds") or []:
+                in_backups.setdefault(oid, set()).add(bid)
+    per_backup = {}
+    for b in raw.get("backups") or []:
+        objs = per_backup.setdefault(b.get("id"), {})
+        for i, f in enumerate((raw["backupFiles"] or {}).get(b.get("id")) or []):
+            fid = f.get("id") or f"{b.get('id')}:{i}"
+            for oid in f.get("objectIds") or [None]:
+                o = objs.setdefault(oid or "", {"name": (objects.get(oid) or {}).get("name") or oid or "",
+                                                "points": set(), "count": None, "last": None, "files": {}})
+                o["points"].update(f.get("restorePointIds") or [])
+                # The newest restore point (the file's time when /restorePoints was not read)
+                for t in [point_times.get(p) for p in f.get("restorePointIds") or []] or [None]:
+                    t = t or f.get("creationTime")
+                    if t and (not o["last"] or t > o["last"]):
+                        o["last"] = t
+                o["files"][fid] = f.get("backupSize") or 0
+        for oid, o in objs.items():
+            e = objects.get(oid) or {}
+            if entries.get(oid) == 1 and len(in_backups.get(oid, ())) == 1 and e.get("restorePointsCount") is not None:
+                o["count"] = e["restorePointsCount"]
+        for e in object_list:
+            if e.get("backupId") == b.get("id") and e["id"] not in objs and e.get("restorePointsCount") is not None:
+                objs[e["id"]] = {"name": e.get("name") or e["id"], "points": set(), "count": e["restorePointsCount"],
+                                 "last": None, "files": {}}
+    return per_backup
+
+
+def backup_totals(objs):
+    """{restorePoints, lastBackup, onDisk} of objects from backup_stats: the most restore points of one
+    object, the newest file and the size of all files (each counted once)."""
+    files = {}
+    for o in objs.values():
+        files.update(o["files"])
+    counts = [o["count"] if o["count"] is not None else len(o["points"]) for o in objs.values()]
+    lasts = [o["last"] for o in objs.values() if o["last"]]
+    return {"restorePoints": max(counts, default=0) or None,
+            "lastBackup": _ts(max(lasts)) if lasts else None,
+            "onDisk": sum(files.values()) if files else None}
 
 
 def _obj(item):
@@ -570,13 +721,37 @@ LOCAL_HOSTS = {"localhost", ".", "127.0.0.1", "::1"}
 JOB_TYPES = {"vspherebackup": "VMware Backup", "hypervbackup": "Hyper-V Backup",
              "vspherereplica": "VMware Replication", "hypervreplica": "Hyper-V Replication",
              "clouddirectorbackup": "Cloud Director Backup", "filebackup": "File backup",
-             "objectstoragebackup": "File backup", "entraidtenantbackup": "Entra ID backup",
+             "objectstoragebackup": "File backup", "filebackupcopy": "File backup copy",
+             "entraidtenantbackup": "Entra ID backup", "entraidauditlogbackup": "Entra ID audit log backup",
              "surebackupcontentscan": "SureBackup (content scan)", "surebackup": "SureBackup",
              "proxmoxbackupjob": "Proxmox Backup", "nutanixahvbackupjob": "Nutanix AHV Backup"}
 # Plug-in platform servers in REST 1.3-rev2+ (HPE Morpheus VME is not in the REST API)
 PLUGIN_SERVER_TYPES = {"ProxmoxNode": "Proxmox VE", "ProxmoxCluster": "Proxmox VE",
                        "NutanixCluster": "Nutanix AHV", "PrismCentral": "Nutanix AHV"}
 PLUGIN_JOB_TYPES = {"proxmoxbackupjob": "Proxmox VE", "nutanixahvbackupjob": "Nutanix AHV"}
+# Plug-in platform IDs (backups' platformId; the PowerShell collector uses the same IDs)
+PLUGIN_PLATFORM_IDS = {"799a5a3e-ae1e-4eaf-86eb-8a9acc2670e2": "Nutanix AHV",
+                       "01208ee8-47fe-4ea8-8727-5115874da1ad": "Proxmox VE",
+                       "2d470d24-b6bb-4fa3-b7ff-f0fc1137ca52": "HPE Morpheus VME"}
+PLUGIN_JOB_LABELS = {"Nutanix AHV": "Nutanix AHV Backup", "Proxmox VE": "Proxmox Backup",
+                     "HPE Morpheus VME": "HPE Morpheus VME Backup"}
+# Backup platforms (platformName) -> the wording of the VBR console's Backups view
+BACKUP_PLATFORMS = {"vmware": "VMware", "hyperv": "Hyper-V", "nutanix": "Nutanix AHV", "proxmox": "Proxmox VE",
+                    "clouddirector": "VMware Cloud Director", "vcd": "VMware Cloud Director",
+                    "windowsphysical": "Windows", "endpoint": "Windows", "linuxphysical": "Linux",
+                    "unixphysical": "Unix", "solarisphysical": "Unix", "macphysical": "Mac",
+                    "unstructureddata": "Unstructured data", "nas": "Unstructured data", "entraid": "Microsoft Entra ID"}
+
+
+def backup_platform(platform, platform_id, job_type):
+    if platform_id in PLUGIN_PLATFORM_IDS:
+        return PLUGIN_PLATFORM_IDS[platform_id]
+    p = _lc(platform)
+    if p in BACKUP_PLATFORMS:
+        return BACKUP_PLATFORMS[p]
+    if p == "customplatform":
+        return "Image-level" if "copy" in _lc(job_type) else "Plug-in"
+    return platform or None
 AGENT_OS = {"windows": "Windows", "linux": "Linux", "mac": "Mac", "unix": "Unix", "solaris": "Unix", "aix": "Unix"}
 
 
@@ -903,7 +1078,9 @@ def build_model(raw, csv_rows=()):
         hid = srv.get("hostId")
         used_hosts.add(hid)
         label = {"ViProxy": "VMware backup proxy", "HvProxy": "Hyper-V off-host proxy",
-                 "GeneralPurposeProxy": "General-purpose proxy"}.get(t, t)
+                 "GeneralPurposeProxy": "General-purpose proxy",
+                 # Plug-in platform workers: in EProxyType since REST 1.3-rev2, but not returned on v13.1
+                 "NutanixAHV": "Nutanix AHV worker", "PVE": "Proxmox VE worker"}.get(t, t)
         # General-purpose proxies are named after their server, as in PowerShell (REST calls them "Backup Proxy")
         name = (host_name(hid) if t == "GeneralPurposeProxy" else None) or p.get("name") or host_name(hid) or "proxy"
         add_node(p["id"], "proxy", name, label, badges=["M"],
@@ -1047,6 +1224,20 @@ def build_model(raw, csv_rows=()):
     # Plug-in jobs come without details (only id, name, type, isDisabled): their repository is in /backups
     backup_repo = {b.get("jobId"): b.get("repositoryId") for b in raw.get("backups") or [] if b.get("jobId")}
     repo_of_job = {j.get("id"): job_repo(j) or backup_repo.get(j.get("id")) for j in jobs}
+    job_names = {j.get("id"): j.get("name") for j in jobs}
+    job_ids_by_name = {j.get("name"): j.get("id") for j in jobs if j.get("name")}
+    per_backup = backup_stats(raw)
+    # Last run and result: /jobs/states, else the job's last session (plug-in jobs, configuration backup)
+    job_state = {x.get("id"): {"lastRun": _ts(x.get("lastRun")), "lastResult": x.get("lastResult")}
+                 for x in raw.get("jobStates") or [] if x.get("id")}
+    job_state.update({jid: v for jid, v in (raw.get("lastSessions") or {}).items() if jid not in job_state})
+
+    def last_run(jid, job_type=""):
+        # As in the console: no result without a run time, and none for policies the agent manages itself
+        st = job_state.get(jid) or {}
+        res = st.get("lastResult")
+        keep = st.get("lastRun") and res not in (None, "None") and "ManagedByAgent" not in job_type
+        return {"lastRun": st.get("lastRun"), "lastResult": res if keep else None}
     replica_targets = []   # (proxies or source hosts, destination host, its vCenter, label): linked once ESXi hosts are known
     for j in jobs:
         jt = j.get("type", "")
@@ -1072,6 +1263,9 @@ def build_model(raw, csv_rows=()):
                                     if isinstance(i, str) and nodes.get(i, {}).get("kind") == "agent")) if is_agent else []
         src_jobs = [_obj(x) for x in ((j.get("sourceObjects") or {}).get("includes") or {}).get("jobs") or []]
         src_jobs += [_obj(x) for x in (j.get("linkedJobs") or {}).get("includes") or []]
+        # File backup copy: its source job
+        if j.get("primaryJobId"):
+            src_jobs.append({"id": j["primaryJobId"], "name": job_names.get(j["primaryJobId"])})
         # Backup copy from a repository (for example an Application Backup Repository)
         src_repo_objs = [_obj(x) for x in ((j.get("sourceObjects") or {}).get("includes") or {}).get("repositories") or []]
         if is_agent:
@@ -1090,9 +1284,12 @@ def build_model(raw, csv_rows=()):
         objects = job_objects(j, server_names)
         objects += [{"name": x.get("name"), "type": "Job", "location": "", "size": "", "excluded": False}
                     for x in (j.get("linkedJobs") or {}).get("includes") or [] if x.get("name")]
+        if j.get("primaryJobId") and job_names.get(j["primaryJobId"]):
+            objects.append({"name": job_names[j["primaryJobId"]], "type": "Job", "location": "", "size": "", "excluded": False})
         job_rows.append({"name": name, "type": job_type_label(j), "disabled": j.get("isDisabled"),
                          "repository": (nodes.get(repo) or {}).get("name"),
-                         "sources": sources, "proxies": proxies, "objects": objects})
+                         "sources": sources, "proxies": proxies, "objects": objects,
+                         **last_run(j.get("id"), job_type_label(j))})
         label = name + (" (disabled)" if j.get("isDisabled") else "")
         if jtl in PLUGIN_JOB_TYPES:
             # No sources in REST: every host of that platform gets an inferred link to the repository
@@ -1141,7 +1338,7 @@ def build_model(raw, csv_rows=()):
                                    badges=["A"])["id"]]
             for pg in pg_ids:
                 add_link(pg, repo, label)
-        elif "file" in jtl or "nas" in jtl or "objectstorage" in jtl or "unstructured" in jtl:
+        elif not is_copy and ("file" in jtl or "nas" in jtl or "objectstorage" in jtl or "unstructured" in jtl):
             px = sel_proxies or proxies_by_type.get("GeneralPurposeProxy", [])
             for p in px:
                 add_link(p, repo, label, "data" if sel_proxies else "auto")
@@ -1166,23 +1363,54 @@ def build_model(raw, csv_rows=()):
                 if sr in nodes:
                     add_link(sr, repo, label, "copy")
 
-    # Plug-in jobs (Proxmox VE, Nutanix AHV) that /jobs does not return: list them from their backups.
-    # Their state, sources and objects are not in /backups.
+    # Plug-in jobs (Nutanix AHV, Proxmox VE, HPE Morpheus VME) that /jobs does not return: list them from
+    # their backups (by job type or platform ID). Their state and sources are not in /backups.
     job_ids = {j.get("id") for j in jobs}
     plugin_jobs = {}
     for b in raw.get("backups") or []:
         jid = b.get("jobId")
-        if jid and jid not in job_ids and _lc(b.get("jobType")) in PLUGIN_JOB_TYPES:
-            pj = plugin_jobs.setdefault(jid, {"name": b.get("name"), "type": b.get("jobType"), "repo": None})
+        plat = PLUGIN_JOB_TYPES.get(_lc(b.get("jobType"))) or PLUGIN_PLATFORM_IDS.get(b.get("platformId"))
+        if jid and jid not in job_ids and plat:
+            pj = plugin_jobs.setdefault(jid, {"name": b.get("name"), "type": PLUGIN_JOB_LABELS[plat], "platform": plat, "repo": None})
             if not pj["repo"] and b.get("repositoryId") in nodes:
                 pj["repo"] = b["repositoryId"]
-    for pj in plugin_jobs.values():
-        job_rows.append({"name": pj["name"], "type": job_type_label(pj), "disabled": None,
+    # Their objects: the backed-up objects named in the files of their backups
+    obj_names = {o.get("id"): o for o in raw.get("backupObjects") or [] if o.get("id")}
+    backup_ids_of = {}
+    for b in raw.get("backups") or []:
+        backup_ids_of.setdefault(b.get("jobId"), []).append(b.get("id"))
+    for jid, pj in plugin_jobs.items():
+        seen, objs = set(), []
+        for bid in backup_ids_of.get(jid, []):
+            for f in (raw.get("backupFiles") or {}).get(bid) or []:
+                for oid in f.get("objectIds") or []:
+                    o = obj_names.get(oid) or {}
+                    if o.get("name") and o["name"] not in seen:
+                        seen.add(o["name"])
+                        objs.append({"name": o["name"], "type": "Virtual Machine" if o.get("type") == "VM" else o.get("type") or "",
+                                     "location": "", "size": "", "excluded": False})
+        job_rows.append({"name": pj["name"], "type": pj["type"], "disabled": None,
                          "repository": (nodes.get(pj["repo"]) or {}).get("name"),
-                         "sources": [], "proxies": "—", "objects": []})
-        for h in [n["id"] for n in nodes.values() if n["kind"] == "ext_host" and n["details"].get("Platform") == PLUGIN_JOB_TYPES[_lc(pj["type"])]]:
+                         "sources": [], "proxies": "—", "objects": sorted(objs, key=lambda x: x["name"]),
+                         **last_run(jid)})
+        for h in [n["id"] for n in nodes.values() if n["kind"] == "ext_host" and n["details"].get("Platform") == pj["platform"]]:
             if pj["repo"] in nodes:
                 add_link(h, pj["repo"], pj["name"], "inferred")
+
+    # Configuration backup: listed, and its target shown on the backup server (the diagram has no links
+    # from the backup server). The REST API does not return the job name; VBR names it "Backup Configuration Job"
+    cb = raw.get("configBackup")
+    if isinstance(cb, dict) and cb:
+        rid = cb.get("backupRepositoryId")
+        cb_disabled = cb.get("isEnabled") is False
+        if rid in nodes:
+            nodes["vbr"]["details"]["Config backup target"] = nodes[rid]["name"]
+        enc = (cb.get("encryption") or {}).get("isEnabled")
+        if isinstance(enc, bool):
+            nodes["vbr"]["details"]["Config backup encrypted"] = "Yes" if enc else "No"
+        job_rows.append({"name": "Backup Configuration Job", "type": "Configuration backup", "disabled": cb_disabled,
+                         "repository": (nodes.get(rid) or {}).get("name"), "sources": [vbr_name],
+                         "proxies": "—", "objects": [], **last_run("configBackup")})
 
     # Agent backups from /backups, only when /jobs has no agent jobs (older API versions). Otherwise
     # these are backups without a job (imported or orphaned), which PowerShell does not show either.
@@ -1287,6 +1515,23 @@ def build_model(raw, csv_rows=()):
     for key, err in (raw.get("_errors") or {}).items():
         warnings.append(f"{key}: {err}")
 
+    # Backups, as the VBR console's Backups view lists them (snapshots and backups without a job included)
+    job_name = {j.get("id"): j.get("name") for j in jobs}
+    job_name.update({jid: pj["name"] for jid, pj in plugin_jobs.items()})
+    backup_rows = []
+    for b in raw.get("backups") or []:
+        vms = per_backup.get(b.get("id"), {})
+        repo_id = b.get("repositoryId")
+        backup_rows.append({
+            "name": b.get("name"), "job": job_name.get(backup_job_id(b, job_ids_by_name, job_name)),
+            "created": _ts(b.get("creationTime")),
+            "repository": b.get("repositoryName") or (nodes.get(repo_id) or {}).get("name"),
+            "platform": backup_platform(b.get("platformName"), b.get("platformId"), b.get("jobType")),
+            **(backup_totals(vms) if vms else {}),
+            "objects": [{"name": v["name"], **backup_totals({k: v})}
+                        for k, v in sorted(vms.items(), key=lambda kv: (_lc(kv[1]["name"]), kv[0]))]})
+    backup_rows.sort(key=lambda x: (_lc(x["name"]), x["repository"] or ""))
+
     return {
         "generatedAt": dt.datetime.now().isoformat(timespec="seconds"),
         "vbr": {"name": vbr_name, "base": meta.get("base"), "apiVersion": meta.get("apiVersion"),
@@ -1294,6 +1539,7 @@ def build_model(raw, csv_rows=()):
         "nodes": list(nodes.values()),
         "links": list(links.values()),
         "jobs": job_rows,
+        "backups": backup_rows,
         "warnings": warnings,
     }
 
