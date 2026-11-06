@@ -792,7 +792,9 @@ foreach ($x in $tapeJobs) {
     $tt = "$($x.Type)"
     $type = switch -Regex ($tt) { '^BackupToTape$' { "Backup to tape" } '^FileToTape$' { "File to tape" } default { "Tape ($tt)" } }
     $srcs = @(@($x.Object) | Where-Object { $_ } | ForEach-Object { "$(Get-Prop $_ @('Name', 'Path'))" } | Where-Object { $_ })
-    $JobRows.Add([ordered]@{ name = $x.Name; type = $type; disabled = ((Get-Prop $x @("Enabled", "JobEnabled")) -eq $false)
+    # Enabled is False both for a disabled tape job and for one without a schedule (console: <Disabled> or
+    # <Not scheduled>), so False leaves the state unknown (footnote tapeState)
+    $JobRows.Add([ordered]@{ name = $x.Name; type = $type; disabled = $(if ((Get-Prop $x @("Enabled", "JobEnabled")) -eq $true) { $false } else { $null })
         repository = "$(Get-Prop $x @('Target.Name', 'Target'))"; sources = $srcs; proxies = "—"
         objects = @($srcs | ForEach-Object { New-JobObject $_ $(if ($tt -match "File") { "File share" } else { "Job" }) }) })
 }
@@ -1065,6 +1067,7 @@ foreach ($r in $JobRows) {
     $na = [ordered]@{}
     if ($r.type -match "^(Backup|File) to tape$" -or $r.type -match "^Tape \(") {
         $na["retention"] = "tapeMediaPool"; $na["encrypted"] = "tapeMediaPool"
+        if ($null -eq $r.disabled) { $na["disabled"] = "tapeState" }
         if (-not $r.lastRun) { $na["lastRun"] = "tapeLastRun" }
     } elseif ($r.type -eq "Configuration backup" -and -not $r.lastRun) {
         $na["lastRun"] = "configLastRun"; $na["lastResult"] = "configLastRun"

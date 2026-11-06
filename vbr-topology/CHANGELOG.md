@@ -119,6 +119,9 @@ Current as of v1.10.0 (checked on VBR v13.1, REST API 1.3-rev2).
   not in the report yet is added from the job itself (as object storage when it is an archive repository).
 - PowerShell: file backup copy jobs show their source job and the copy link: `Get-VBRNASBackupCopyJob`
   gives the source job's ID only, in `LinkedJobIds`.
+- PowerShell: a tape job whose `Enabled` flag is off no longer shows as disabled. `Get-VBRTapeJob` uses
+  the same flag for a disabled job and for one without a schedule (the console shows `<Disabled>` or
+  `<Not scheduled>`), so its state shows "n/a" with a note.
 
 ## v1.10.0 (2026-11-05)
 
