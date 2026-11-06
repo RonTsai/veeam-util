@@ -824,9 +824,10 @@ foreach ($x in $cfgJobs) {
 # ShortTermRetentionType Daily / Monthly / Yearly), so several names are tried, the job's own cmdlet first,
 # then its Get-VBRJob object. Missing values stay empty.
 function Get-RetentionText($x) {
-    # File share jobs keep their retention in NasBackupRetentionPolicy; their BackupStorageOptions holds an unused default.
-    # A file backup copy job without custom retention carries the source job's value there.
-    $nrp = Get-Prop $x @("Options.NasBackupRetentionPolicy", "NasBackupRetentionPolicy")
+    # File share jobs (JobType NasBackup / NasBackupCopy) keep their retention in NasBackupRetentionPolicy; their
+    # BackupStorageOptions holds an unused default. A file backup copy job without custom retention carries the source
+    # job's value there. Every other Get-VBRJob job has NasBackupRetentionPolicy too, with an unused 28-day default.
+    $nrp = $(if ("$(Get-Prop $x @('JobType'))" -match '^Nas') { Get-Prop $x @("Options.NasBackupRetentionPolicy", "NasBackupRetentionPolicy") })
     $bso = Get-Prop $x @("Options.BackupStorageOptions", "BackupStorageOptions")
     if ($nrp -and (Get-Prop $nrp @("ShortTermRetention"))) {
         $n = Get-Prop $nrp @("ShortTermRetention")

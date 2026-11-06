@@ -102,6 +102,8 @@ $J8.Info | Add-Member TargetHostId (gid "hvc")
 function bso($job, $type, $n, $enc) {
     $job.Options | Add-Member BackupStorageOptions ([pscustomobject]@{ RetentionType = $type; RetainCycles = $(if ($type -eq "Cycles") { $n } else { 7 })
         RetainDaysToKeep = $(if ($type -eq "Days") { $n } else { 7 }); StorageEncryptionEnabled = $enc })
+    # As on v13: every job has an unused file share retention default
+    $job.Options | Add-Member NasBackupRetentionPolicy ([pscustomobject]@{ ShortTermRetention = 28; ShortTermRetentionUnit = "Day" })
 }
 bso $J1 "Cycles" 14 $true; bso $J2 "Days" 7 $false; bso $J3 "Days" 30 $false; bso $J7 "Cycles" 7 $false; bso $J8 "Cycles" 7 $false
 # Last sessions (FindLastSession() on Get-VBRJob objects; session cmdlets for the others), as in sample_raw.json
@@ -174,7 +176,7 @@ function Get-VBREntraIDLogsBackupJob { New-Obj @{ Id = (gid "e2"); Name = "Entra
     ShortTermRetentionPeriod = 28; ShortTermRetentionType = "Daily"; StorageOptions = [pscustomobject]@{ EncryptionEnabled = $false } } }
 function Get-VBRNASBackupCopyJob {
     New-Obj @{ Id = (gid "n4"); Name = "NAS-Shares-Copy"; JobEnabled = $true; BackupJob = [pscustomobject]@{ Id = (gid "n1"); Name = "NAS-Shares" }
-        TargetRepository = $global:R4
+        TargetRepository = $global:R4; JobType = "NasBackupCopy"
         # As on v13: the retention is in NasBackupRetentionPolicy, BackupStorageOptions keeps an unused 7-day default
         Options = [pscustomobject]@{
             NasBackupRetentionPolicy = [pscustomobject]@{ UseSpecificRetentionPolicy = $false; ShortTermRetention = 28; ShortTermRetentionUnit = "Day" }
