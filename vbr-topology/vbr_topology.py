@@ -1257,10 +1257,12 @@ def build_model(raw, csv_rows=()):
     job_state.update({jid: v for jid, v in (raw.get("lastSessions") or {}).items() if jid not in job_state})
 
     def last_run(jid, job_type=""):
-        # As in the console: no result without a run time, and none for policies the agent manages itself
+        # As in the console: no result without a run time, and N/A for policies the agent manages itself
         st = job_state.get(jid) or {}
         res = st.get("lastResult")
-        keep = st.get("lastRun") and res not in (None, "None") and "ManagedByAgent" not in job_type
+        if "ManagedByAgent" in job_type:
+            return {"lastRun": st.get("lastRun"), "lastResult": "N/A"}
+        keep = st.get("lastRun") and res not in (None, "None")
         return {"lastRun": st.get("lastRun"), "lastResult": res if keep else None}
     replica_targets = []   # (proxies or source hosts, destination host, its vCenter, label): linked once ESXi hosts are known
     for j in jobs:
@@ -1417,6 +1419,9 @@ def build_model(raw, csv_rows=()):
         job_rows.append({"name": pj["name"], "type": pj["type"], "disabled": None,
                          "repository": (nodes.get(pj["repo"]) or {}).get("name"),
                          "sources": [], "proxies": "—", "objects": sorted(objs, key=lambda x: x["name"]),
+                         # Cells the REST API cannot fill: "n/a" with a footnote (texts: note_<code> in template.html I18N)
+                         "unavailable": {"disabled": "pluginSettings", "sources": "pluginSettings", "retention": "pluginSettings",
+                                         "encrypted": "pluginSettings"},
                          **last_run(jid)})
         for h in [n["id"] for n in nodes.values() if n["kind"] == "ext_host" and n["details"].get("Platform") == pj["platform"]]:
             if pj["repo"] in nodes:

@@ -45,6 +45,8 @@
   .caret { display:inline-block; width:16px; color:var(--mute); }
   .count { color:var(--mute); font-size:12px; margin-left:6px; }
   .hint { color:var(--mute); font-size:13px; margin:-4px 0 8px; }
+  .na { color:var(--mute); font-style:italic; } .na sup { font-style:normal; margin-left:1px; }
+  .notes { color:var(--mute); font-size:12px; margin:6px 0 0; } .notes ol { margin:2px 0 0; padding-left:20px; }
   table.jtab tr.objs > td { background:#fafbfb; padding:6px 10px 12px 36px; }
   table.jtab tr.objs table { width:auto; min-width:60%; }
   #jobTable tr.objs tr.ex td { color:#a3acb3; text-decoration:line-through; }
@@ -78,6 +80,7 @@
   <h2 data-i18n="jobsTitle"></h2>
   <p class="hint" data-i18n="objHint"></p>
   <table id="jobTable" class="jtab"></table>
+  <div id="jobNotes" class="notes"></div>
   <div id="backupSection" style="display:none">
     <h2 data-i18n="backupsTitle"></h2>
     <p class="hint" data-i18n="backupsHint"></p>
@@ -115,6 +118,12 @@ const I18N = {
     thJob: "Job", thType: "Type", thSource: "Sources", thProxy: "Proxy", thRepo: "Repository", thState: "State",
     thPoints: "Restore points", thLast: "Last backup", thDisk: "On disk",
     thLastRun: "Last run", thLastResult: "Last result", thRetention: "Retention", thEncryption: "Encryption", yes: "Yes", no: "No",
+    notAvailable: "n/a", jobNotesTitle: "Notes",
+    note_tapeLastRun: "PowerShell gives no run time for tape jobs: Get-VBRTapeJob returns only the last result.",
+    note_configLastRun: "PowerShell gives no run time for the configuration backup: Get-VBRConfigurationBackupJob returns only the last result.",
+    note_entraLastRun: "VBR v13.1 has no PowerShell session cmdlet for Entra ID tenant backups, so their last run and result cannot be read.",
+    note_pluginSettings: "The REST API does not list plug-in platform jobs (Nutanix AHV, Proxmox VE, HPE Morpheus VME) in /jobs. They are found through their backups, which carry no state, sources, retention or encryption. The PowerShell collector reads these settings.",
+    note_tapeMediaPool: "Tape jobs keep their retention and encryption on the media pool, which the report does not read.",
     backupsTitle: "Backups", backupsHint: "As the VBR console's Backups view lists them, including storage snapshots and backups whose job no longer exists. Click a backup to see its VMs.",
     thBackup: "Backup", thPlatform: "Platform", thCreated: "Created",
     enabled: "Enabled", disabled: "Disabled",
@@ -142,6 +151,12 @@ const I18N = {
     thJob: "Job", thType: "類型", thSource: "來源", thProxy: "Proxy", thRepo: "Repository", thState: "狀態",
     thPoints: "還原點", thLast: "最新備份", thDisk: "佔用空間",
     thLastRun: "上次執行", thLastResult: "上次結果", thRetention: "保留設定", thEncryption: "加密", yes: "是", no: "否",
+    notAvailable: "n/a", jobNotesTitle: "附註",
+    note_tapeLastRun: "PowerShell 讀不到磁帶 job 的執行時間：Get-VBRTapeJob 只回傳上次結果。",
+    note_configLastRun: "PowerShell 讀不到組態備份的執行時間：Get-VBRConfigurationBackupJob 只回傳上次結果。",
+    note_entraLastRun: "VBR v13.1 沒有 Entra ID tenant backup 的 PowerShell session cmdlet，所以讀不到上次執行時間和結果。",
+    note_pluginSettings: "REST API 的 /jobs 不列出 plug-in 平台的 job（Nutanix AHV、Proxmox VE、HPE Morpheus VME）。這些 job 是從備份找到的，備份不含狀態、來源、保留設定和加密。PowerShell collector 讀得到這些設定。",
+    note_tapeMediaPool: "磁帶 job 的保留設定和加密設在 media pool 上，報告沒有讀取 media pool。",
     backupsTitle: "Backups", backupsHint: "與 VBR 主控台的 Backups 畫面相同，包含儲存快照，以及 job 已不存在的備份。點一下備份可看各台 VM。",
     thBackup: "備份", thPlatform: "平台", thCreated: "建立時間",
     enabled: "Enabled", disabled: "Disabled",
@@ -614,22 +629,32 @@ function tables() {
   // Jobs with protected objects expand on click (see toggleJob)
   // Size on disk in bytes -> GB / TB
   const fmtBytes = v => v == null ? "—" : v >= 1024 ** 4 ? (v / 1024 ** 4).toFixed(1) + " TB" : (v / 1024 ** 3).toFixed(1) + " GB";
+  // Cells a collector cannot fill (j.unavailable: field -> note code) show "n/a" with a footnote number
+  const noteNums = [];
+  const na = (j, f, text) => {
+    const code = (j.unavailable || {})[f];
+    if (!code) return esc(text);
+    if (!noteNums.includes(code)) noteNums.push(code);
+    return `<span class="na">${esc(t("notAvailable"))}<sup>${noteNums.indexOf(code) + 1}</sup></span>`;
+  };
   document.getElementById("jobTable").innerHTML = th(["thJob", "thType", "thSource", "thProxy", "thRepo", "thRetention", "thEncryption", "thLastRun", "thLastResult", "thState"]) +
     (MODEL.jobs || []).map((j, i) => {
       const objs = j.objects || [], has = objs.length > 0;
       const row = `<tr class="job${has ? " has" : ""}" data-i="${i}"><td><span class="caret">${has ? "▸" : ""}</span>${esc(j.name)}${
         // count included objects only; File / Tag masks are filters, not objects
         has ? `<span class="count">(${objs.filter(o => !o.excluded && !/ mask$/.test(o.type)).length})</span>` : ""}</td><td>${esc(j.type)}</td>
-        <td>${esc((j.sources || []).join(", "))}</td><td>${esc(j.proxies)}</td><td>${esc(j.repository)}</td>
-        <td class="nowrap">${esc(j.retention ? td(j.retention) : "—")}</td><td>${esc(j.encrypted == null ? "—" : t(j.encrypted ? "yes" : "no"))}</td>
-        <td class="nowrap">${esc(j.lastRun ?? "—")}</td><td class="result ${esc((j.lastResult || "").toLowerCase())}">${esc(j.lastResult ?? "—")}</td>
-        <td>${esc((j.disabled == null ? "—" : t(j.disabled ? "disabled" : "enabled")))}</td></tr>`;
+        <td>${na(j, "sources", (j.sources || []).join(", "))}</td><td>${esc(j.proxies)}</td><td>${esc(j.repository)}</td>
+        <td class="nowrap">${na(j, "retention", j.retention ? td(j.retention) : "—")}</td><td>${na(j, "encrypted", j.encrypted == null ? "—" : t(j.encrypted ? "yes" : "no"))}</td>
+        <td class="nowrap">${na(j, "lastRun", j.lastRun ?? "—")}</td><td class="result ${esc((j.lastResult || "").toLowerCase())}">${na(j, "lastResult", j.lastResult ?? "—")}</td>
+        <td>${na(j, "disabled", j.disabled == null ? "—" : t(j.disabled ? "disabled" : "enabled"))}</td></tr>`;
       const sub = has ? `<tr class="objs" data-for="${i}" hidden><td colspan="10"><table>${
         th(["objType", "objName", "objLocation", "objSize", "objMode"])}${objs.map(o => `<tr class="${o.excluded ? "ex" : ""}">
         <td>${esc(td(o.type))}</td><td>${esc(o.name)}</td><td>${esc(o.location)}</td><td>${esc(o.size)}</td>
         <td>${esc(t(o.excluded ? "objExclude" : "objInclude"))}</td></tr>`).join("")}</table></td></tr>` : "";
       return row + sub;
     }).join("");
+  document.getElementById("jobNotes").innerHTML = noteNums.length ?
+    `${esc(t("jobNotesTitle"))}<ol>${noteNums.map(c => `<li>${esc(t("note_" + c))}</li>`).join("")}</ol>` : "";
   document.querySelectorAll("#jobTable tr.job.has").forEach(tr => tr.onclick = () => toggleJob(tr));
   showSelJob();
   // Backups, as the VBR console's Backups view lists them; each expands to its VMs

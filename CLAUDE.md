@@ -36,8 +36,10 @@ The maintainer's personal working rules and lab notes are in `CLAUDE.local.md` (
     (`ext_host`: plug-in platforms such as Proxmox VE; PowerShell only, the REST API does not return them)
   - `links[]`: `source, target, kind (data | auto | copy | inferred), jobs`
   - `jobs[]`: `name, type, disabled, repository, sources, proxies, objects`, optionally `lastRun, lastResult,
-    retention, encrypted` (`lastRun`: `yyyy-MM-dd HH:mm`; `lastResult`: `Success | Warning | Failed`;
-    `retention`: `7 days`, `14 restore points`, `1 year`; `encrypted`: bool)
+    retention, encrypted, unavailable` (`lastRun`: `yyyy-MM-dd HH:mm`; `lastResult`: `Success | Warning | Failed`,
+    `N/A` for policies the agent manages; `retention`: `7 days`, `14 restore points`, `1 year`; `encrypted`: bool;
+    `unavailable`: `{field: note code}` for cells the collector cannot read, shown as "n/a" with the footnote
+    `note_<code>` from `template.html`'s `I18N`)
   - `backups[]`: `name, job, created, repository, platform`, optionally `restorePoints, lastBackup, onDisk`,
     and `objects[]` (`name`, optionally `restorePoints, lastBackup, onDisk`), as the VBR console's Backups view
     (`created` / `lastBackup`: `yyyy-MM-dd HH:mm`; `onDisk`: bytes)
@@ -93,7 +95,7 @@ Copy-Item ./test/out_ps/topology.html ./docs/example.html
 ```
 
 - `report-en.png`: the diagram SVG only, at 2x (as the report's Download PNG).
-- `report-jobs-en.png`: the Jobs heading, hint and table with `VMware-Prod-Daily` expanded, at 2x.
+- `report-jobs-en.png`: the Jobs heading, hint, table (with `VMware-Prod-Daily` expanded) and notes, at 2x.
 
 To take them, copy the report to a scratch folder, append a script that keeps only that part of the
 page (and clicks the job), then use headless Chrome:

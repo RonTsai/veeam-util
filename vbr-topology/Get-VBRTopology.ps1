@@ -1037,9 +1037,23 @@ foreach ($r in $JobRows) {
     $jid = $(if ($r.type -eq "Configuration backup") { "cfg" } else { "$($idByName[$r.name])" })
     $ls = $lastByJob[$jid]
     $res = $(if ($ls) { $ls.Result } else { $resultByJob[$jid] })
-    # As in the console: no result without a run time, and none for policies the agent manages itself (N/A)
+    # As in the console: no result without a run time, and N/A for policies the agent manages itself
     $r["lastRun"] = $(if ($ls) { & $fmtTime $ls.Time } else { $null })
-    $r["lastResult"] = $(if ($ls -and $res -and $res -ne "None" -and $r.type -notmatch "ManagedByAgent") { $res } else { $null })
+    $r["lastResult"] = $(if ($r.type -match "ManagedByAgent") { "N/A" } elseif ($ls -and $res -and $res -ne "None") { $res } else { $null })
+}
+
+# Cells PowerShell cannot fill: the report shows "n/a" with a footnote (texts: note_<code> in template.html I18N)
+foreach ($r in $JobRows) {
+    $na = [ordered]@{}
+    if ($r.type -match "^(Backup|File) to tape$" -or $r.type -match "^Tape \(") {
+        $na["retention"] = "tapeMediaPool"; $na["encrypted"] = "tapeMediaPool"
+        if (-not $r.lastRun) { $na["lastRun"] = "tapeLastRun" }
+    } elseif ($r.type -eq "Configuration backup" -and -not $r.lastRun) {
+        $na["lastRun"] = "configLastRun"; $na["lastResult"] = "configLastRun"
+    } elseif ($r.type -eq "Entra ID backup" -and -not $r.lastRun) {
+        $na["lastRun"] = "entraLastRun"; $na["lastResult"] = "entraLastRun"
+    }
+    if ($na.Count) { $r["unavailable"] = $na }
 }
 
 # Re-point links to SOBR extents at the SOBR itself

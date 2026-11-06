@@ -28,8 +28,8 @@ Current as of v1.10.0 (checked on VBR v13.1, REST API 1.3-rev2).
 - Backup copies from an Application Backup Repository report a size on disk of 0.
 - Without PowerCLI or `--vcenter-user`, components are matched to hosts by VM name only. Proxies
   registered by IP, and VMs whose name differs from their hostname, show as "Physical / unknown host".
-- As in the VBR console, a job shows no last result without a last run time, and none (N/A) for agent
-  policies the agent manages itself.
+- As in the VBR console, a job shows no last result without a last run time, and N/A for agent policies
+  the agent manages itself.
 - Retention is the job's short-term retention only (no GFS). Replicas, CDP policies, SureBackup and tape
   jobs show no encryption.
 
@@ -103,6 +103,13 @@ Current as of v1.10.0 (checked on VBR v13.1, REST API 1.3-rev2).
   cmdlets (file backup copy jobs: `Options.NasBackupRetentionPolicy`, which holds the source job's
   retention unless the copy has its own); Python reads `retentionPolicy` and `encryption` from `/api/v1/jobs` (replicas:
   `restorePointsToKeep`) and `/api/v1/configBackup`.
+- Both: Jobs table cells that the collector cannot read show "n/a" with a numbered note under the table that
+  gives the reason (PowerShell: last run of tape jobs, the configuration backup and Entra ID tenant backups,
+  tape retention and encryption; Python: state, sources, retention and encryption of plug-in platform jobs).
+  The model gains an optional `unavailable` map per job.
+
+### Changed
+- Both: policies that the agent manages itself show "N/A" as their last result, as the VBR console does.
 
 ## v1.10.0 (2026-11-05)
 
