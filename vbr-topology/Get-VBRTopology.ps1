@@ -648,9 +648,23 @@ foreach ($j in $jobs) {
     }
 }
 
-# Agent jobs (v12+ cmdlet)
+# A job's repository that no repository cmdlet returned is added from the job itself: Veeam Vault archive
+# repositories are in neither Get-VBRObjectStorageRepository nor Get-VBRArchiveObjectStorageRepository
+function Add-JobRepoNode($r) {
+    $id = Get-IdStr $r
+    if (-not $id -or (Test-Node $id) -or -not "$(Get-Prop $r @('Name'))") { return $id }
+    $t = "$(Get-Prop $r @('Type'))"
+    if ($t -match $objectTypes -or "$(Get-Prop $r @('Group'))" -match "Archive") {
+        Add-Node $id "object" $r.Name "Object storage · $t" @() @{ Type = $t; Description = $r.Description } | Out-Null
+    } else {
+        Add-Node $id "repo" $r.Name "Repository · $t" @() @{ Type = $t; Description = $r.Description } | Out-Null
+    }
+    return $id
+}
+
+# Agent jobs (v12+ cmdlet). Policies the agent manages keep their repository in DestinationOptions
 foreach ($a in $agentJobs) {
-    $repo = Get-IdStr (Get-Prop $a @("BackupRepository", "TargetRepository"))
+    $repo = Add-JobRepoNode (Get-Prop $a @("BackupRepository", "TargetRepository", "DestinationOptions.BackupRepository"))
     $enabled = Get-Prop $a @("JobEnabled", "IsEnabled")
     $label = $a.Name + $(if ($enabled -eq $false) { " (disabled)" } else { "" })
     $pgIds = @(@($a.BackupObject) | ForEach-Object { Get-IdStr (Get-Prop $_ @("Container", "ProtectionGroup")); Get-IdStr $_ } |
@@ -694,7 +708,9 @@ $entraLogIds = & $idSet $entraLogJobs
 $nasCopyIds = & $idSet $nasCopyJobs
 $nasRepo = @{}
 foreach ($n in @($nasJobs) + @($entraLogJobs) + @($nasCopyJobs)) {
-    if ($n) { $nasRepo[(Get-IdStr $n)] = Get-IdStr (Get-Prop $n @("ShortTermBackupRepository", "BackupRepository", "StorageRepository", "TargetRepository", "Repository")) }
+    # File backup copy jobs (Get-VBRNASBackupCopyJob) only have TargetRepositoryId
+    if ($n) { $nasRepo[(Get-IdStr $n)] = Add-JobRepoNode (Get-Prop $n @("ShortTermBackupRepository", "BackupRepository", "StorageRepository",
+                                                                          "TargetRepository", "TargetRepositoryId", "Repository")) }
 }
 $nasSeen = New-Object System.Collections.Generic.HashSet[string]
 foreach ($n in @($nasJobs) + @($entraLogJobs) + @($nasCopyJobs)) {

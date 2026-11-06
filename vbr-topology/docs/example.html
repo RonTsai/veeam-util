@@ -93,14 +93,14 @@
 
 <script>
 const MODEL = {
-  "generatedAt": "2026-11-06T15:37:08",
+  "generatedAt": "2026-11-06T16:41:36",
   "lang": "en",
   "vbr": {
     "name": "vbr01.corp.local",
     "base": "vbr01.corp.local",
     "apiVersion": "PowerShell",
     "build": "12.3.1.1139",
-    "collectedAt": "2026-11-06T15:37:08"
+    "collectedAt": "2026-11-06T16:41:36"
   },
   "nodes": [
     {
@@ -124,7 +124,7 @@ const MODEL = {
         "source": "PowerCLI (vcsa01.corp.local)",
         "platform": "vi"
       },
-      "runsOn": "739c35ea-5146-477a-9d38-43fa544b3bbb"
+      "runsOn": "6edc41cc-134e-441a-ac86-769944f26a82"
     },
     {
       "id": "mgmt:em:em01.corp.local",
@@ -147,10 +147,69 @@ const MODEL = {
         "source": "Veeam inventory (vcsa01.corp.local)",
         "platform": "vi"
       },
-      "runsOn": "739c35ea-5146-477a-9d38-43fa544b3bbb"
+      "runsOn": "6edc41cc-134e-441a-ac86-769944f26a82"
     },
     {
-      "id": "28c06631-db63-41bd-8e42-fcf6e0fd090f",
+      "id": "abe5b6c9-77fe-4d7d-af2e-6068574e2758",
+      "kind": "hv_host",
+      "name": "hv01.corp.local",
+      "sub": "Hyper-V host · Source host",
+      "badges": [
+        "M"
+      ],
+      "details": {
+        "Data Mover": "On-host proxy (Veeam Data Mover Service)",
+        "Type": "HvServer",
+        "Status": "Available"
+      }
+    },
+    {
+      "id": "6edc41cc-134e-441a-ac86-769944f26a82",
+      "kind": "vi_host",
+      "name": "esx01.corp.local",
+      "sub": "ESXi 8.0.3 · Source host",
+      "badges": [],
+      "details": {
+        "Status": "Available",
+        "Type": "ESXi",
+        "Product": "VMware ESXi",
+        "Build": "24280767",
+        "Version": "8.0.3",
+        "Cluster": "Prod-Cluster"
+      },
+      "cluster": {
+        "name": "Prod-Cluster",
+        "vcenter": "vcsa01.corp.local"
+      }
+    },
+    {
+      "id": "21ac3a92-9a54-4335-ace4-dfa2ad14c8f8",
+      "kind": "ext_host",
+      "name": "VMECluster",
+      "sub": "HPE Morpheus VME · Source host",
+      "badges": [],
+      "details": {
+        "Platform": "HPE Morpheus VME",
+        "Platform ID": "2d470d24-b6bb-4fa3-b7ff-f0fc1137ca52",
+        "Type": "ExternalInfrastructureServer",
+        "Status": "Available"
+      }
+    },
+    {
+      "id": "d8391a0e-64f7-4f44-88c6-c2d0f3963a59",
+      "kind": "ext_host",
+      "name": "pve02.corp.local",
+      "sub": "Proxmox VE · Source host",
+      "badges": [],
+      "details": {
+        "Platform": "Proxmox VE",
+        "Platform ID": "01208ee8-47fe-4ea8-8727-5115874da1ad",
+        "Type": "ExternalInfrastructureServer",
+        "Status": "Available"
+      }
+    },
+    {
+      "id": "1d96fe6b-a0bf-4fef-84b1-f69ecc18d01e",
       "kind": "hv_host",
       "name": "hvclu01.corp.local",
       "sub": "Hyper-V cluster · Source host",
@@ -163,75 +222,57 @@ const MODEL = {
       }
     },
     {
-      "id": "f6545893-b5a3-4704-bd7a-b1eafda0530d",
-      "kind": "ext_host",
-      "name": "pve02.corp.local",
-      "sub": "Proxmox VE · Source host",
+      "id": "fcdb4c72-3c0f-4410-9004-55db479abb80",
+      "kind": "vi_host",
+      "name": "vcsa01.corp.local",
+      "sub": "vCenter Server 8.0.3 · Source host",
       "badges": [],
       "details": {
+        "Status": "Available",
+        "Type": "VC",
+        "Product": "VMware vCenter Server",
+        "Build": "24322831",
+        "Version": "8.0.3"
+      }
+    },
+    {
+      "id": "0d0e5c81-e86c-46db-aab1-6893cc16e9b9",
+      "kind": "ext_host",
+      "name": "ahv01.corp.local",
+      "sub": "Nutanix AHV · Source host",
+      "badges": [],
+      "details": {
+        "Platform": "Nutanix AHV",
+        "Platform ID": "799a5a3e-ae1e-4eaf-86eb-8a9acc2670e2",
         "Type": "ExternalInfrastructureServer",
-        "Platform": "Proxmox VE",
-        "Platform ID": "01208ee8-47fe-4ea8-8727-5115874da1ad",
         "Status": "Available"
       }
     },
     {
-      "id": "c5c59512-a76d-40a4-86c8-a92f6f74a8fd",
+      "id": "9bf6522f-c6d8-4568-bfaf-c8042ff40c96",
       "kind": "ext_host",
       "name": "pve01.corp.local",
       "sub": "Proxmox VE · Source host",
       "badges": [],
       "details": {
-        "Type": "ExternalInfrastructureServer",
         "Platform": "Proxmox VE",
         "Platform ID": "01208ee8-47fe-4ea8-8727-5115874da1ad",
-        "Status": "Available"
-      }
-    },
-    {
-      "id": "27eec9f9-77f0-4cf6-bd9f-762c26651a8d",
-      "kind": "ext_host",
-      "name": "VMECluster",
-      "sub": "HPE Morpheus VME · Source host",
-      "badges": [],
-      "details": {
         "Type": "ExternalInfrastructureServer",
-        "Platform": "HPE Morpheus VME",
-        "Platform ID": "2d470d24-b6bb-4fa3-b7ff-f0fc1137ca52",
         "Status": "Available"
       }
     },
     {
-      "id": "739c35ea-5146-477a-9d38-43fa544b3bbb",
-      "kind": "vi_host",
-      "name": "esx01.corp.local",
-      "sub": "ESXi 8.0.3 · Source host",
-      "badges": [],
-      "details": {
-        "Version": "8.0.3",
-        "Type": "ESXi",
-        "Build": "24280767",
-        "Product": "VMware ESXi",
-        "Status": "Available",
-        "Cluster": "Prod-Cluster"
-      },
-      "cluster": {
-        "name": "Prod-Cluster",
-        "vcenter": "vcsa01.corp.local"
-      }
-    },
-    {
-      "id": "b0908db3-53b2-4cd7-9357-a4ee2ab9f745",
+      "id": "8018ef16-b126-490d-8f01-c9fc0882f723",
       "kind": "vi_host",
       "name": "esx02.corp.local",
       "sub": "ESXi 7.0.3 · Source host",
       "badges": [],
       "details": {
-        "Version": "7.0.3",
-        "Type": "ESXi",
-        "Build": "21930508",
-        "Product": "VMware ESXi",
         "Status": "Available",
+        "Type": "ESXi",
+        "Product": "VMware ESXi",
+        "Build": "21930508",
+        "Version": "7.0.3",
         "Cluster": "DR-Cluster"
       },
       "cluster": {
@@ -240,61 +281,20 @@ const MODEL = {
       }
     },
     {
-      "id": "aa346e57-9f78-44d9-be45-fbd9ec595c63",
+      "id": "5089fc0d-381d-4af5-963a-882996a185ee",
       "kind": "ext_host",
       "name": "other01.corp.local",
       "sub": "Plug-in platform · Source host",
       "badges": [],
       "details": {
-        "Type": "ExternalInfrastructureServer",
         "Platform": "Plug-in platform",
         "Platform ID": "00000000-1111-2222-3333-444444444444",
-        "Status": "Available"
-      }
-    },
-    {
-      "id": "13c8f911-f057-41d7-8548-49ee09516a37",
-      "kind": "vi_host",
-      "name": "vcsa01.corp.local",
-      "sub": "vCenter Server 8.0.3 · Source host",
-      "badges": [],
-      "details": {
-        "Version": "8.0.3",
-        "Type": "VC",
-        "Build": "24322831",
-        "Product": "VMware vCenter Server",
-        "Status": "Available"
-      }
-    },
-    {
-      "id": "b4376ff9-a194-4ade-8cf1-7459c950dc77",
-      "kind": "ext_host",
-      "name": "ahv01.corp.local",
-      "sub": "Nutanix AHV · Source host",
-      "badges": [],
-      "details": {
         "Type": "ExternalInfrastructureServer",
-        "Platform": "Nutanix AHV",
-        "Platform ID": "799a5a3e-ae1e-4eaf-86eb-8a9acc2670e2",
         "Status": "Available"
       }
     },
     {
-      "id": "2d5957c7-3981-4f8e-af63-85096cfdc13e",
-      "kind": "hv_host",
-      "name": "hv01.corp.local",
-      "sub": "Hyper-V host · Source host",
-      "badges": [
-        "M"
-      ],
-      "details": {
-        "Type": "HvServer",
-        "Data Mover": "On-host proxy (Veeam Data Mover Service)",
-        "Status": "Available"
-      }
-    },
-    {
-      "id": "798b49ed-36f3-4129-91bd-de481e599b4c",
+      "id": "24830935-f89e-49bf-87d3-99b74f2d8190",
       "kind": "proxy",
       "name": "vbrpx01.corp.local",
       "sub": "VMware backup proxy",
@@ -302,11 +302,11 @@ const MODEL = {
         "M"
       ],
       "details": {
-        "Max tasks": "8",
-        "Type": "ViProxy",
-        "Transport mode": "HotAdd",
         "Host": "vbrpx01.corp.local",
+        "Type": "ViProxy",
         "Disabled": "False",
+        "Transport mode": "HotAdd",
+        "Max tasks": "8",
         "Runs on": "esx01.corp.local (VM: vbrpx01)",
         "Matched by": "Veeam inventory (vcsa01.corp.local)"
       },
@@ -316,10 +316,10 @@ const MODEL = {
         "source": "Veeam inventory (vcsa01.corp.local)",
         "platform": "vi"
       },
-      "runsOn": "739c35ea-5146-477a-9d38-43fa544b3bbb"
+      "runsOn": "6edc41cc-134e-441a-ac86-769944f26a82"
     },
     {
-      "id": "9c49206f-4788-4cdd-8444-8f89d84eb769",
+      "id": "6c6ddc0e-850f-47c6-a505-dca4c89a23d7",
       "kind": "proxy",
       "name": "vbrpx02.corp.local",
       "sub": "VMware backup proxy",
@@ -327,11 +327,11 @@ const MODEL = {
         "M"
       ],
       "details": {
-        "Max tasks": "4",
-        "Type": "ViProxy",
-        "Transport mode": "Network",
         "Host": "vbrpx02.corp.local",
+        "Type": "ViProxy",
         "Disabled": "False",
+        "Transport mode": "Network",
+        "Max tasks": "4",
         "Runs on": "esx02.corp.local (VM: vbrpx02.corp.local)",
         "Matched by": "Veeam inventory (vcsa01.corp.local)"
       },
@@ -341,10 +341,10 @@ const MODEL = {
         "source": "Veeam inventory (vcsa01.corp.local)",
         "platform": "vi"
       },
-      "runsOn": "b0908db3-53b2-4cd7-9357-a4ee2ab9f745"
+      "runsOn": "8018ef16-b126-490d-8f01-c9fc0882f723"
     },
     {
-      "id": "gp:a659dbbb-af30-49aa-b44d-b98278671e99",
+      "id": "gp:5ef294cb-83e6-4e30-87c1-b15094c5d030",
       "kind": "proxy",
       "name": "repo01.corp.local",
       "sub": "General-purpose proxy",
@@ -352,8 +352,8 @@ const MODEL = {
         "M"
       ],
       "details": {
-        "Type": "GeneralPurposeProxy",
         "Max tasks": "4",
+        "Type": "GeneralPurposeProxy",
         "Runs on": "Unknown / physical"
       },
       "placement": {
@@ -362,7 +362,7 @@ const MODEL = {
       }
     },
     {
-      "id": "cdp:4081ff4d-acbd-4b2f-9422-afaaa1ea19ee",
+      "id": "cdp:651e206e-6413-4f4a-bdf3-bc50b4ec9356",
       "kind": "proxy",
       "name": "vbrpx02.corp.local",
       "sub": "CDP proxy",
@@ -370,11 +370,11 @@ const MODEL = {
         "M"
       ],
       "details": {
-        "Disabled": "False",
-        "Type": "CdpProxy",
-        "Cache path": "/var/lib/veeam/veeam-cdp",
-        "Host": "vbrpx02.corp.local",
         "Cache size": "100 GB",
+        "Host": "vbrpx02.corp.local",
+        "Type": "CdpProxy",
+        "Disabled": "False",
+        "Cache path": "/var/lib/veeam/veeam-cdp",
         "Runs on": "esx02.corp.local (VM: vbrpx02.corp.local)",
         "Matched by": "Veeam inventory (vcsa01.corp.local)"
       },
@@ -384,10 +384,10 @@ const MODEL = {
         "source": "Veeam inventory (vcsa01.corp.local)",
         "platform": "vi"
       },
-      "runsOn": "b0908db3-53b2-4cd7-9357-a4ee2ab9f745"
+      "runsOn": "8018ef16-b126-490d-8f01-c9fc0882f723"
     },
     {
-      "id": "8ea63643-d645-4741-9854-b86fd09e38cb",
+      "id": "d7ca30cb-353c-404b-bb17-0d0d7ae3395c",
       "kind": "server",
       "name": "tape01.corp.local",
       "sub": "Tape server",
@@ -404,33 +404,33 @@ const MODEL = {
       }
     },
     {
-      "id": "tapelib:4a6a1615-2c7a-4ce5-8543-80d37eae77b1",
+      "id": "tapelib:e6e79f90-1589-46d7-8ebf-9b730c0f9541",
       "kind": "server",
       "name": "HPE MSL3040",
       "sub": "Tape library · MSL G3 Series",
       "badges": [],
       "details": {
-        "State": "Online",
-        "Type": "Automated",
-        "Drives": "2",
         "Slots": "40",
-        "Tape server": "tape01.corp.local"
+        "Type": "Automated",
+        "Tape server": "tape01.corp.local",
+        "Drives": "2",
+        "State": "Online"
       }
     },
     {
-      "id": "cloud:60cb523e-7026-47e5-99ce-7e977e5ec494",
+      "id": "cloud:261f8c32-e75d-46db-85d4-f64fb12f2647",
       "kind": "repo",
       "name": "cc.provider.example",
       "sub": "Cloud Connect service provider",
       "badges": [],
       "details": {
         "Description": "Offsite backups",
-        "Port": "6180",
-        "Cloud repositories": "Cloud-Repo-01"
+        "Cloud repositories": "Cloud-Repo-01",
+        "Port": "6180"
       }
     },
     {
-      "id": "vlab:e5946839-3ad3-4e0b-be16-4b5a09c07c7d",
+      "id": "vlab:a9ad84e4-abf3-4195-90da-fd1e48a688cf",
       "kind": "server",
       "name": "Lab01",
       "sub": "SureBackup virtual lab",
@@ -445,10 +445,10 @@ const MODEL = {
         "source": "Virtual lab host (VBR)",
         "platform": "vi"
       },
-      "runsOn": "739c35ea-5146-477a-9d38-43fa544b3bbb"
+      "runsOn": "6edc41cc-134e-441a-ac86-769944f26a82"
     },
     {
-      "id": "b88f3c18-50c5-47ff-88f3-1a0f8810bc44",
+      "id": "82295c60-00d4-4147-b2b2-245f604fd9b8",
       "kind": "repo",
       "name": "Repo01-ReFS",
       "sub": "Windows repository",
@@ -456,9 +456,9 @@ const MODEL = {
         "M"
       ],
       "details": {
-        "Type": "WinLocal",
         "Path": "E:\\Backups",
         "Host": "repo01.corp.local",
+        "Type": "WinLocal",
         "Free": "12,000 GB",
         "Capacity": "40,000 GB",
         "Runs on": "Unknown / physical"
@@ -470,7 +470,7 @@ const MODEL = {
       }
     },
     {
-      "id": "cf9bb11f-a640-44f5-acb3-a800754040fb",
+      "id": "eda46fa3-a414-4347-b3ff-52ddbc402e0a",
       "kind": "object",
       "name": "Wasabi-Offsite",
       "sub": "Object storage · WasabiCloud",
@@ -481,7 +481,7 @@ const MODEL = {
       }
     },
     {
-      "id": "922aa2a2-fbce-463d-858b-675ca26f9630",
+      "id": "4f33586b-da4b-4d98-bffa-0e39e9cf825e",
       "kind": "repo",
       "name": "LHR01",
       "sub": "Hardened Linux repository",
@@ -489,9 +489,9 @@ const MODEL = {
         "M"
       ],
       "details": {
-        "Type": "LinuxHardened",
         "Path": "/mnt/veeam",
         "Host": "lhr01.corp.local",
+        "Type": "LinuxHardened",
         "Free": "61,000 GB",
         "Capacity": "100,000 GB",
         "SOBR extent of": "SOBR-Immutable",
@@ -499,17 +499,17 @@ const MODEL = {
         "Matched by": "Veeam inventory (vcsa01.corp.local)"
       },
       "usage": 0.39,
-      "inSobr": "c803aa3f-c188-4dd7-ab5c-34941b0d4d5d",
+      "inSobr": "c3b3456b-62b1-41f1-bf13-a3b471e85539",
       "placement": {
         "host": "esx02.corp.local",
         "vm": "lhr01",
         "source": "Veeam inventory (vcsa01.corp.local)",
         "platform": "vi"
       },
-      "runsOn": "b0908db3-53b2-4cd7-9357-a4ee2ab9f745"
+      "runsOn": "8018ef16-b126-490d-8f01-c9fc0882f723"
     },
     {
-      "id": "b0a7bfc4-105f-44c3-8ad8-0600a393f023",
+      "id": "18d3a2a1-167a-4920-bf61-60f26bbd6c9e",
       "kind": "repo",
       "name": "LHR02",
       "sub": "Hardened Linux repository",
@@ -517,20 +517,20 @@ const MODEL = {
         "M"
       ],
       "details": {
-        "Type": "LinuxHardened",
         "Path": "/mnt/veeam",
         "Host": "lhr02.corp.local",
+        "Type": "LinuxHardened",
         "SOBR extent of": "SOBR-Immutable",
         "Runs on": "Unknown / physical"
       },
-      "inSobr": "c803aa3f-c188-4dd7-ab5c-34941b0d4d5d",
+      "inSobr": "c3b3456b-62b1-41f1-bf13-a3b471e85539",
       "placement": {
         "host": null,
         "note": "Not found in the vSphere / Hyper-V inventory (physical or unmanaged)"
       }
     },
     {
-      "id": "bca8b04e-151d-42e2-9088-2ea8cd9f3b40",
+      "id": "6ffa7dba-1484-46c9-87db-57710fe84168",
       "kind": "repo",
       "name": "Application Backup Repository",
       "sub": "Application Backup Repository",
@@ -538,10 +538,10 @@ const MODEL = {
         "M"
       ],
       "details": {
-        "Type": "ApplicationBackupRepository",
+        "Retention (days)": "2",
         "Path": "veeam-stg-abr01/Application_Backup_Repository",
         "Host": "abr01.corp.local",
-        "Retention (days)": "2",
+        "Type": "ApplicationBackupRepository",
         "Runs on": "Unknown / physical"
       },
       "placement": {
@@ -550,28 +550,28 @@ const MODEL = {
       }
     },
     {
-      "id": "c803aa3f-c188-4dd7-ab5c-34941b0d4d5d",
+      "id": "c3b3456b-62b1-41f1-bf13-a3b471e85539",
       "kind": "sobr",
       "name": "SOBR-Immutable",
       "sub": "Scale-out repository · 2 extents",
       "badges": [],
       "details": {
         "Capacity tier": "Wasabi-Offsite",
-        "Archive tier": "—",
         "Performance tier": "LHR01, LHR02",
+        "Archive tier": "—",
         "Extent hosts": "LHR01 → esx02.corp.local; LHR02 → Unknown"
       },
       "extents": [
-        "922aa2a2-fbce-463d-858b-675ca26f9630",
-        "b0a7bfc4-105f-44c3-8ad8-0600a393f023"
+        "4f33586b-da4b-4d98-bffa-0e39e9cf825e",
+        "18d3a2a1-167a-4920-bf61-60f26bbd6c9e"
       ],
       "capacity": [
-        "cf9bb11f-a640-44f5-acb3-a800754040fb"
+        "eda46fa3-a414-4347-b3ff-52ddbc402e0a"
       ],
       "placeLabel": "Extents: esx02 / Unknown"
     },
     {
-      "id": "74011d8c-ba48-4592-943f-4e07ca525b0c",
+      "id": "6c3b07f3-bbe6-469f-ab41-3e600aad167a",
       "kind": "agent",
       "name": "Physical Windows Servers",
       "sub": "Veeam Agent · IndividualComputers",
@@ -579,12 +579,12 @@ const MODEL = {
         "A"
       ],
       "details": {
-        "Type": "IndividualComputers",
-        "Computers": "3"
+        "Computers": "3",
+        "Type": "IndividualComputers"
       }
     },
     {
-      "id": "14a954a1-2798-4d7f-9e3e-dd176ac71154",
+      "id": "402ae5e2-d8d7-4067-93ab-604940e1c7ff",
       "kind": "agent",
       "name": "Linux AD OU",
       "sub": "Veeam Agent · ADObjects",
@@ -592,12 +592,22 @@ const MODEL = {
         "A"
       ],
       "details": {
-        "Type": "ADObjects",
-        "Computers": "3"
+        "Computers": "3",
+        "Type": "ADObjects"
       }
     },
     {
-      "id": "429351fe-80b9-450a-b941-61fb41ffd177",
+      "id": "526950f1-67ca-4086-b5d3-2abfdefe22f0",
+      "kind": "object",
+      "name": "Vault-Archive",
+      "sub": "Object storage · VeeamVaultAzureArchive",
+      "badges": [],
+      "details": {
+        "Type": "VeeamVaultAzureArchive"
+      }
+    },
+    {
+      "id": "05d4e30d-0631-42ad-8bfd-9a30973a453d",
       "kind": "server",
       "name": "oldsrv.corp.local",
       "sub": "Managed server · Windows",
@@ -614,16 +624,16 @@ const MODEL = {
   ],
   "links": [
     {
-      "source": "c803aa3f-c188-4dd7-ab5c-34941b0d4d5d",
-      "target": "cf9bb11f-a640-44f5-acb3-a800754040fb",
+      "source": "c3b3456b-62b1-41f1-bf13-a3b471e85539",
+      "target": "eda46fa3-a414-4347-b3ff-52ddbc402e0a",
       "kind": "copy",
       "jobs": [
         "Capacity tier offload"
       ]
     },
     {
-      "source": "13c8f911-f057-41d7-8548-49ee09516a37",
-      "target": "798b49ed-36f3-4129-91bd-de481e599b4c",
+      "source": "fcdb4c72-3c0f-4410-9004-55db479abb80",
+      "target": "24830935-f89e-49bf-87d3-99b74f2d8190",
       "kind": "data",
       "jobs": [
         "VMware-Prod-Daily",
@@ -632,8 +642,8 @@ const MODEL = {
       ]
     },
     {
-      "source": "13c8f911-f057-41d7-8548-49ee09516a37",
-      "target": "9c49206f-4788-4cdd-8444-8f89d84eb769",
+      "source": "fcdb4c72-3c0f-4410-9004-55db479abb80",
+      "target": "6c6ddc0e-850f-47c6-a505-dca4c89a23d7",
       "kind": "data",
       "jobs": [
         "VMware-Prod-Daily",
@@ -642,128 +652,136 @@ const MODEL = {
       ]
     },
     {
-      "source": "798b49ed-36f3-4129-91bd-de481e599b4c",
-      "target": "c803aa3f-c188-4dd7-ab5c-34941b0d4d5d",
+      "source": "24830935-f89e-49bf-87d3-99b74f2d8190",
+      "target": "c3b3456b-62b1-41f1-bf13-a3b471e85539",
       "kind": "data",
       "jobs": [
         "VMware-Prod-Daily"
       ]
     },
     {
-      "source": "9c49206f-4788-4cdd-8444-8f89d84eb769",
-      "target": "c803aa3f-c188-4dd7-ab5c-34941b0d4d5d",
+      "source": "6c6ddc0e-850f-47c6-a505-dca4c89a23d7",
+      "target": "c3b3456b-62b1-41f1-bf13-a3b471e85539",
       "kind": "data",
       "jobs": [
         "VMware-Prod-Daily"
       ]
     },
     {
-      "source": "798b49ed-36f3-4129-91bd-de481e599b4c",
-      "target": "b88f3c18-50c5-47ff-88f3-1a0f8810bc44",
+      "source": "24830935-f89e-49bf-87d3-99b74f2d8190",
+      "target": "82295c60-00d4-4147-b2b2-245f604fd9b8",
       "kind": "auto",
       "jobs": [
         "VMware-Dev"
       ]
     },
     {
-      "source": "9c49206f-4788-4cdd-8444-8f89d84eb769",
-      "target": "b88f3c18-50c5-47ff-88f3-1a0f8810bc44",
+      "source": "6c6ddc0e-850f-47c6-a505-dca4c89a23d7",
+      "target": "82295c60-00d4-4147-b2b2-245f604fd9b8",
       "kind": "auto",
       "jobs": [
         "VMware-Dev"
       ]
     },
     {
-      "source": "2d5957c7-3981-4f8e-af63-85096cfdc13e",
-      "target": "b88f3c18-50c5-47ff-88f3-1a0f8810bc44",
+      "source": "abe5b6c9-77fe-4d7d-af2e-6068574e2758",
+      "target": "82295c60-00d4-4147-b2b2-245f604fd9b8",
       "kind": "data",
       "jobs": [
         "HyperV-Daily"
       ]
     },
     {
-      "source": "28c06631-db63-41bd-8e42-fcf6e0fd090f",
-      "target": "b88f3c18-50c5-47ff-88f3-1a0f8810bc44",
+      "source": "1d96fe6b-a0bf-4fef-84b1-f69ecc18d01e",
+      "target": "82295c60-00d4-4147-b2b2-245f604fd9b8",
       "kind": "data",
       "jobs": [
         "HyperV-Daily"
       ]
     },
     {
-      "source": "b4376ff9-a194-4ade-8cf1-7459c950dc77",
-      "target": "b88f3c18-50c5-47ff-88f3-1a0f8810bc44",
+      "source": "0d0e5c81-e86c-46db-aab1-6893cc16e9b9",
+      "target": "82295c60-00d4-4147-b2b2-245f604fd9b8",
       "kind": "auto",
       "jobs": [
         "AHV-Daily"
       ]
     },
     {
-      "source": "f6545893-b5a3-4704-bd7a-b1eafda0530d",
-      "target": "b88f3c18-50c5-47ff-88f3-1a0f8810bc44",
+      "source": "d8391a0e-64f7-4f44-88c6-c2d0f3963a59",
+      "target": "82295c60-00d4-4147-b2b2-245f604fd9b8",
       "kind": "inferred",
       "jobs": [
         "Proxmox-Daily"
       ]
     },
     {
-      "source": "c5c59512-a76d-40a4-86c8-a92f6f74a8fd",
-      "target": "b88f3c18-50c5-47ff-88f3-1a0f8810bc44",
+      "source": "9bf6522f-c6d8-4568-bfaf-c8042ff40c96",
+      "target": "82295c60-00d4-4147-b2b2-245f604fd9b8",
       "kind": "inferred",
       "jobs": [
         "Proxmox-Daily"
       ]
     },
     {
-      "source": "27eec9f9-77f0-4cf6-bd9f-762c26651a8d",
-      "target": "b88f3c18-50c5-47ff-88f3-1a0f8810bc44",
+      "source": "21ac3a92-9a54-4335-ace4-dfa2ad14c8f8",
+      "target": "82295c60-00d4-4147-b2b2-245f604fd9b8",
       "kind": "auto",
       "jobs": [
         "VME-Daily"
       ]
     },
     {
-      "source": "798b49ed-36f3-4129-91bd-de481e599b4c",
-      "target": "b0908db3-53b2-4cd7-9357-a4ee2ab9f745",
+      "source": "24830935-f89e-49bf-87d3-99b74f2d8190",
+      "target": "8018ef16-b126-490d-8f01-c9fc0882f723",
       "kind": "copy",
       "jobs": [
         "VMware-Replica-DR"
       ]
     },
     {
-      "source": "9c49206f-4788-4cdd-8444-8f89d84eb769",
-      "target": "b0908db3-53b2-4cd7-9357-a4ee2ab9f745",
+      "source": "6c6ddc0e-850f-47c6-a505-dca4c89a23d7",
+      "target": "8018ef16-b126-490d-8f01-c9fc0882f723",
       "kind": "copy",
       "jobs": [
         "VMware-Replica-DR"
       ]
     },
     {
-      "source": "2d5957c7-3981-4f8e-af63-85096cfdc13e",
-      "target": "28c06631-db63-41bd-8e42-fcf6e0fd090f",
+      "source": "abe5b6c9-77fe-4d7d-af2e-6068574e2758",
+      "target": "1d96fe6b-a0bf-4fef-84b1-f69ecc18d01e",
       "kind": "copy",
       "jobs": [
         "HyperV-Replica-DR"
       ]
     },
     {
-      "source": "74011d8c-ba48-4592-943f-4e07ca525b0c",
-      "target": "b88f3c18-50c5-47ff-88f3-1a0f8810bc44",
+      "source": "6c3b07f3-bbe6-469f-ab41-3e600aad167a",
+      "target": "82295c60-00d4-4147-b2b2-245f604fd9b8",
       "kind": "data",
       "jobs": [
         "Agent-Windows"
       ]
     },
     {
-      "source": "14a954a1-2798-4d7f-9e3e-dd176ac71154",
-      "target": "c803aa3f-c188-4dd7-ab5c-34941b0d4d5d",
+      "source": "402ae5e2-d8d7-4067-93ab-604940e1c7ff",
+      "target": "c3b3456b-62b1-41f1-bf13-a3b471e85539",
       "kind": "data",
       "jobs": [
         "Agent-Linux"
       ]
     },
     {
-      "source": "b88f3c18-50c5-47ff-88f3-1a0f8810bc44",
-      "target": "cf9bb11f-a640-44f5-acb3-a800754040fb",
+      "source": "402ae5e2-d8d7-4067-93ab-604940e1c7ff",
+      "target": "82295c60-00d4-4147-b2b2-245f604fd9b8",
+      "kind": "data",
+      "jobs": [
+        "Agent-Unix"
+      ]
+    },
+    {
+      "source": "82295c60-00d4-4147-b2b2-245f604fd9b8",
+      "target": "eda46fa3-a414-4347-b3ff-52ddbc402e0a",
       "kind": "copy",
       "jobs": [
         "Copy-to-Wasabi",
@@ -771,16 +789,16 @@ const MODEL = {
       ]
     },
     {
-      "source": "bca8b04e-151d-42e2-9088-2ea8cd9f3b40",
-      "target": "b88f3c18-50c5-47ff-88f3-1a0f8810bc44",
+      "source": "6ffa7dba-1484-46c9-87db-57710fe84168",
+      "target": "82295c60-00d4-4147-b2b2-245f604fd9b8",
       "kind": "copy",
       "jobs": [
         "ABR-to-Repo01"
       ]
     },
     {
-      "source": "gp:a659dbbb-af30-49aa-b44d-b98278671e99",
-      "target": "b88f3c18-50c5-47ff-88f3-1a0f8810bc44",
+      "source": "gp:5ef294cb-83e6-4e30-87c1-b15094c5d030",
+      "target": "82295c60-00d4-4147-b2b2-245f604fd9b8",
       "kind": "auto",
       "jobs": [
         "NAS-Shares",
@@ -788,16 +806,24 @@ const MODEL = {
       ]
     },
     {
-      "source": "739c35ea-5146-477a-9d38-43fa544b3bbb",
-      "target": "cdp:4081ff4d-acbd-4b2f-9422-afaaa1ea19ee",
+      "source": "gp:5ef294cb-83e6-4e30-87c1-b15094c5d030",
+      "target": "526950f1-67ca-4086-b5d3-2abfdefe22f0",
+      "kind": "auto",
+      "jobs": [
+        "NAS-Archive"
+      ]
+    },
+    {
+      "source": "6edc41cc-134e-441a-ac86-769944f26a82",
+      "target": "cdp:651e206e-6413-4f4a-bdf3-bc50b4ec9356",
       "kind": "auto",
       "jobs": [
         "CDP-SQL"
       ]
     },
     {
-      "source": "cdp:4081ff4d-acbd-4b2f-9422-afaaa1ea19ee",
-      "target": "b0908db3-53b2-4cd7-9357-a4ee2ab9f745",
+      "source": "cdp:651e206e-6413-4f4a-bdf3-bc50b4ec9356",
+      "target": "8018ef16-b126-490d-8f01-c9fc0882f723",
       "kind": "copy",
       "jobs": [
         "CDP-SQL"
@@ -1065,6 +1091,29 @@ const MODEL = {
       "lastResult": null
     },
     {
+      "name": "Agent-Unix",
+      "type": "Agent backup (Unix, ManagedByAgent)",
+      "disabled": false,
+      "repository": "Repo01-ReFS",
+      "sources": [
+        "Linux AD OU"
+      ],
+      "proxies": "—",
+      "objects": [
+        {
+          "name": "Linux AD OU",
+          "type": "Protection group",
+          "location": "ADObjects",
+          "size": "",
+          "excluded": false
+        }
+      ],
+      "retention": "7 days",
+      "encrypted": false,
+      "lastRun": null,
+      "lastResult": "N/A"
+    },
+    {
       "name": "Copy-to-Wasabi",
       "type": "Backup copy (Periodic)",
       "disabled": false,
@@ -1177,6 +1226,27 @@ const MODEL = {
       ],
       "retention": "28 days",
       "encrypted": false,
+      "lastRun": null,
+      "lastResult": null
+    },
+    {
+      "name": "NAS-Archive",
+      "type": "File backup",
+      "disabled": false,
+      "repository": "Vault-Archive",
+      "sources": [],
+      "proxies": "Automatic",
+      "objects": [
+        {
+          "name": "\\\\nas01.corp.local\\archive",
+          "type": "SMB share",
+          "location": "",
+          "size": "",
+          "excluded": false
+        }
+      ],
+      "retention": "180 days",
+      "encrypted": true,
       "lastRun": null,
       "lastResult": null
     },
@@ -1432,15 +1502,15 @@ const MODEL = {
       "objects": [
         {
           "name": "app-sql01",
-          "restorePoints": 3,
-          "lastBackup": "2026-10-27 22:02",
-          "onDisk": 146028888064
-        },
-        {
-          "name": "app-sql01",
           "restorePoints": 1,
           "lastBackup": "2026-10-20 22:02",
           "onDisk": 5368709120
+        },
+        {
+          "name": "app-sql01",
+          "restorePoints": 3,
+          "lastBackup": "2026-10-27 22:02",
+          "onDisk": 146028888064
         },
         {
           "name": "app-web01",

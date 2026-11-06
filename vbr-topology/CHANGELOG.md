@@ -111,6 +111,13 @@ Current as of v1.10.0 (checked on VBR v13.1, REST API 1.3-rev2).
 ### Changed
 - Both: policies that the agent manages itself show "N/A" as their last result, as the VBR console does.
 
+### Fixed
+- PowerShell: repositories missing from three kinds of jobs. File backup copy jobs only carry
+  `TargetRepositoryId`; agent policies that the agent manages keep their repository in
+  `DestinationOptions.BackupRepository`; Veeam Vault archive repositories are returned by neither
+  `Get-VBRObjectStorageRepository` nor `Get-VBRArchiveObjectStorageRepository`, so a job's repository that is
+  not in the report yet is added from the job itself (as object storage when it is an archive repository).
+
 ## v1.10.0 (2026-11-05)
 
 ### Added

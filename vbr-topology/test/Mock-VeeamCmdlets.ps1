@@ -138,6 +138,10 @@ function Get-VBRComputerBackupJob {
         RetentionType = "RestoreDays"; RetentionPolicy = 14; StorageOptions = [pscustomobject]@{ EncryptionEnabled = $false } }
     New-Obj @{ Id = (gid "a2"); Name = "Agent-Linux"; OSPlatform = "Linux"; Mode = "ManagedByBackupServer"; JobEnabled = $true; BackupRepository = (New-Obj @{ Id = (gid "sobr") }); BackupObject = @($PG2)
         RetentionType = "RestoreDays"; RetentionPolicy = 14; StorageOptions = [pscustomobject]@{ EncryptionEnabled = $false } }
+    # A policy the agent manages: the repository is in DestinationOptions, BackupRepository is empty
+    New-Obj @{ Id = (gid "a3"); Name = "Agent-Unix"; OSPlatform = "Unix"; Mode = "ManagedByAgent"; JobEnabled = $true; BackupRepository = $null
+        DestinationOptions = [pscustomobject]@{ DestinationType = "BackupRepository"; BackupRepository = $global:R1 }; BackupObject = @($PG2)
+        RetentionType = "RestoreDays"; RetentionPolicy = 7; StorageOptions = [pscustomobject]@{ EncryptionEnabled = $false } }
 }
 function Get-VBRBackupCopyJob {
     New-Obj @{ Id = (gid "c1"); Name = "Copy-to-Wasabi"; Mode = "Periodic"; JobEnabled = $true; BackupJob = @($J2); TargetRepository = $global:R4
@@ -169,6 +173,11 @@ function Get-VBRNASBackupJob {
     New-Obj @{ Id = (gid "n2"); Name = "Bucket-Backup"; JobEnabled = $true; ShortTermBackupRepository = $global:R1; ShortTermRetentionPeriod = 28; ShortTermRetentionType = "Daily"; StorageOptions = [pscustomobject]@{ EncryptionEnabled = $false }
         BackupObject = @([pscustomobject]@{ Path = "/Backup/data/"; Container = [pscustomobject]@{ Name = "veeam-bucket" }
                                             Server = (New-Object Mock.VBRAmazonS3ObjectStorageServer) }) }
+    # A Veeam Vault archive repository: no repository cmdlet returns it, only the job does
+    New-Obj @{ Id = (gid "n5"); Name = "NAS-Archive"; JobEnabled = $true; ShortTermRetentionPeriod = 180; ShortTermRetentionType = "Daily"
+        ShortTermBackupRepository = [pscustomobject]@{ Id = (gid "arch1"); Name = "Vault-Archive"; Group = "ArchiveRepository"; Type = "VeeamVaultAzureArchive"; Description = "" }
+        StorageOptions = [pscustomobject]@{ EncryptionEnabled = $true }
+        BackupObject = @([pscustomobject]@{ Path = "\\nas01.corp.local\archive"; Server = (New-Object Mock.VBRNASSMBServer) }) }
 }
 # v13 Get-VBRUnstructuredBackupJob also returns Entra ID audit log backups and file backup copies
 function Get-VBRUnstructuredBackupJob { Get-VBRNASBackupJob; Get-VBREntraIDLogsBackupJob; Get-VBRNASBackupCopyJob }
@@ -176,7 +185,7 @@ function Get-VBREntraIDLogsBackupJob { New-Obj @{ Id = (gid "e2"); Name = "Entra
     ShortTermRetentionPeriod = 28; ShortTermRetentionType = "Daily"; StorageOptions = [pscustomobject]@{ EncryptionEnabled = $false } } }
 function Get-VBRNASBackupCopyJob {
     New-Obj @{ Id = (gid "n4"); Name = "NAS-Shares-Copy"; JobEnabled = $true; BackupJob = [pscustomobject]@{ Id = (gid "n1"); Name = "NAS-Shares" }
-        TargetRepository = $global:R4; JobType = "NasBackupCopy"
+        TargetRepositoryId = $global:R4.Id; JobType = "NasBackupCopy"   # as on v13: the ID only
         # As on v13: the retention is in NasBackupRetentionPolicy, BackupStorageOptions keeps an unused 7-day default
         Options = [pscustomobject]@{
             NasBackupRetentionPolicy = [pscustomobject]@{ UseSpecificRetentionPolicy = $false; ShortTermRetention = 28; ShortTermRetentionUnit = "Day" }
