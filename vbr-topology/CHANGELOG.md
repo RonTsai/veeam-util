@@ -117,6 +117,8 @@ Current as of v1.10.0 (checked on VBR v13.1, REST API 1.3-rev2).
   `DestinationOptions.BackupRepository`; Veeam Vault archive repositories are returned by neither
   `Get-VBRObjectStorageRepository` nor `Get-VBRArchiveObjectStorageRepository`, so a job's repository that is
   not in the report yet is added from the job itself (as object storage when it is an archive repository).
+- PowerShell: file backup copy jobs show their source job and the copy link: `Get-VBRNASBackupCopyJob`
+  gives the source job's ID only, in `LinkedJobIds`.
 
 ## v1.10.0 (2026-11-05)
 

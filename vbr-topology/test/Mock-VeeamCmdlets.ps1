@@ -184,7 +184,7 @@ function Get-VBRUnstructuredBackupJob { Get-VBRNASBackupJob; Get-VBREntraIDLogsB
 function Get-VBREntraIDLogsBackupJob { New-Obj @{ Id = (gid "e2"); Name = "EntraID-AuditLogs"; JobEnabled = $true; ShortTermBackupRepository = $global:R1
     ShortTermRetentionPeriod = 28; ShortTermRetentionType = "Daily"; StorageOptions = [pscustomobject]@{ EncryptionEnabled = $false } } }
 function Get-VBRNASBackupCopyJob {
-    New-Obj @{ Id = (gid "n4"); Name = "NAS-Shares-Copy"; JobEnabled = $true; BackupJob = [pscustomobject]@{ Id = (gid "n1"); Name = "NAS-Shares" }
+    New-Obj @{ Id = (gid "n4"); Name = "NAS-Shares-Copy"; JobEnabled = $true; LinkedJobIds = @([guid](gid "n1"))   # as on v13: the source job's ID only
         TargetRepositoryId = $global:R4.Id; JobType = "NasBackupCopy"   # as on v13: the ID only
         # As on v13: the retention is in NasBackupRetentionPolicy, BackupStorageOptions keeps an unused 7-day default
         Options = [pscustomobject]@{

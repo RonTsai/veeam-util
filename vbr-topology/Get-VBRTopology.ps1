@@ -725,9 +725,11 @@ foreach ($n in @($nasJobs) + @($entraLogJobs) + @($nasCopyJobs)) {
         continue
     }
     if ($nasCopyIds.Contains($nid) -or "$($n.GetType().Name)" -match "Copy") {
-        $src = @(Get-Prop $n @("BackupJob", "SourceJob", "PrimaryJob", "SourceBackupJob", "Job"))[0]
+        # Get-VBRNASBackupCopyJob (v13) gives the source job's ID only, in LinkedJobIds
+        $src = @(Get-Prop $n @("BackupJob", "SourceJob", "PrimaryJob", "SourceBackupJob", "Job", "LinkedJobIds"))[0]
         $srcName = "$(Get-Prop $src @('Name'))"
         $sid = Get-IdStr $src
+        if (-not $srcName -and $sid) { $srcName = "$(@(@($nasJobs) | Where-Object { $_ -and (Get-IdStr $_) -eq $sid })[0].Name)" }
         $sr = $(if ($sid) { $nasRepo[$sid] } else { $null })
         if ($sr) { Add-Link $sr $repo $n.Name "copy" }
         $JobRows.Add([ordered]@{ name = $n.Name; type = "File backup copy"; disabled = ($enabled -eq $false)
