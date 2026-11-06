@@ -819,8 +819,10 @@ foreach ($x in $cfgJobs) {
 }
 
 # Retention and encryption of each job. Get-VBRJob objects: BackupStorageOptions (RetainCycles or
-# RetainDaysToKeep, by RetentionType). The v12+ cmdlets name these properties differently, so several names
-# are tried, the job's own cmdlet first, then its Get-VBRJob object. Missing values stay empty.
+# RetainDaysToKeep, by RetentionType). The v12+ cmdlets name these properties differently (agent and Entra ID:
+# RetentionPolicy + RetentionType RestoreDays / RestorePoints; file share: ShortTermRetentionPeriod +
+# ShortTermRetentionType Daily / Monthly / Yearly), so several names are tried, the job's own cmdlet first,
+# then its Get-VBRJob object. Missing values stay empty.
 function Get-RetentionText($x) {
     $bso = Get-Prop $x @("Options.BackupStorageOptions", "BackupStorageOptions")
     if ($bso) {
@@ -833,7 +835,7 @@ function Get-RetentionText($x) {
         if (-not $t -and (Get-Prop $x @("RestorePointsToKeep", "RestorePointsToKeepNumber"))) { $t = "RestorePoints" }
     }
     if ("$n" -notmatch '^\d+$' -or [int]"$n" -le 0) { return $null }
-    $unit = switch -Regex ($t) { 'Day' { "day" } 'Week' { "week" } 'Month' { "month" } 'Year' { "year" } 'Cycle|Point' { "restore point" } default { $null } }
+    $unit = switch -Regex ($t) { 'Day|Daily' { "day" } 'Week' { "week" } 'Month' { "month" } 'Year' { "year" } 'Cycle|Point' { "restore point" } default { $null } }
     if (-not $unit) { return $null }
     return "$n $unit" + $(if ([int]"$n" -eq 1) { "" } else { "s" })
 }

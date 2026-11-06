@@ -561,8 +561,8 @@
       "storage": {
         "tenantId": "t-1",
         "retentionPolicy": {
-          "type": "Years",
-          "quantity": 1
+          "type": "Days",
+          "quantity": 7
         },
         "advancedSettings": {
           "encryption": {
