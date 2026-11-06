@@ -643,8 +643,9 @@ function tables() {
     (MODEL.jobs || []).map((j, i) => {
       const objs = j.objects || [], has = objs.length > 0;
       const row = `<tr class="job${has ? " has" : ""}" data-i="${i}"><td><span class="caret">${has ? "▸" : ""}</span>${esc(j.name)}${
-        // count included objects only; File / Tag masks are filters, not objects
-        has ? `<span class="count">(${objs.filter(o => !o.excluded && !/ mask$/.test(o.type)).length})</span>` : ""}</td><td>${esc(j.type)}</td>
+        // count included objects only, as the console's Objects column: File / Tag masks are filters and a
+        // SureBackup virtual lab is where the job runs, not objects
+        has ? `<span class="count">(${objs.filter(o => !o.excluded && !/ mask$|^Virtual lab$/.test(o.type)).length})</span>` : ""}</td><td>${esc(j.type)}</td>
         <td>${na(j, "sources", (j.sources || []).join(", "))}</td><td>${esc(j.proxies)}</td><td>${esc(j.repository)}</td>
         <td class="nowrap">${na(j, "retention", j.retention ? td(j.retention) : "—")}</td><td>${na(j, "encrypted", j.encrypted == null ? "—" : t(j.encrypted ? "yes" : "no"))}</td>
         <td class="nowrap">${na(j, "lastRun", j.lastRun ?? "—")}</td><td class="result ${esc((j.lastResult || "").toLowerCase())}">${na(j, "lastResult", j.lastResult ?? "—")}</td>

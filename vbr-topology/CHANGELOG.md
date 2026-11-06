@@ -68,7 +68,8 @@ Current as of v1.10.0 (checked on VBR v13.1, REST API 1.3-rev2).
 - No plug-in platform hosts and no ESXi versions (the vCenter REST API has none either).
 - Plug-in platform jobs (Nutanix AHV, Proxmox VE, HPE Morpheus VME) are not in `/jobs`. Python finds them
   in `/backups` with their repository, VMs, restore points and last run, but without state, sources,
-  retention, encryption or data-flow links.
+  retention, encryption or data-flow links. Their objects are every VM found in their backups, including VMs the job no
+  longer protects, so the count can be higher than the console's.
 - On VBR v13 the inventory does not return VMs per host: without `--vcenter-user`, components are usually
   not placed on ESXi hosts. A vCenter whose login is rejected shows no ESXi hosts (`managedServers` lists
   only the vCenter, even with `includeNestedHosts`).
@@ -122,6 +123,10 @@ Current as of v1.10.0 (checked on VBR v13.1, REST API 1.3-rev2).
 - PowerShell: a tape job whose `Enabled` flag is off no longer shows as disabled. `Get-VBRTapeJob` uses
   the same flag for a disabled job and for one without a schedule (the console shows `<Disabled>` or
   `<Not scheduled>`), so its state shows "n/a" with a note.
+- Both: Entra ID tenant and audit log backup jobs show their tenant as source and object (PowerShell:
+  `Tenant` / `BackupObject.Tenant`; Python: `tenant.tenantId` / `storage.tenantId` with `/entraIdTenants`).
+- Both: the object count next to a SureBackup job no longer counts its virtual lab, as the VBR console's
+  Objects column.
 
 ## v1.10.0 (2026-11-05)
 

@@ -156,7 +156,7 @@ $global:ABR = New-Obj @{ Id = (gid "abr"); Name = "Application Backup Repository
     MountPath = "Application_Backup_Repository"; RetentionDays = 2; Description = ""; Server = $H["abr1"] }
 function Get-VBRApplicationBackupRepository { $global:ABR }
 function Get-VBREntraIDTenantBackupJob { New-Obj @{ Id = (gid "e1"); Name = "EntraID-Tenant"; JobEnabled = $true
-    RetentionType = "RestoreDays"; RetentionPolicy = 7; EncryptionOptions = $false } }
+    RetentionType = "RestoreDays"; RetentionPolicy = 7; EncryptionOptions = $false; Tenant = [pscustomobject]@{ Name = "corp.onmicrosoft.com" } } }
 # A content scan (no virtual lab, linked jobs) and a SureBackup job with a virtual lab and an application group
 function Get-VBRSureBackupJob {
     New-Obj @{ Id = (gid "sb1"); Name = "SureBackup-Prod"; IsEnabled = $false; LinkedJob = @([pscustomobject]@{ Job = $J1 }) }
@@ -182,7 +182,8 @@ function Get-VBRNASBackupJob {
 # v13 Get-VBRUnstructuredBackupJob also returns Entra ID audit log backups and file backup copies
 function Get-VBRUnstructuredBackupJob { Get-VBRNASBackupJob; Get-VBREntraIDLogsBackupJob; Get-VBRNASBackupCopyJob }
 function Get-VBREntraIDLogsBackupJob { New-Obj @{ Id = (gid "e2"); Name = "EntraID-AuditLogs"; JobEnabled = $true; ShortTermBackupRepository = $global:R1
-    ShortTermRetentionPeriod = 28; ShortTermRetentionType = "Daily"; StorageOptions = [pscustomobject]@{ EncryptionEnabled = $false } } }
+    ShortTermRetentionPeriod = 28; ShortTermRetentionType = "Daily"; StorageOptions = [pscustomobject]@{ EncryptionEnabled = $false }
+    BackupObject = [pscustomobject]@{ Tenant = [pscustomobject]@{ Name = "corp.onmicrosoft.com" } } } }
 function Get-VBRNASBackupCopyJob {
     New-Obj @{ Id = (gid "n4"); Name = "NAS-Shares-Copy"; JobEnabled = $true; LinkedJobIds = @([guid](gid "n1"))   # as on v13: the source job's ID only
         TargetRepositoryId = $global:R4.Id; JobType = "NasBackupCopy"   # as on v13: the ID only

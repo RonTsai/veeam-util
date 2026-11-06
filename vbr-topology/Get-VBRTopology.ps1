@@ -720,8 +720,10 @@ foreach ($n in @($nasJobs) + @($entraLogJobs) + @($nasCopyJobs)) {
     $repo = $nasRepo[$nid]
     $enabled = Get-Prop $n @("JobEnabled", "IsEnabled", "Enabled")
     if ($entraLogIds.Contains($nid)) {
+        $tn = "$(Get-Prop $n @('BackupObject.Tenant.Name', 'BackupObject.Tenant.TenantName', 'BackupObject.TenantName', 'Tenant.Name'))"
         $JobRows.Add([ordered]@{ name = $n.Name; type = "Entra ID audit log backup"; disabled = ($enabled -eq $false)
-            repository = $(if ((Test-Node "$repo")) { $Nodes["$repo"].name } else { $null }); sources = @(); proxies = "—"; objects = @() })
+            repository = $(if ((Test-Node "$repo")) { $Nodes["$repo"].name } else { $null }); sources = @($tn | Where-Object { $_ }); proxies = "—"
+            objects = @($tn | Where-Object { $_ } | ForEach-Object { New-JobObject $_ "Entra ID tenant" }) })
         continue
     }
     if ($nasCopyIds.Contains($nid) -or "$($n.GetType().Name)" -match "Copy") {
@@ -767,8 +769,9 @@ foreach ($n in @($nasJobs) + @($entraLogJobs) + @($nasCopyJobs)) {
 # Entra ID tenant backup and SureBackup: no repository or proxy of their own to draw
 foreach ($x in $entraJobs) {
     $enabled = Get-Prop $x @("JobEnabled", "IsEnabled", "Enabled")
+    $tn = "$(Get-Prop $x @('Tenant.Name', 'Tenant.TenantName', 'Tenant.DisplayName'))"
     $JobRows.Add([ordered]@{ name = $x.Name; type = "Entra ID backup"; disabled = ($enabled -eq $false); repository = $null
-        sources = @(); proxies = "—"; objects = @() })
+        sources = @($tn | Where-Object { $_ }); proxies = "—"; objects = @($tn | Where-Object { $_ } | ForEach-Object { New-JobObject $_ "Entra ID tenant" }) })
 }
 foreach ($x in $sbJobs) {
     $enabled = Get-Prop $x @("JobEnabled", "IsEnabled", "Enabled")

@@ -1265,6 +1265,7 @@ def build_model(raw, csv_rows=()):
         keep = st.get("lastRun") and res not in (None, "None")
         return {"lastRun": st.get("lastRun"), "lastResult": res if keep else None}
     replica_targets = []   # (proxies or source hosts, destination host, its vCenter, label): linked once ESXi hosts are known
+    tenant_names = {e.get("id"): e.get("name") or e.get("azureTenantId") for e in raw.get("entraIdTenants") or [] if e.get("id")}
     for j in jobs:
         jt = j.get("type", "")
         jtl = _lc(jt)
@@ -1301,6 +1302,11 @@ def build_model(raw, csv_rows=()):
             sources = [x for x in sources if x]
         else:
             sources = sorted(hosts)
+        # Entra ID tenant and audit log backups: the tenant (tenant.tenantId or storage.tenantId)
+        tenant = (tenant_names.get((j.get("tenant") or {}).get("tenantId") or storage.get("tenantId"))
+                  if "entraid" in jtl else None)
+        if tenant:
+            sources = [tenant]
         if is_agent or is_copy or "entraid" in jtl or "surebackup" in jtl:
             proxies = "—"   # no backup proxy of their own, as PowerShell shows them
         elif auto and not sel_proxies:
@@ -1310,6 +1316,8 @@ def build_model(raw, csv_rows=()):
         objects = job_objects(j, server_names)
         objects += [{"name": x.get("name"), "type": "Job", "location": "", "size": "", "excluded": False}
                     for x in (j.get("linkedJobs") or {}).get("includes") or [] if x.get("name")]
+        if tenant:
+            objects.append({"name": tenant, "type": "Entra ID tenant", "location": "", "size": "", "excluded": False})
         if j.get("primaryJobId") and job_names.get(j["primaryJobId"]):
             objects.append({"name": job_names[j["primaryJobId"]], "type": "Job", "location": "", "size": "", "excluded": False})
         job_rows.append({"name": name, "type": job_type_label(j), "disabled": j.get("isDisabled"),
