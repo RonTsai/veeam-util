@@ -100,7 +100,8 @@ Current as of v1.10.0 (checked on VBR v13.1, REST API 1.3-rev2).
 - Both: the Jobs table shows each job's retention (for example `7 days`, `14 restore points`) and whether
   it encrypts its backups. PowerShell reads `Options.BackupStorageOptions` of `Get-VBRJob` jobs and the
   retention and storage options of the agent, backup copy, file share, Entra ID and configuration backup
-  cmdlets; Python reads `retentionPolicy` and `encryption` from `/api/v1/jobs` (replicas:
+  cmdlets (file backup copy jobs: `Options.NasBackupRetentionPolicy`, which holds the source job's
+  retention unless the copy has its own); Python reads `retentionPolicy` and `encryption` from `/api/v1/jobs` (replicas:
   `restorePointsToKeep`) and `/api/v1/configBackup`.
 
 ## v1.10.0 (2026-11-05)

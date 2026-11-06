@@ -174,7 +174,11 @@ function Get-VBREntraIDLogsBackupJob { New-Obj @{ Id = (gid "e2"); Name = "Entra
     ShortTermRetentionPeriod = 28; ShortTermRetentionType = "Daily"; StorageOptions = [pscustomobject]@{ EncryptionEnabled = $false } } }
 function Get-VBRNASBackupCopyJob {
     New-Obj @{ Id = (gid "n4"); Name = "NAS-Shares-Copy"; JobEnabled = $true; BackupJob = [pscustomobject]@{ Id = (gid "n1"); Name = "NAS-Shares" }
-        TargetRepository = $global:R4; ShortTermRetentionPeriod = 28; ShortTermRetentionType = "Daily"; StorageOptions = [pscustomobject]@{ EncryptionEnabled = $false } }
+        TargetRepository = $global:R4
+        # As on v13: the retention is in NasBackupRetentionPolicy, BackupStorageOptions keeps an unused 7-day default
+        Options = [pscustomobject]@{
+            NasBackupRetentionPolicy = [pscustomobject]@{ UseSpecificRetentionPolicy = $false; ShortTermRetention = 28; ShortTermRetentionUnit = "Day" }
+            BackupStorageOptions = [pscustomobject]@{ RetentionType = "Days"; RetainCycles = 7; RetainDaysToKeep = 7; StorageEncryptionEnabled = $false } } }
 }
 # A CDP proxy, a CDP policy (sql01 on esx01 -> esx02) and the configuration backup
 function Get-VBRCDPProxy { New-Obj @{ Id = (gid "cdp1"); Name = "vbrpx02.corp.local"; ServerId = (gid "px2"); CachePath = "/var/lib/veeam/veeam-cdp"; CacheSize = 100; CacheSizeUnit = "GB"; IsEnabled = $true; Description = "" } }
