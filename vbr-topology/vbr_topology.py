@@ -769,6 +769,30 @@ def job_type_label(j):
     return t
 
 
+RETENTION_UNITS = {"days": "day", "restorepoints": "restore point", "weeks": "week", "months": "month", "years": "year"}
+
+
+def retention_text(quantity, unit):
+    """'7 days', '1 restore point': the collectors' shared English form (translated in the template)."""
+    if not isinstance(quantity, int) or not unit:
+        return None
+    return f"{quantity} {unit}" + ("" if quantity == 1 else "s")
+
+
+def job_retention(j):
+    """Short-term retention of a job: storage / target / backupRepository.retentionPolicy, or a replica's restore points."""
+    rp = next((x for x in find_all(j, "retentionPolicy") if isinstance(x, dict)), None)
+    if rp:
+        return retention_text(rp.get("quantity"), RETENTION_UNITS.get(_lc(rp.get("type"))))
+    return retention_text((j.get("jobSettings") or {}).get("restorePointsToKeep"), "restore point")
+
+
+def job_encrypted(j):
+    """Whether a job encrypts its backups (None when the job has no encryption setting)."""
+    return next((x.get("isEnabled") for x in find_all(j, "encryption")
+                 if isinstance(x, dict) and isinstance(x.get("isEnabled"), bool)), None)
+
+
 def unstructured_name(u):
     """Display name of an unstructured data server: share name / path, or the object storage account."""
     return (u.get("name") or u.get("path") or u.get("friendlyName") or find_first(u.get("account") or {}, "friendlyName")
@@ -1289,6 +1313,7 @@ def build_model(raw, csv_rows=()):
         job_rows.append({"name": name, "type": job_type_label(j), "disabled": j.get("isDisabled"),
                          "repository": (nodes.get(repo) or {}).get("name"),
                          "sources": sources, "proxies": proxies, "objects": objects,
+                         "retention": job_retention(j), "encrypted": job_encrypted(j),
                          **last_run(j.get("id"), job_type_label(j))})
         label = name + (" (disabled)" if j.get("isDisabled") else "")
         if jtl in PLUGIN_JOB_TYPES:
@@ -1410,7 +1435,9 @@ def build_model(raw, csv_rows=()):
             nodes["vbr"]["details"]["Config backup encrypted"] = "Yes" if enc else "No"
         job_rows.append({"name": "Backup Configuration Job", "type": "Configuration backup", "disabled": cb_disabled,
                          "repository": (nodes.get(rid) or {}).get("name"), "sources": [vbr_name],
-                         "proxies": "—", "objects": [], **last_run("configBackup")})
+                         "proxies": "—", "objects": [], "encrypted": enc if isinstance(enc, bool) else None,
+                         "retention": retention_text(cb.get("restorePointsToKeep"), "restore point"),
+                         **last_run("configBackup")})
 
     # Agent backups from /backups, only when /jobs has no agent jobs (older API versions). Otherwise
     # these are backups without a job (imported or orphaned), which PowerShell does not show either.

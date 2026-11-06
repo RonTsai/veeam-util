@@ -818,6 +818,50 @@ foreach ($x in $cfgJobs) {
         repository = $(if ((Test-Node "$repo")) { $Nodes["$repo"].name } else { $null }); sources = @($vbrName); proxies = "—"; objects = @() })
 }
 
+# Retention and encryption of each job. Get-VBRJob objects: BackupStorageOptions (RetainCycles or
+# RetainDaysToKeep, by RetentionType). The v12+ cmdlets name these properties differently, so several names
+# are tried, the job's own cmdlet first, then its Get-VBRJob object. Missing values stay empty.
+function Get-RetentionText($x) {
+    $bso = Get-Prop $x @("Options.BackupStorageOptions", "BackupStorageOptions")
+    if ($bso) {
+        $t = "$(Get-Prop $bso @('RetentionType'))"
+        $n = $(if ($t -match "Day") { Get-Prop $bso @("RetainDaysToKeep") } else { Get-Prop $bso @("RetainCycles") })
+    } else {
+        $n = Get-Prop $x @("RetentionPolicy.Quantity", "RetentionPolicy", "RetentionNumber", "RetentionPeriod", "ShortTermRetentionPeriod",
+                           "ShortTermBackupRetention", "RestorePointsToKeep", "RestorePointsToKeepNumber")
+        $t = "$(Get-Prop $x @('RetentionPolicy.Type', 'RetentionType', 'ShortTermRetentionType', 'RetentionPeriodType'))"
+        if (-not $t -and (Get-Prop $x @("RestorePointsToKeep", "RestorePointsToKeepNumber"))) { $t = "RestorePoints" }
+    }
+    if ("$n" -notmatch '^\d+$' -or [int]"$n" -le 0) { return $null }
+    $unit = switch -Regex ($t) { 'Day' { "day" } 'Week' { "week" } 'Month' { "month" } 'Year' { "year" } 'Cycle|Point' { "restore point" } default { $null } }
+    if (-not $unit) { return $null }
+    return "$n $unit" + $(if ([int]"$n" -eq 1) { "" } else { "s" })
+}
+function Get-Encrypted($x) {
+    $e = Get-Prop $x @("Options.BackupStorageOptions.StorageEncryptionEnabled", "BackupStorageOptions.StorageEncryptionEnabled",
+                       "StorageOptions.EncryptionEnabled", "StorageOptions.Encryption", "EncryptionOptions.Enabled", "EncryptionOptions.Enable",
+                       "EncryptionOptions", "EncryptionEnabled")
+    if ($e -is [bool]) { return $e }
+    return $null
+}
+$settingsSrc = @{}   # job name -> objects to read, the job's own cmdlet first
+foreach ($x in @($agentJobs) + @($copyJobs) + @($nasJobs) + @($entraJobs) + @($entraLogJobs) + @($nasCopyJobs) + @($cdpPolicies) +
+               @($vcdReplicas) + @($jobs)) {
+    if ($x -and $x.Name) { if (-not $settingsSrc.ContainsKey($x.Name)) { $settingsSrc[$x.Name] = @() }; $settingsSrc[$x.Name] += , $x }
+}
+foreach ($r in $JobRows) {
+    $srcs = $(if ($r.type -eq "Configuration backup") { @($cfgJobs) } else { @($settingsSrc[$r.name]) })
+    $ret = $null; $enc = $null
+    foreach ($x in $srcs) {
+        if (-not $x) { continue }
+        if (-not $ret) { $ret = Get-RetentionText $x }
+        if ($null -eq $enc) { $enc = Get-Encrypted $x }
+    }
+    # Replicas keep VMs, not backup files: no encryption setting (REST has none for them either)
+    if ($r.type -match "Replica|Replication|CDP") { $enc = $null }
+    $r["retention"] = $ret; $r["encrypted"] = $enc
+}
+
 # Backups (as the VBR console's Backups view lists them) and, per job, restore points, last backup and
 # size on disk. Per backup and VM: the restore points, the newest one and the size of the backup files.
 # - Plug-in platform backups (JobType VmbApiPolicyTempJob: Nutanix AHV, Proxmox VE, HPE Morpheus VME):

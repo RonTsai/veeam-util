@@ -363,8 +363,8 @@ Without PowerCLI, the script falls back to the Veeam inventory automatically.
 
 ![Jobs table with one job expanded](docs/images/report-jobs-en.png)
 
-Each job also shows its last run and last result (Success / Warning / Failed), as the VBR console's Jobs
-view.
+Each job also shows its retention (short-term: days or restore points), whether it encrypts its backups,
+and its last run and last result (Success / Warning / Failed), as the VBR console's Jobs view.
 
 The **Backups** table lists the backups as the VBR console's Backups view does: one row per backup (storage
 snapshots and backups whose job no longer exists included) with its job, repository, platform, creation

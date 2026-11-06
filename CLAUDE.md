@@ -35,8 +35,9 @@ The maintainer's personal working rules and lab notes are in `CLAUDE.local.md` (
   - `kind` is one of `backup, em, vone, agent, hv_host, vi_host, ext_host, proxy, repo, sobr, object, server`
     (`ext_host`: plug-in platforms such as Proxmox VE; PowerShell only, the REST API does not return them)
   - `links[]`: `source, target, kind (data | auto | copy | inferred), jobs`
-  - `jobs[]`: `name, type, disabled, repository, sources, proxies, objects`, optionally `lastRun, lastResult`
-    (`lastRun`: `yyyy-MM-dd HH:mm`; `lastResult`: `Success | Warning | Failed`)
+  - `jobs[]`: `name, type, disabled, repository, sources, proxies, objects`, optionally `lastRun, lastResult,
+    retention, encrypted` (`lastRun`: `yyyy-MM-dd HH:mm`; `lastResult`: `Success | Warning | Failed`;
+    `retention`: `7 days`, `14 restore points`, `1 year`; `encrypted`: bool)
   - `backups[]`: `name, job, created, repository, platform`, optionally `restorePoints, lastBackup, onDisk`,
     and `objects[]` (`name`, optionally `restorePoints, lastBackup, onDisk`), as the VBR console's Backups view
     (`created` / `lastBackup`: `yyyy-MM-dd HH:mm`; `onDisk`: bytes)

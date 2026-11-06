@@ -114,7 +114,7 @@ const I18N = {
     thHost: "ESXi / Hyper-V host", thComponent: "Component", thRoleShort: "Role", thVm: "VM name", thMatched: "Matched by",
     thJob: "Job", thType: "Type", thSource: "Sources", thProxy: "Proxy", thRepo: "Repository", thState: "State",
     thPoints: "Restore points", thLast: "Last backup", thDisk: "On disk",
-    thLastRun: "Last run", thLastResult: "Last result",
+    thLastRun: "Last run", thLastResult: "Last result", thRetention: "Retention", thEncryption: "Encryption", yes: "Yes", no: "No",
     backupsTitle: "Backups", backupsHint: "As the VBR console's Backups view lists them, including storage snapshots and backups whose job no longer exists. Click a backup to see its VMs.",
     thBackup: "Backup", thPlatform: "Platform", thCreated: "Created",
     enabled: "Enabled", disabled: "Disabled",
@@ -141,7 +141,7 @@ const I18N = {
     thHost: "ESXi / Hyper-V 主機", thComponent: "元件", thRoleShort: "角色", thVm: "VM 名稱", thMatched: "比對來源",
     thJob: "Job", thType: "類型", thSource: "來源", thProxy: "Proxy", thRepo: "Repository", thState: "狀態",
     thPoints: "還原點", thLast: "最新備份", thDisk: "佔用空間",
-    thLastRun: "上次執行", thLastResult: "上次結果",
+    thLastRun: "上次執行", thLastResult: "上次結果", thRetention: "保留設定", thEncryption: "加密", yes: "是", no: "否",
     backupsTitle: "Backups", backupsHint: "與 VBR 主控台的 Backups 畫面相同，包含儲存快照，以及 job 已不存在的備份。點一下備份可看各台 VM。",
     thBackup: "備份", thPlatform: "平台", thCreated: "建立時間",
     enabled: "Enabled", disabled: "Disabled",
@@ -194,6 +194,8 @@ const DATA_ZH_RULES = [
   [/^ESXi hosts run different versions: (.*)$/, "ESXi 主機版本不一致: $1"],
   [/^Restore points of (\d+) backups could not be read: (.*)\. Error: (.*)$/s, "無法讀取 $1 個備份的還原點: $2。錯誤: $3"],
   [/^(\d+) hosts?$/, "$1 台主機"],
+  // Job retention: "7 days", "14 restore points", "1 year"
+  [/^(\d+) (day|week|month|year|restore point)s?$/, (_, n, u) => n + " " + { day: "天", week: "週", month: "個月", year: "年", "restore point": "個還原點" }[u]],
   // Where an IP address came from (hover details)
   [/^(.+) \(VM guest\)$/, "$1 (取自 VM)"],
   [/^(.+) \(DNS\)$/, "$1 (DNS 查詢)"],
@@ -612,16 +614,17 @@ function tables() {
   // Jobs with protected objects expand on click (see toggleJob)
   // Size on disk in bytes -> GB / TB
   const fmtBytes = v => v == null ? "—" : v >= 1024 ** 4 ? (v / 1024 ** 4).toFixed(1) + " TB" : (v / 1024 ** 3).toFixed(1) + " GB";
-  document.getElementById("jobTable").innerHTML = th(["thJob", "thType", "thSource", "thProxy", "thRepo", "thLastRun", "thLastResult", "thState"]) +
+  document.getElementById("jobTable").innerHTML = th(["thJob", "thType", "thSource", "thProxy", "thRepo", "thRetention", "thEncryption", "thLastRun", "thLastResult", "thState"]) +
     (MODEL.jobs || []).map((j, i) => {
       const objs = j.objects || [], has = objs.length > 0;
       const row = `<tr class="job${has ? " has" : ""}" data-i="${i}"><td><span class="caret">${has ? "▸" : ""}</span>${esc(j.name)}${
         // count included objects only; File / Tag masks are filters, not objects
         has ? `<span class="count">(${objs.filter(o => !o.excluded && !/ mask$/.test(o.type)).length})</span>` : ""}</td><td>${esc(j.type)}</td>
         <td>${esc((j.sources || []).join(", "))}</td><td>${esc(j.proxies)}</td><td>${esc(j.repository)}</td>
+        <td class="nowrap">${esc(j.retention ? td(j.retention) : "—")}</td><td>${esc(j.encrypted == null ? "—" : t(j.encrypted ? "yes" : "no"))}</td>
         <td class="nowrap">${esc(j.lastRun ?? "—")}</td><td class="result ${esc((j.lastResult || "").toLowerCase())}">${esc(j.lastResult ?? "—")}</td>
         <td>${esc((j.disabled == null ? "—" : t(j.disabled ? "disabled" : "enabled")))}</td></tr>`;
-      const sub = has ? `<tr class="objs" data-for="${i}" hidden><td colspan="8"><table>${
+      const sub = has ? `<tr class="objs" data-for="${i}" hidden><td colspan="10"><table>${
         th(["objType", "objName", "objLocation", "objSize", "objMode"])}${objs.map(o => `<tr class="${o.excluded ? "ex" : ""}">
         <td>${esc(td(o.type))}</td><td>${esc(o.name)}</td><td>${esc(o.location)}</td><td>${esc(o.size)}</td>
         <td>${esc(t(o.excluded ? "objExclude" : "objInclude"))}</td></tr>`).join("")}</table></td></tr>` : "";

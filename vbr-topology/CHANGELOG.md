@@ -13,6 +13,9 @@ Current as of v1.10.0 (checked on VBR v13.1, REST API 1.3-rev2).
   mocks.
 - The plug-in platform IDs (Nutanix AHV, Proxmox VE, HPE Morpheus VME) were taken from one lab; other
   plug-in versions may use other IDs.
+- Job retention and encryption in PowerShell: only `Get-VBRJob`'s `BackupStorageOptions` follows a known
+  layout. For agent, backup copy, file share and Entra ID jobs several property names are tried, which has
+  only been tested against the mocks; a name that does not match leaves the value empty.
 
 **Both collectors**
 
@@ -27,6 +30,8 @@ Current as of v1.10.0 (checked on VBR v13.1, REST API 1.3-rev2).
   registered by IP, and VMs whose name differs from their hostname, show as "Physical / unknown host".
 - As in the VBR console, a job shows no last result without a last run time, and none (N/A) for agent
   policies the agent manages itself.
+- Retention is the job's short-term retention only (no GFS). Replicas, CDP policies, SureBackup and tape
+  jobs show no encryption.
 
 **PowerShell**
 
@@ -62,8 +67,8 @@ Current as of v1.10.0 (checked on VBR v13.1, REST API 1.3-rev2).
   the backups inside an Application Backup Repository and Unix agent backups (Backups table).
 - No plug-in platform hosts and no ESXi versions (the vCenter REST API has none either).
 - Plug-in platform jobs (Nutanix AHV, Proxmox VE, HPE Morpheus VME) are not in `/jobs`. Python finds them
-  in `/backups` with their repository, VMs, restore points and last run, but without state, sources or
-  data-flow links.
+  in `/backups` with their repository, VMs, restore points and last run, but without state, sources,
+  retention, encryption or data-flow links.
 - On VBR v13 the inventory does not return VMs per host: without `--vcenter-user`, components are usually
   not placed on ESXi hosts. A vCenter whose login is rejected shows no ESXi hosts (`managedServers` lists
   only the vCenter, even with `includeNestedHosts`).
@@ -88,6 +93,15 @@ Current as of v1.10.0 (checked on VBR v13.1, REST API 1.3-rev2).
 - Job object locations: PowerShell shows the full inventory path, Python only the host name (vCenter /
   Hyper-V host). Object type names differ slightly (`Vapp` / `vApp`, `Virtual machine` / `Virtual Machine`
   for Hyper-V), and PowerShell lists the computers of an agent job as `Protection group`.
+
+## Unreleased
+
+### Added
+- Both: the Jobs table shows each job's retention (for example `7 days`, `14 restore points`) and whether
+  it encrypts its backups. PowerShell reads `Options.BackupStorageOptions` of `Get-VBRJob` jobs and the
+  retention and storage options of the agent, backup copy, file share, Entra ID and configuration backup
+  cmdlets; Python reads `retentionPolicy` and `encryption` from `/api/v1/jobs` (replicas:
+  `restorePointsToKeep`) and `/api/v1/configBackup`.
 
 ## v1.10.0 (2026-11-05)
 

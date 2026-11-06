@@ -284,6 +284,18 @@
             "px-1",
             "px-2"
           ]
+        },
+        "retentionPolicy": {
+          "type": "RestorePoints",
+          "quantity": 14
+        },
+        "advancedSettings": {
+          "storageData": {
+            "encryption": {
+              "encryptionType": "ByUserPassword",
+              "isEnabled": true
+            }
+          }
         }
       }
     },
@@ -309,6 +321,18 @@
         "backupProxies": {
           "autoSelection": true,
           "proxyIds": []
+        },
+        "retentionPolicy": {
+          "type": "Days",
+          "quantity": 7
+        },
+        "advancedSettings": {
+          "storageData": {
+            "encryption": {
+              "encryptionType": "ByUserPassword",
+              "isEnabled": false
+            }
+          }
         }
       }
     },
@@ -340,6 +364,18 @@
         "backupProxies": {
           "autoSelection": true,
           "proxyIds": []
+        },
+        "retentionPolicy": {
+          "type": "Days",
+          "quantity": 30
+        },
+        "advancedSettings": {
+          "storageData": {
+            "encryption": {
+              "encryptionType": "ByUserPassword",
+              "isEnabled": false
+            }
+          }
         }
       }
     },
@@ -357,7 +393,19 @@
         }
       ],
       "storage": {
-        "backupRepositoryId": "r-1"
+        "backupRepositoryId": "r-1",
+        "retentionPolicy": {
+          "type": "Days",
+          "quantity": 14
+        },
+        "advancedSettings": {
+          "storageData": {
+            "encryption": {
+              "encryptionType": "ByUserPassword",
+              "isEnabled": false
+            }
+          }
+        }
       }
     },
     {
@@ -374,7 +422,19 @@
         }
       ],
       "storage": {
-        "backupRepositoryId": "sobr-1"
+        "backupRepositoryId": "sobr-1",
+        "retentionPolicy": {
+          "type": "Days",
+          "quantity": 14
+        },
+        "advancedSettings": {
+          "storageData": {
+            "encryption": {
+              "encryptionType": "ByUserPassword",
+              "isEnabled": false
+            }
+          }
+        }
       }
     },
     {
@@ -385,7 +445,19 @@
       "isDisabled": false,
       "sourceRepositoryId": "r-1",
       "storage": {
-        "backupRepositoryId": "r-4"
+        "backupRepositoryId": "r-4",
+        "retentionPolicy": {
+          "type": "Days",
+          "quantity": 30
+        },
+        "advancedSettings": {
+          "storageData": {
+            "encryption": {
+              "encryptionType": "ByUserPassword",
+              "isEnabled": true
+            }
+          }
+        }
       },
       "sourceObjects": {
         "includes": {
@@ -424,7 +496,19 @@
         }
       ],
       "backupRepository": {
-        "backupRepositoryId": "r-1"
+        "backupRepositoryId": "r-1",
+        "retentionPolicy": {
+          "type": "Days",
+          "quantity": 28
+        },
+        "advancedSettings": {
+          "storageData": {
+            "encryption": {
+              "encryptionType": "ByUserPassword",
+              "isEnabled": false
+            }
+          }
+        }
       }
     },
     {
@@ -457,7 +541,8 @@
         }
       },
       "jobSettings": {
-        "metadataRepositoryId": "r-1"
+        "metadataRepositoryId": "r-1",
+        "restorePointsToKeep": 7
       },
       "dataTransfer": {
         "sourceProxies": {
@@ -474,7 +559,17 @@
       "type": "EntraIDTenantBackup",
       "isDisabled": false,
       "storage": {
-        "tenantId": "t-1"
+        "tenantId": "t-1",
+        "retentionPolicy": {
+          "type": "Years",
+          "quantity": 1
+        },
+        "advancedSettings": {
+          "encryption": {
+            "encryptionType": "ByUserPassword",
+            "isEnabled": false
+          }
+        }
       }
     },
     {
@@ -506,7 +601,19 @@
         }
       ],
       "storage": {
-        "backupRepositoryId": "r-1"
+        "backupRepositoryId": "r-1",
+        "retentionPolicy": {
+          "type": "Days",
+          "quantity": 28
+        },
+        "advancedSettings": {
+          "storageData": {
+            "encryption": {
+              "encryptionType": "ByUserPassword",
+              "isEnabled": false
+            }
+          }
+        }
       }
     },
     {
@@ -533,7 +640,8 @@
         }
       },
       "jobSettings": {
-        "metadataRepositoryId": "r-1"
+        "metadataRepositoryId": "r-1",
+        "restorePointsToKeep": 7
       }
     },
     {
@@ -556,7 +664,19 @@
         }
       },
       "target": {
-        "backupRepositoryId": "r-1"
+        "backupRepositoryId": "r-1",
+        "retentionPolicy": {
+          "type": "Days",
+          "quantity": 7
+        },
+        "advancedSettings": {
+          "storageData": {
+            "encryption": {
+              "encryptionType": "ByUserPassword",
+              "isEnabled": false
+            }
+          }
+        }
       }
     },
     {
@@ -568,7 +688,19 @@
         "tenantId": "t-1"
       },
       "storage": {
-        "backupRepositoryId": "r-1"
+        "backupRepositoryId": "r-1",
+        "retentionPolicy": {
+          "type": "Days",
+          "quantity": 28
+        },
+        "advancedSettings": {
+          "storageData": {
+            "encryption": {
+              "encryptionType": "ByUserPassword",
+              "isEnabled": false
+            }
+          }
+        }
       }
     },
     {
@@ -577,7 +709,15 @@
       "type": "FileBackupCopy",
       "isDisabled": false,
       "primaryJobId": "j7",
-      "backupRepositoryId": "r-4"
+      "backupRepositoryId": "r-4",
+      "retentionPolicy": {
+        "type": "Days",
+        "quantity": 28
+      },
+      "encryption": {
+        "encryptionType": "ByUserPassword",
+        "isEnabled": false
+      }
     }
   ],
   "backups": [

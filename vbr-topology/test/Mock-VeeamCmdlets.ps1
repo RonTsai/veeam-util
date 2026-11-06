@@ -98,6 +98,12 @@ $J7.Info | Add-Member TargetHostId (gid "esx2")
 # Hyper-V replica without off-host proxies: host to host (on-host proxies), not through the VMware proxies
 $J8 = job "j8" "HyperV-Replica-DR" "Replica" "EHyperV" "r1" @() $true @("hv01.corp.local"); $J8.TypeToString = "Hyper-V Replication"
 $J8.Info | Add-Member TargetHostId (gid "hvc")
+# Retention and encryption (Options.BackupStorageOptions), as in sample_raw.json. Plug-in jobs have none there.
+function bso($job, $type, $n, $enc) {
+    $job.Options | Add-Member BackupStorageOptions ([pscustomobject]@{ RetentionType = $type; RetainCycles = $(if ($type -eq "Cycles") { $n } else { 7 })
+        RetainDaysToKeep = $(if ($type -eq "Days") { $n } else { 7 }); StorageEncryptionEnabled = $enc })
+}
+bso $J1 "Cycles" 14 $true; bso $J2 "Days" 7 $false; bso $J3 "Days" 30 $false; bso $J7 "Cycles" 7 $false; bso $J8 "Cycles" 7 $false
 # Last sessions (FindLastSession() on Get-VBRJob objects; session cmdlets for the others), as in sample_raw.json
 function lastsess($job, $time, $result) {
     $job | Add-Member -Force -MemberType ScriptMethod -Name FindLastSession -Value ([scriptblock]::Create("[pscustomobject]@{ CreationTime = [datetime]'$time'; Result = '$result' }"))
@@ -126,21 +132,25 @@ $J7 | Add-Member _objs @((jo "app-sql01" "Virtual Machine" "$vc\DC01\vm\app-sql0
 $J8 | Add-Member _objs @((jo "app01" "Virtual Machine" "hv01.corp.local" "hv01.corp.local"))
 function Get-VBRJobObject($Job) { $Job._objs }
 function Get-VBRComputerBackupJob {
-    New-Obj @{ Id = (gid "a1"); Name = "Agent-Windows"; OSPlatform = "Windows"; Mode = "ManagedByBackupServer"; JobEnabled = $true; BackupRepository = $global:R1; BackupObject = @($PG1) }
-    New-Obj @{ Id = (gid "a2"); Name = "Agent-Linux"; OSPlatform = "Linux"; Mode = "ManagedByBackupServer"; JobEnabled = $true; BackupRepository = (New-Obj @{ Id = (gid "sobr") }); BackupObject = @($PG2) }
+    New-Obj @{ Id = (gid "a1"); Name = "Agent-Windows"; OSPlatform = "Windows"; Mode = "ManagedByBackupServer"; JobEnabled = $true; BackupRepository = $global:R1; BackupObject = @($PG1)
+        RetentionType = "Days"; RetentionPolicy = 14; StorageOptions = [pscustomobject]@{ EncryptionEnabled = $false } }
+    New-Obj @{ Id = (gid "a2"); Name = "Agent-Linux"; OSPlatform = "Linux"; Mode = "ManagedByBackupServer"; JobEnabled = $true; BackupRepository = (New-Obj @{ Id = (gid "sobr") }); BackupObject = @($PG2)
+        RetentionType = "Days"; RetentionPolicy = 14; StorageOptions = [pscustomobject]@{ EncryptionEnabled = $false } }
 }
 function Get-VBRBackupCopyJob {
-    New-Obj @{ Id = (gid "c1"); Name = "Copy-to-Wasabi"; Mode = "Periodic"; JobEnabled = $true; BackupJob = @($J2); TargetRepository = $global:R4 }
+    New-Obj @{ Id = (gid "c1"); Name = "Copy-to-Wasabi"; Mode = "Periodic"; JobEnabled = $true; BackupJob = @($J2); TargetRepository = $global:R4
+        RetentionType = "Days"; RetentionNumber = 30; StorageOptions = [pscustomobject]@{ EncryptionEnabled = $true } }
     # From an Application Backup Repository (the source is a repository, not a job)
     New-Obj @{ Id = (gid "c2"); Name = "ABR-to-Repo01"; Mode = "Immediate"; JobEnabled = $true; BackupJob = @()
         SourceRepository = (New-Obj @{ Id = (gid "abrvirtual"); Name = "Application Backup Repository"; Type = "AbrVirtual" })
-        TargetRepository = $global:R1 }
+        TargetRepository = $global:R1; RetentionType = "Days"; RetentionNumber = 7; StorageOptions = [pscustomobject]@{ EncryptionEnabled = $false } }
 }
 # Application Backup Repository (v13); Server prints as "name(id)" like the real object
 $global:ABR = New-Obj @{ Id = (gid "abr"); Name = "Application Backup Repository"; ZFSPool = "veeam-stg-abr01"
     MountPath = "Application_Backup_Repository"; RetentionDays = 2; Description = ""; Server = $H["abr1"] }
 function Get-VBRApplicationBackupRepository { $global:ABR }
-function Get-VBREntraIDTenantBackupJob { New-Obj @{ Id = (gid "e1"); Name = "EntraID-Tenant"; JobEnabled = $true } }
+function Get-VBREntraIDTenantBackupJob { New-Obj @{ Id = (gid "e1"); Name = "EntraID-Tenant"; JobEnabled = $true
+    RetentionPolicy = [pscustomobject]@{ Type = "Years"; Quantity = 1 }; StorageOptions = [pscustomobject]@{ EncryptionEnabled = $false } } }
 # A content scan (no virtual lab, linked jobs) and a SureBackup job with a virtual lab and an application group
 function Get-VBRSureBackupJob {
     New-Obj @{ Id = (gid "sb1"); Name = "SureBackup-Prod"; IsEnabled = $false; LinkedJob = @([pscustomobject]@{ Job = $J1 }) }
@@ -150,20 +160,21 @@ function Get-VBRSureBackupJob {
 }
 if (-not ("Mock.VBRNASSMBServer" -as [type])) { Add-Type -TypeDefinition "namespace Mock { public class VBRNASSMBServer { } public class VBRAmazonS3ObjectStorageServer { } }" }
 function Get-VBRNASBackupJob {
-    New-Obj @{ Id = (gid "n1"); Name = "NAS-Shares"; JobEnabled = $true; ShortTermBackupRepository = $global:R1
+    New-Obj @{ Id = (gid "n1"); Name = "NAS-Shares"; JobEnabled = $true; ShortTermBackupRepository = $global:R1; ShortTermRetentionPeriod = 28; ShortTermRetentionType = "Days"; StorageOptions = [pscustomobject]@{ EncryptionEnabled = $false }
         BackupObject = @([pscustomobject]@{ Path = "\\nas01.corp.local\projects"; Server = (New-Object Mock.VBRNASSMBServer)
                                             InclusionMask = @("*.docx", "*.xlsx"); ExclusionMask = @("\.snapshot", "*.tmp") }) }
     # Object storage: Path is the folder only, the bucket is separate (shown as "<bucket>/<folder>")
-    New-Obj @{ Id = (gid "n2"); Name = "Bucket-Backup"; JobEnabled = $true; ShortTermBackupRepository = $global:R1
+    New-Obj @{ Id = (gid "n2"); Name = "Bucket-Backup"; JobEnabled = $true; ShortTermBackupRepository = $global:R1; ShortTermRetentionPeriod = 28; ShortTermRetentionType = "Days"; StorageOptions = [pscustomobject]@{ EncryptionEnabled = $false }
         BackupObject = @([pscustomobject]@{ Path = "/Backup/data/"; Container = [pscustomobject]@{ Name = "veeam-bucket" }
                                             Server = (New-Object Mock.VBRAmazonS3ObjectStorageServer) }) }
 }
 # v13 Get-VBRUnstructuredBackupJob also returns Entra ID audit log backups and file backup copies
 function Get-VBRUnstructuredBackupJob { Get-VBRNASBackupJob; Get-VBREntraIDLogsBackupJob; Get-VBRNASBackupCopyJob }
-function Get-VBREntraIDLogsBackupJob { New-Obj @{ Id = (gid "e2"); Name = "EntraID-AuditLogs"; JobEnabled = $true; ShortTermBackupRepository = $global:R1 } }
+function Get-VBREntraIDLogsBackupJob { New-Obj @{ Id = (gid "e2"); Name = "EntraID-AuditLogs"; JobEnabled = $true; ShortTermBackupRepository = $global:R1
+    ShortTermRetentionPeriod = 28; ShortTermRetentionType = "Days"; StorageOptions = [pscustomobject]@{ EncryptionEnabled = $false } } }
 function Get-VBRNASBackupCopyJob {
     New-Obj @{ Id = (gid "n4"); Name = "NAS-Shares-Copy"; JobEnabled = $true; BackupJob = [pscustomobject]@{ Id = (gid "n1"); Name = "NAS-Shares" }
-        TargetRepository = $global:R4 }
+        TargetRepository = $global:R4; ShortTermRetentionPeriod = 28; ShortTermRetentionType = "Days"; StorageOptions = [pscustomobject]@{ EncryptionEnabled = $false } }
 }
 # A CDP proxy, a CDP policy (sql01 on esx01 -> esx02) and the configuration backup
 function Get-VBRCDPProxy { New-Obj @{ Id = (gid "cdp1"); Name = "vbrpx02.corp.local"; ServerId = (gid "px2"); CachePath = "/var/lib/veeam/veeam-cdp"; CacheSize = 100; CacheSizeUnit = "GB"; IsEnabled = $true; Description = "" } }
@@ -172,7 +183,7 @@ function Get-VBRCDPPolicy {
         Server = $H.esx2; MetadataRepository = $global:R1 }
 }
 function Get-VBRvCDReplicaJob { }
-function Get-VBRConfigurationBackupJob { New-Obj @{ Name = "Backup Configuration Job"; Enabled = $true; Repository = $global:R1; EncryptionOptions = $true; LastResult = "Success" } }
+function Get-VBRConfigurationBackupJob { New-Obj @{ Name = "Backup Configuration Job"; Enabled = $true; Repository = $global:R1; EncryptionOptions = $true; RestorePointsToKeep = 10; LastResult = "Success" } }
 # Backups and restore points (one backup file per restore point), matching sample_raw.json "backupFiles".
 # app-sql01 has a point from an older chain (another object in VBR, same VM name: its own row)
 function rpoint($name, $time, $gb, $obj = $name) {
