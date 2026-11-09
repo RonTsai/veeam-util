@@ -34,7 +34,8 @@ The maintainer's personal working rules and lab notes are in `CLAUDE.local.md` (
     `capacity` / `archive`: a SOBR's object storage node ids)
   - `kind` is one of `backup, em, vone, agent, hv_host, vi_host, ext_host, proxy, repo, sobr, object, server`
     (`ext_host`: plug-in platforms such as Proxmox VE; PowerShell only, the REST API does not return them)
-  - `links[]`: `source, target, kind (data | auto | copy | inferred), jobs`
+  - `links[]`: `source, target, kind (data | auto | copy | inferred | gateway), jobs` (`gateway`: a gateway
+    server's proxy card to a repository whose data goes through it, no jobs)
   - `jobs[]`: `name, type, disabled, repository, sources, proxies, objects`, optionally `typeDetail, target, lastRun,
     lastResult, retention, encrypted, unavailable` (`type`: the VBR console's Jobs view name; `typeDetail`: what
     that name leaves out, such as a backup copy's mode; `target`: a replica's or CDP policy's target host, a

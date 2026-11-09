@@ -1538,6 +1538,20 @@ def build_model(raw, csv_rows=()):
     if not jobs and raw.get("_errors", {}).get("jobs"):
         warnings.append("Could not read jobs; data flow is shown as inferred (dashed) links.")
 
+    # Gateway servers -> repositories whose data goes through them (Host "Gateway", as in the console), when
+    # the gateway server has a proxy card (a CDP proxy card only when it has no other); kind "gateway", no jobs
+    proxy_card = {}
+    for n in sorted((n for n in nodes.values() if n["kind"] == "proxy"), key=lambda n: "CDP" in n["sub"]):
+        proxy_card.setdefault(_lc(n["name"]), n["id"])
+    for n in list(nodes.values()):
+        if n["kind"] not in ("repo", "object") or n["details"].get("Host") != "Gateway" or not n["details"].get("Gateway"):
+            continue
+        tgt = n.get("inSobr") or n["id"]
+        for g in str(n["details"]["Gateway"]).split(","):
+            src = proxy_card.get(_lc(g.strip()))
+            if src and src != tgt:
+                links.setdefault((src, tgt, "gateway"), {"source": src, "target": tgt, "kind": "gateway", "jobs": []})
+
     # Other managed servers (not holding any role)
     for s in servers.values():
         if s["id"] not in used_hosts and s["id"] not in nodes:

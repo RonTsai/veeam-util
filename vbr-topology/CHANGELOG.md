@@ -99,6 +99,12 @@ Current as of v1.11.0 (checked on VBR v13.1, REST API 1.3-rev2).
 
 ## Unreleased
 
+### Added
+- Both: gateway server links (purple dotted, link kind `gateway`) from a gateway server's proxy card to the
+  repositories whose data goes through it: object storage in Gateway mode, and dedup appliances and NAS
+  shares with selected gateways. Gateway servers without a proxy card, Direct mode and automatic gateway
+  selection get no link.
+
 ### Changed
 - Both: a repository's Host detail follows the console's Host column: `Direct` or `Gateway` for object
   storage, `Gateway (auto)` for dedup appliances and NAS shares that let VBR pick the gateway, `Gateway`

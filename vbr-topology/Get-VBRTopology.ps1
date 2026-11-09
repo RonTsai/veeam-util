@@ -1137,6 +1137,23 @@ foreach ($n in @($Nodes.Values)) {
     if ($n.kind -eq "vi_host" -and -not $hasOut[$n.id]) { foreach ($p in $proxyByType.ViProxy) { Add-Link $n.id $p $null "inferred" } }
 }
 
+# Gateway servers -> repositories whose data goes through them (Host "Gateway", as in the console), when the
+# gateway server has a proxy card (a CDP proxy card only when it has no other); kind "gateway", no jobs
+$proxyCardByName = @{}
+foreach ($n in @($Nodes.Values | Where-Object { $_.kind -eq "proxy" } | Sort-Object { $_.sub -match "CDP" })) {
+    $k = "$($n.name)".ToLower(); if (-not $proxyCardByName.ContainsKey($k)) { $proxyCardByName[$k] = $n.id }
+}
+foreach ($n in @($Nodes.Values)) {
+    if ($n.kind -notin @("repo", "object") -or $n.details["Host"] -ne "Gateway" -or -not $n.details["Gateway"]) { continue }
+    $tgt = if ($n["inSobr"]) { $n["inSobr"] } else { $n.id }
+    foreach ($g in "$($n.details['Gateway'])".Split(",")) {
+        $src = $proxyCardByName["$g".Trim().ToLower()]
+        if ($src -and $src -ne $tgt -and -not $Links.Contains("$src|$tgt|gateway")) {
+            $Links["$src|$tgt|gateway"] = [ordered]@{ source = $src; target = $tgt; kind = "gateway"; jobs = New-Object System.Collections.Generic.List[string] }
+        }
+    }
+}
+
 # Other managed servers
 foreach ($s in $servers) {
     $id = Get-IdStr $s

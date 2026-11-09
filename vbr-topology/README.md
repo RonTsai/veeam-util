@@ -356,6 +356,9 @@ Without PowerCLI, the script falls back to the Veeam inventory automatically.
   mode: "Direct connection", or the gateway servers the data goes through (the first one and how many
   more; hover for the full list). Dedup appliances and NAS shares show "Gateway (auto)" when VBR picks
   the gateway, or their selected gateways, as the console's Host column.
+- **Gateway servers**: a purple dotted line from the gateway server's proxy card to each repository whose
+  data goes through it (object storage in Gateway mode, dedup appliances and NAS shares with selected
+  gateways). Gateway servers without a proxy card, and automatic selection, show on the card only.
 - **Sources without job information**: get a gray dashed "inferred" link to the proxies. ESXi hosts are skipped
   when a vCenter is present.
 - **Managed servers without a role**: listed under "Other servers"

@@ -110,8 +110,8 @@ const I18N = {
     placeTitle: "Component hosts", invTitle: "Infrastructure inventory", jobsTitle: "Jobs",
     meta: "VBR: {name}  ·  Build {build}  ·  API {api}  ·  Scanned {time}",
     legendData: "Data flow (set in job)", legendAuto: "Data flow (automatic proxy selection)",
-    legendCopy: "Backup copy / Replica / Offload", legendInferred: "Inferred link",
-    tipInferred: "(inferred: no job information)", tipAuto: "(automatic proxy selection)",
+    legendCopy: "Backup copy / Replica / Offload", legendInferred: "Inferred link", legendGateway: "Gateway server",
+    tipInferred: "(inferred: no job information)", tipAuto: "(automatic proxy selection)", tipGateway: "(gateway server of the repository)",
     otherTitle: "Other servers (tape servers and libraries, SureBackup virtual labs, managed servers without a proxy or repository role)",
     unknownHost: "Physical / unknown host", unknownGroup: "Physical / unknown", hosted: "Components running here",
     thKind: "Kind", thName: "Name", thRole: "Role / type", thDetails: "Details",
@@ -145,8 +145,8 @@ const I18N = {
     placeTitle: "元件所在主機", invTitle: "基礎架構清單", jobsTitle: "Jobs",
     meta: "VBR: {name}  ·  Build {build}  ·  API {api}  ·  掃描時間 {time}",
     legendData: "資料流 (Job 指定)", legendAuto: "資料流 (Proxy 自動選擇)",
-    legendCopy: "Backup copy / Replica / Offload", legendInferred: "推測連線",
-    tipInferred: "(推測：無 Job 資訊)", tipAuto: "(Proxy 自動選擇)",
+    legendCopy: "Backup copy / Replica / Offload", legendInferred: "推測連線", legendGateway: "Gateway server",
+    tipInferred: "(推測：無 Job 資訊)", tipAuto: "(Proxy 自動選擇)", tipGateway: "(此 repository 的 gateway server)",
     otherTitle: "其他伺服器 (Tape server 與 tape library、SureBackup virtual lab、未擔任 proxy、repository 角色的受管伺服器)",
     unknownHost: "實體機 / 未知主機", unknownGroup: "實體機 / 未知", hosted: "上面執行的元件",
     thKind: "類別", thName: "名稱", thRole: "角色 / 類型", thDetails: "詳細",
@@ -277,6 +277,7 @@ const SVG_STYLE = `
   .flow.auto { stroke:#00b336; stroke-opacity:.55; }
   .flow.copy { stroke:#1f8fd6; stroke-dasharray:7 4; }
   .flow.inferred { stroke:#9aa5ae; stroke-dasharray:5 4; }
+  .flow.gateway { stroke:#8a5cd6; stroke-dasharray:2 3; }
   .hit { stroke:transparent; stroke-width:12; fill:none; }
   .dim { opacity:.12; }
   .badge { fill:#00b336; stroke:#fff; stroke-width:2; }
@@ -505,7 +506,8 @@ function render() {
     if (l.route === "adj" || l.route === "same") d = `M${sx} ${l.sy} H${l.c1} V${l.ty} H${tx}`;
     else d = `M${sx} ${l.sy} H${l.c1} V${l.laneY} H${l.c2} V${l.ty} H${tx}`;
     const tip = `${esc(a.name)} → ${esc(b.name)}` + (l.jobs.length ? "\n" + l.jobs.map(esc).join("\n") : "") +
-                (l.kind === "inferred" ? "\n" + t("tipInferred") : l.kind === "auto" ? "\n" + t("tipAuto") : "");
+                (l.kind === "inferred" ? "\n" + t("tipInferred") : l.kind === "auto" ? "\n" + t("tipAuto")
+                 : l.kind === "gateway" ? "\n" + t("tipGateway") : "");
     s += `<g class="link" data-s="${esc(l.source)}" data-t="${esc(l.target)}" data-jobs="${esc(JSON.stringify(l.jobs))}"><title>${tip}</title>
       <path class="flow ${l.kind}" d="${d}" marker-end="url(#arr-${l.kind})"/><path class="hit" d="${d}"/></g>`;
   });
@@ -553,6 +555,7 @@ function render() {
 
   // legend
   const lg = [["data", t("legendData")], ["auto", t("legendAuto")], ["copy", t("legendCopy")], ["inferred", t("legendInferred")]];
+  if (links.some(l => l.kind === "gateway")) lg.push(["gateway", t("legendGateway")]);
   let lx = 0, lgs = "";
   lg.forEach(([k, label]) => { lgs += `<path class="flow ${k}" d="M${lx} 0 h40" marker-end="url(#arr-${k})"/><text x="${lx + 50}" y="4">${esc(label)}</text>`;
     lx += 80 + textW(label); });
@@ -564,7 +567,7 @@ function render() {
      <text x="${lx + 246}" y="4">Veeam Agent</text></g>`;
 
   const marker = (id, c) => `<marker id="arr-${id}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="${c}"/></marker>`;
-  s = `<defs>${marker("data", "#00b336")}${marker("auto", "#7fd99a")}${marker("copy", "#1f8fd6")}${marker("inferred", "#9aa5ae")}</defs>` + s;
+  s = `<defs>${marker("data", "#00b336")}${marker("auto", "#7fd99a")}${marker("copy", "#1f8fd6")}${marker("inferred", "#9aa5ae")}${marker("gateway", "#8a5cd6")}</defs>` + s;
 
   const svg = document.getElementById("diagram");
   svg.setAttribute("width", totalW); svg.setAttribute("height", totalH);
