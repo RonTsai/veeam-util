@@ -2,20 +2,22 @@
 
 ## Known limitations
 
-Current as of v1.10.0 (checked on VBR v13.1, REST API 1.3-rev2).
+Current as of v1.11.0 (checked on VBR v13.1, REST API 1.3-rev2).
 
 **Testing**
 
 - Tested on VBR v13.1 in two labs (vCenter 8.0.3, ESXi 7.0.3 and 8.0.3, one Hyper-V cluster) and against
   the offline mocks. Results were compared with the VBR console.
+- The PowerShell collector was run in the PowerShell 7 that the VBR v13 console opens. It keeps to Windows
+  PowerShell 5.1 syntax, but has not been run on 5.1 against a real server.
 - CDP policies, Cloud Director replication jobs and storage copy jobs were not in the labs; what
   PowerShell reads for CDP policies and Cloud Director replication jobs has only been tested against the
   mocks.
 - The plug-in platform IDs (Nutanix AHV, Proxmox VE, HPE Morpheus VME) were taken from one lab; other
   plug-in versions may use other IDs.
-- Job retention and encryption in PowerShell: only `Get-VBRJob`'s `BackupStorageOptions` follows a known
-  layout. For agent, backup copy, file share and Entra ID jobs several property names are tried, which has
-  only been tested against the mocks; a name that does not match leaves the value empty.
+- Job retention and encryption in PowerShell: the property names were checked in the lab for `Get-VBRJob`,
+  agent, backup copy, file share, file backup copy and Entra ID jobs. Other job kinds try several names,
+  tested against the mocks only; a name that does not match leaves the value empty.
 
 **Both collectors**
 
@@ -30,6 +32,8 @@ Current as of v1.10.0 (checked on VBR v13.1, REST API 1.3-rev2).
   the agent manages itself.
 - Retention is the job's short-term retention only (no GFS). Replicas, CDP policies, SureBackup and tape
   jobs show no encryption.
+- A file backup copy job without its own encryption settings uses the source job's, but both collectors show
+  the copy job's own flag.
 
 **PowerShell**
 
@@ -66,8 +70,8 @@ Current as of v1.10.0 (checked on VBR v13.1, REST API 1.3-rev2).
 - No plug-in platform hosts and no ESXi versions (the vCenter REST API has none either).
 - Plug-in platform jobs (Nutanix AHV, Proxmox VE, HPE Morpheus VME) are not in `/jobs`. Python finds them
   in `/backups` with their repository, VMs, restore points and last run, but without state, sources,
-  retention, encryption or data-flow links. Their objects are every VM found in their backups, including VMs the job no
-  longer protects, so the count can be higher than the console's.
+  retention, encryption or data-flow links. Their objects are every VM found in their backups, including
+  VMs the job no longer protects, so the count can be higher than the console's.
 - On VBR v13 the inventory does not return VMs per host: without `--vcenter-user`, components are usually
   not placed on ESXi hosts. A vCenter whose login is rejected shows no ESXi hosts (`managedServers` lists
   only the vCenter, even with `includeNestedHosts`).
@@ -93,15 +97,15 @@ Current as of v1.10.0 (checked on VBR v13.1, REST API 1.3-rev2).
   Hyper-V host). Object type names differ slightly (`Vapp` / `vApp`, `Virtual machine` / `Virtual Machine`
   for Hyper-V), and PowerShell lists the computers of an agent job as `Protection group`.
 
-## Unreleased
+## v1.11.0 (2026-11-09)
 
 ### Added
 - Both: the Jobs table shows each job's retention (for example `7 days`, `14 restore points`) and whether
   it encrypts its backups. PowerShell reads `Options.BackupStorageOptions` of `Get-VBRJob` jobs and the
   retention and storage options of the agent, backup copy, file share, Entra ID and configuration backup
   cmdlets (file backup copy jobs: `Options.NasBackupRetentionPolicy`, which holds the source job's
-  retention unless the copy has its own); Python reads `retentionPolicy` and `encryption` from `/api/v1/jobs` (replicas:
-  `restorePointsToKeep`) and `/api/v1/configBackup`.
+  retention unless the copy has its own); Python reads `retentionPolicy` and `encryption` from
+  `/api/v1/jobs` (replicas: `restorePointsToKeep`) and `/api/v1/configBackup`.
 - Both: Jobs table cells that the collector cannot read show "n/a" with a numbered note under the table that
   gives the reason (PowerShell: last run of tape jobs, the configuration backup and Entra ID tenant backups,
   tape retention and encryption; Python: state, sources, retention and encryption of plug-in platform jobs).
