@@ -23,8 +23,6 @@ Current as of v1.10.0 (checked on VBR v13.1, REST API 1.3-rev2).
   (`GetChilds()` / `GetSubHosts()` return nothing), and REST lists `NutanixAHV` and `PVE` in `EProxyType`
   but `/proxies` returns none of them.
 - Storage copy jobs (HPE StoreOnce Catalyst Copy, Dell Data Domain Managed File Replication) are not listed.
-- Object storage backup jobs are labeled `File backup`, as `Get-VBRUnstructuredBackupJob` does not tell
-  them apart from file share backups.
 - Backup copies from an Application Backup Repository report a size on disk of 0.
 - Without PowerCLI or `--vcenter-user`, components are matched to hosts by VM name only. Proxies
   registered by IP, and VMs whose name differs from their hostname, show as "Physical / unknown host".
@@ -116,6 +114,13 @@ Current as of v1.10.0 (checked on VBR v13.1, REST API 1.3-rev2).
 - Both: the Jobs table's Repository column is now Target, as the VBR console's: replicas show their target
   host, with the repository that holds the replica metadata under it, and SureBackup jobs (PowerShell) their
   virtual lab; PowerShell CDP policies show their target host too. The model gains an optional `target`.
+- Both: job types use the names of the VBR console's Jobs view (for example `Linux Agent Backup`,
+  `Unix Agent Policy`, `Backup Copy`, `Entra ID Log Backup`, `Proxmox VE Replica`, `File to Tape Backup`).
+  What the console's name leaves out shows on a second line: the copy mode of a backup copy, `File share`
+  for a file backup copy, `Content scan` for a SureBackup job without a virtual lab. The model gains an
+  optional `typeDetail`.
+- Both: object storage backup jobs are labeled `Object Storage Backup` (PowerShell: when all of the job's
+  objects are object storage), no longer `File backup`.
 
 ### Fixed
 - PowerShell: repositories missing from three kinds of jobs. File backup copy jobs only carry

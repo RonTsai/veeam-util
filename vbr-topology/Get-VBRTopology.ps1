@@ -585,7 +585,10 @@ foreach ($j in $jobs) {
         New-JobObject "$($_.Name)" "$(Get-Prop $_ @('TypeDisplayName', 'Object.ViType', 'Object.Type'))" "$($_.Location)" `
             $size ("$($_.Type)" -eq "Exclude") })
 
-    $JobRows.Add([ordered]@{ name = $j.Name; type = $(if ($typeStr) { $typeStr } else { $type }); disabled = $disabled
+    # TypeToString, with the names the console's Jobs view uses where they differ
+    $rowType = $(if ($typeStr) { $typeStr } else { $type })
+    $rowType = switch -Regex ($rowType) { '^Proxmox$' { "Proxmox VE Replica" } '^Proxmox Backup$' { "Proxmox VE Backup" } default { $rowType } }
+    $JobRows.Add([ordered]@{ name = $j.Name; type = $rowType; disabled = $disabled
         repository = $(if ((Test-Node $repo)) { $Nodes[$repo].name } else { $null }); sources = @($hosts)
         proxies = $(if ($sel.Count) { ($sel | ForEach-Object { $Nodes[$_].name }) -join ", " } else { "Automatic" })
         objects = $jobObjs })
@@ -673,7 +676,7 @@ foreach ($a in $agentJobs) {
                Where-Object { $_ -and (Test-Node $_) -and $Nodes[$_].kind -eq "agent" })
     if (-not $pgIds.Count) { Add-Node "agents" "agent" "Veeam Agents" "Physical / virtual servers" @("A") | Out-Null; $pgIds = @("agents") }
     foreach ($pg in $pgIds) { Add-Link $pg $repo $label }
-    $JobRows.Add([ordered]@{ name = $a.Name; type = "Agent backup ($($a.OSPlatform), $($a.Mode))"; disabled = ($enabled -eq $false)
+    $JobRows.Add([ordered]@{ name = $a.Name; type = "$($a.OSPlatform) Agent $(if ("$($a.Mode)" -match 'ManagedByAgent') { 'Policy' } else { 'Backup' })"; disabled = ($enabled -eq $false)
         repository = $(if ((Test-Node "$repo")) { $Nodes["$repo"].name } else { $null })
         sources = @($pgIds | ForEach-Object { $Nodes[$_].name }); proxies = "—"
         objects = @(@($a.BackupObject) | Where-Object { $_ } | ForEach-Object {
@@ -696,7 +699,7 @@ foreach ($c in $copyJobs) {
         $srcRepos += $sid
     }
     foreach ($sr in $srcRepos) { if ($sr) { Add-Link $sr $tgt $c.Name "copy" } }
-    $JobRows.Add([ordered]@{ name = $c.Name; type = "Backup copy ($($c.Mode))"; disabled = ($c.JobEnabled -eq $false)
+    $JobRows.Add([ordered]@{ name = $c.Name; type = "Backup Copy"; typeDetail = "$($c.Mode)"; disabled = ($c.JobEnabled -eq $false)
         repository = $(if ((Test-Node "$tgt")) { $Nodes["$tgt"].name } else { $null })
         sources = @(@($c.BackupJob) + @(Get-Prop $c @("SourceRepository")) | Where-Object { $_ } | ForEach-Object { $_.Name }); proxies = "—"
         objects = @(@(@($c.BackupJob) | Where-Object { $_ } | ForEach-Object { New-JobObject "$($_.Name)" "Job" }) +
@@ -723,7 +726,7 @@ foreach ($n in @($nasJobs) + @($entraLogJobs) + @($nasCopyJobs)) {
     $enabled = Get-Prop $n @("JobEnabled", "IsEnabled", "Enabled")
     if ($entraLogIds.Contains($nid)) {
         $tn = "$(Get-Prop $n @('BackupObject.Tenant.Name', 'BackupObject.Tenant.TenantName', 'BackupObject.TenantName', 'Tenant.Name'))"
-        $JobRows.Add([ordered]@{ name = $n.Name; type = "Entra ID audit log backup"; disabled = ($enabled -eq $false)
+        $JobRows.Add([ordered]@{ name = $n.Name; type = "Entra ID Log Backup"; disabled = ($enabled -eq $false)
             repository = $(if ((Test-Node "$repo")) { $Nodes["$repo"].name } else { $null }); sources = @($tn | Where-Object { $_ }); proxies = "—"
             objects = @($tn | Where-Object { $_ } | ForEach-Object { New-JobObject $_ "Entra ID tenant" }) })
         continue
@@ -736,7 +739,7 @@ foreach ($n in @($nasJobs) + @($entraLogJobs) + @($nasCopyJobs)) {
         if (-not $srcName -and $sid) { $srcName = "$(@(@($nasJobs) | Where-Object { $_ -and (Get-IdStr $_) -eq $sid })[0].Name)" }
         $sr = $(if ($sid) { $nasRepo[$sid] } else { $null })
         if ($sr) { Add-Link $sr $repo $n.Name "copy" }
-        $JobRows.Add([ordered]@{ name = $n.Name; type = "File backup copy"; disabled = ($enabled -eq $false)
+        $JobRows.Add([ordered]@{ name = $n.Name; type = "Backup Copy"; typeDetail = "File share"; disabled = ($enabled -eq $false)
             repository = $(if ((Test-Node "$repo")) { $Nodes["$repo"].name } else { $null })
             sources = @($srcName | Where-Object { $_ }); proxies = "—"
             objects = @($srcName | Where-Object { $_ } | ForEach-Object { New-JobObject $_ "Job" }) })
@@ -763,7 +766,10 @@ foreach ($n in @($nasJobs) + @($entraLogJobs) + @($nasCopyJobs)) {
             foreach ($m in @(Get-Prop $b @($mk[0]))) { if ($m) { New-JobObject "$m" $mk[1] $path "" $mk[2] } }
         }
     })
-    $JobRows.Add([ordered]@{ name = $n.Name; type = "File backup"; disabled = ($enabled -eq $false)
+    # Object storage backup when every share or bucket is object storage (Get-VBRUnstructuredBackupJob returns both kinds)
+    $isObj = @($nasObjs | Where-Object { $_.type -notmatch ' mask$' }).Count -gt 0 -and
+             @($nasObjs | Where-Object { $_.type -notmatch ' mask$' -and $_.type -ne "Object storage" }).Count -eq 0
+    $JobRows.Add([ordered]@{ name = $n.Name; type = $(if ($isObj) { "Object Storage Backup" } else { "File Backup" }); disabled = ($enabled -eq $false)
         repository = $(if ((Test-Node "$repo")) { $Nodes["$repo"].name } else { $null }); sources = @(); proxies = "Automatic"
         objects = $nasObjs })
 }
@@ -772,7 +778,7 @@ foreach ($n in @($nasJobs) + @($entraLogJobs) + @($nasCopyJobs)) {
 foreach ($x in $entraJobs) {
     $enabled = Get-Prop $x @("JobEnabled", "IsEnabled", "Enabled")
     $tn = "$(Get-Prop $x @('Tenant.Name', 'Tenant.TenantName', 'Tenant.DisplayName'))"
-    $JobRows.Add([ordered]@{ name = $x.Name; type = "Entra ID backup"; disabled = ($enabled -eq $false); repository = $null
+    $JobRows.Add([ordered]@{ name = $x.Name; type = "Entra ID Tenant Backup"; disabled = ($enabled -eq $false); repository = $null
         sources = @($tn | Where-Object { $_ }); proxies = "—"; objects = @($tn | Where-Object { $_ } | ForEach-Object { New-JobObject $_ "Entra ID tenant" }) })
 }
 foreach ($x in $sbJobs) {
@@ -786,7 +792,7 @@ foreach ($x in $sbJobs) {
     $ag = Get-Prop $x @("ApplicationGroup")
     $appGroup = "$(Get-Prop $ag @('Name'))"; if (-not $appGroup -and $ag) { $appGroup = "$ag" }
     $agVms = (@(@(Get-Prop $ag @("VM")) | Where-Object { $_ } | ForEach-Object { $vn = Get-Prop $_ @('Name'); if ($vn) { "$vn" } else { "$_" } }) | Where-Object { $_ }) -join ", "
-    $JobRows.Add([ordered]@{ name = $x.Name; type = $(if ($vlName) { "SureBackup" } else { "SureBackup (content scan)" })
+    $JobRows.Add([ordered]@{ name = $x.Name; type = "SureBackup"; typeDetail = $(if ($vlName) { $null } else { "Content scan" })
         disabled = ($enabled -eq $false); repository = $null; sources = $linked; proxies = "—"
         target = $(if ($vlName) { $vlName } else { $null })   # the virtual lab, as the console's Target column
         objects = @(@($linked | ForEach-Object { New-JobObject $_ "Job" }) + @($(if ($appGroup) { New-JobObject $appGroup "Application group" $agVms })) +
@@ -796,7 +802,7 @@ foreach ($x in $sbJobs) {
 # Tape jobs: the target is a media pool (shown as the repository); sources are jobs or file shares
 foreach ($x in $tapeJobs) {
     $tt = "$($x.Type)"
-    $type = switch -Regex ($tt) { '^BackupToTape$' { "Backup to tape" } '^FileToTape$' { "File to tape" } default { "Tape ($tt)" } }
+    $type = switch -Regex ($tt) { '^BackupToTape$' { "Backup to Tape" } '^FileToTape$' { "File to Tape Backup" } default { "Tape ($tt)" } }
     $srcs = @(@($x.Object) | Where-Object { $_ } | ForEach-Object { "$(Get-Prop $_ @('Name', 'Path'))" } | Where-Object { $_ })
     # Enabled is False both for a disabled tape job and for one without a schedule (console: <Disabled> or
     # <Not scheduled>), so False leaves the state unknown (footnote tapeState)
@@ -817,7 +823,7 @@ foreach ($x in $cdpPolicies) {
     $px = @($proxyByType.CdpProxy)
     foreach ($h in $hosts) { $src = Resolve-SourceNode $h "vi"; foreach ($p in $px) { Add-Link $src $p $label "auto" } }
     foreach ($p in $px) { Add-Link $p $tgt $label "copy" }
-    $JobRows.Add([ordered]@{ name = $x.Name; type = "CDP policy"; disabled = ($enabled -eq $false)
+    $JobRows.Add([ordered]@{ name = $x.Name; type = "CDP Policy"; disabled = ($enabled -eq $false)
         repository = $(if ((Test-Node "$repo")) { $Nodes["$repo"].name } else { $null }); sources = @($hosts); proxies = "Automatic"
         target = $(if ((Test-Node "$tgt")) { $Nodes["$tgt"].name } else { $null })
         objects = @($objs | ForEach-Object { New-JobObject "$(Get-Prop $_ @('Name'))" "Virtual machine" "$(Get-Prop $_ @('Host.Name', 'Object.Host.Name', 'HostName'))" }) })
@@ -841,7 +847,7 @@ foreach ($x in $cfgJobs) {
     if ((Test-Node "$repo")) { $Nodes["vbr"].details["Config backup target"] = $Nodes["$repo"].name }
     $enc = Get-Prop $x @("EncryptionOptions.Enabled", "EncryptionOptions.Enable", "EncryptionOptions")
     if ($enc -is [bool]) { $Nodes["vbr"].details["Config backup encrypted"] = $(if ($enc) { "Yes" } else { "No" }) }
-    $JobRows.Add([ordered]@{ name = $name; type = "Configuration backup"; disabled = ($enabled -eq $false)
+    $JobRows.Add([ordered]@{ name = $name; type = "Configuration Backup"; disabled = ($enabled -eq $false)
         repository = $(if ((Test-Node "$repo")) { $Nodes["$repo"].name } else { $null }); sources = @($vbrName); proxies = "—"; objects = @() })
 }
 
@@ -886,7 +892,7 @@ foreach ($x in @($agentJobs) + @($copyJobs) + @($nasJobs) + @($entraJobs) + @($e
     if ($x -and $x.Name) { if (-not $settingsSrc.ContainsKey($x.Name)) { $settingsSrc[$x.Name] = @() }; $settingsSrc[$x.Name] += , $x }
 }
 foreach ($r in $JobRows) {
-    $srcs = $(if ($r.type -eq "Configuration backup") { @($cfgJobs) } else { @($settingsSrc[$r.name]) })
+    $srcs = $(if ($r.type -eq "Configuration Backup") { @($cfgJobs) } else { @($settingsSrc[$r.name]) })
     $ret = $null; $enc = $null
     foreach ($x in $srcs) {
         if (-not $x) { continue }
@@ -1015,7 +1021,7 @@ foreach ($k in $vmsByBackup.Keys) {
     elseif ("$($b.JobType)" -eq "VmbApiPolicyTempJob" -or $pf -eq "CustomPlatform") {
         $jt = $typeByJob[$jid]
         $pf = $(if ($jt -match "Nutanix|AHV") { "Nutanix AHV" } elseif ($jt -match "Proxmox") { "Proxmox VE" } elseif ($jt -match "Morpheus") { "HPE Morpheus VME" }
-                elseif ($jt -match '^Agent backup \((\w+)') { $Matches[1] }
+                elseif ($jt -match '^(\w+) Agent (Backup|Policy)$') { $Matches[1] }
                 elseif ("$($b.JobType)" -match "Copy|BackupSync") { "Image-level" } else { "Plug-in" })
     }
     # Created: the oldest backup file, as the console shows it (CreationTime can be the date of an upgrade)
@@ -1062,26 +1068,26 @@ foreach ($x in @($tapeJobs) + @($cfgJobs)) {
     Add-LastSession $key (Get-Prop $x @("LastRun", "LastRunTime", "LastRunLocal")) $res
 }
 foreach ($r in $JobRows) {
-    $jid = $(if ($r.type -eq "Configuration backup") { "cfg" } else { "$($idByName[$r.name])" })
+    $jid = $(if ($r.type -eq "Configuration Backup") { "cfg" } else { "$($idByName[$r.name])" })
     $ls = $lastByJob[$jid]
     $res = $(if ($ls) { $ls.Result } else { $resultByJob[$jid] })
     # As in the console: no result without a run time, and N/A for policies the agent manages itself
     $r["lastRun"] = $(if ($ls) { & $fmtTime $ls.Time } else { $null })
     $running = $ls -and $ls.State -and $ls.State -notmatch '^(Stopped|Idle|None)$'
-    $r["lastResult"] = $(if ($r.type -match "ManagedByAgent") { "N/A" } elseif ($running) { "Running" }
+    $r["lastResult"] = $(if ($r.type -match "Agent Policy$") { "N/A" } elseif ($running) { "Running" }
                          elseif ($ls -and $res -and $res -ne "None") { $res } else { $null })
 }
 
 # Cells PowerShell cannot fill: the report shows "n/a" with a footnote (texts: note_<code> in template.html I18N)
 foreach ($r in $JobRows) {
     $na = [ordered]@{}
-    if ($r.type -match "^(Backup|File) to tape$" -or $r.type -match "^Tape \(") {
+    if ($r.type -match "^(Backup to Tape|File to Tape Backup)$" -or $r.type -match "^Tape \(") {
         $na["retention"] = "tapeMediaPool"; $na["encrypted"] = "tapeMediaPool"
         if ($null -eq $r.disabled) { $na["disabled"] = "tapeState" }
         if (-not $r.lastRun) { $na["lastRun"] = "tapeLastRun" }
-    } elseif ($r.type -eq "Configuration backup" -and -not $r.lastRun) {
+    } elseif ($r.type -eq "Configuration Backup" -and -not $r.lastRun) {
         $na["lastRun"] = "configLastRun"; $na["lastResult"] = "configLastRun"
-    } elseif ($r.type -eq "Entra ID backup" -and -not $r.lastRun) {
+    } elseif ($r.type -eq "Entra ID Tenant Backup" -and -not $r.lastRun) {
         $na["lastRun"] = "entraLastRun"; $na["lastResult"] = "entraLastRun"
     }
     if ($na.Count) { $r["unavailable"] = $na }

@@ -717,14 +717,16 @@ DEDUP_REPO_TYPES = {"ddboost", "exagrid", "hpstoreonce", "quantum", "infinidat",
 
 LOCAL_HOSTS = {"localhost", ".", "127.0.0.1", "::1"}
 
-# REST job types -> the wording PowerShell shows (TypeToString and the PowerShell collector's own labels)
+# REST job types -> the wording of the VBR console's Jobs view (the PowerShell collector uses the same names)
 JOB_TYPES = {"vspherebackup": "VMware Backup", "hypervbackup": "Hyper-V Backup",
              "vspherereplica": "VMware Replication", "hypervreplica": "Hyper-V Replication",
-             "clouddirectorbackup": "Cloud Director Backup", "filebackup": "File backup",
-             "objectstoragebackup": "File backup", "filebackupcopy": "File backup copy",
-             "entraidtenantbackup": "Entra ID backup", "entraidauditlogbackup": "Entra ID audit log backup",
-             "surebackupcontentscan": "SureBackup (content scan)", "surebackup": "SureBackup",
-             "proxmoxbackupjob": "Proxmox Backup", "nutanixahvbackupjob": "Nutanix AHV Backup"}
+             "clouddirectorbackup": "Cloud Director Backup", "filebackup": "File Backup",
+             "objectstoragebackup": "Object Storage Backup", "filebackupcopy": "Backup Copy",
+             "entraidtenantbackup": "Entra ID Tenant Backup", "entraidauditlogbackup": "Entra ID Log Backup",
+             "surebackupcontentscan": "SureBackup", "surebackup": "SureBackup", "backupcopy": "Backup Copy",
+             "proxmoxbackupjob": "Proxmox VE Backup", "nutanixahvbackupjob": "Nutanix AHV Backup"}
+# What the console's type leaves out, shown under it
+JOB_TYPE_DETAILS = {"filebackupcopy": "File share", "surebackupcontentscan": "Content scan"}
 # Plug-in platform servers in REST 1.3-rev2+ (HPE Morpheus VME is not in the REST API)
 PLUGIN_SERVER_TYPES = {"ProxmoxNode": "Proxmox VE", "ProxmoxCluster": "Proxmox VE",
                        "NutanixCluster": "Nutanix AHV", "PrismCentral": "Nutanix AHV"}
@@ -733,7 +735,7 @@ PLUGIN_JOB_TYPES = {"proxmoxbackupjob": "Proxmox VE", "nutanixahvbackupjob": "Nu
 PLUGIN_PLATFORM_IDS = {"799a5a3e-ae1e-4eaf-86eb-8a9acc2670e2": "Nutanix AHV",
                        "01208ee8-47fe-4ea8-8727-5115874da1ad": "Proxmox VE",
                        "2d470d24-b6bb-4fa3-b7ff-f0fc1137ca52": "HPE Morpheus VME"}
-PLUGIN_JOB_LABELS = {"Nutanix AHV": "Nutanix AHV Backup", "Proxmox VE": "Proxmox Backup",
+PLUGIN_JOB_LABELS = {"Nutanix AHV": "Nutanix AHV Backup", "Proxmox VE": "Proxmox VE Backup",
                      "HPE Morpheus VME": "HPE Morpheus VME Backup"}
 # Backup platforms (platformName) -> the wording of the VBR console's Backups view
 BACKUP_PLATFORMS = {"vmware": "VMware", "hyperv": "Hyper-V", "nutanix": "Nutanix AHV", "proxmox": "Proxmox VE",
@@ -759,14 +761,19 @@ def job_type_label(j):
     t = j.get("type") or ""
     if _lc(t) in JOB_TYPES:
         return JOB_TYPES[_lc(t)]
-    if _lc(t) == "backupcopy":
-        return f"Backup copy ({j['mode']})" if j.get("mode") else "Backup copy"
-    # WindowsAgentBackup (managed by the backup server), WindowsAgentBackupServerPolicy (managed by the agent), ...
+    # WindowsAgentBackup (managed by the backup server): "Windows Agent Backup"; WindowsAgentBackupServerPolicy
+    # (managed by the agent): "Windows Agent Policy", as the console names them
     m = re.match(r"^(windows|linux|mac|unix|solaris|aix)agentbackup(.*)$", _lc(t))
     if m:
-        mode = "ManagedByAgent" if "policy" in m.group(2) else "ManagedByBackupServer"
-        return f"Agent backup ({AGENT_OS[m.group(1)]}, {mode})"
+        return f"{AGENT_OS[m.group(1)]} Agent {'Policy' if 'policy' in m.group(2) else 'Backup'}"
     return t
+
+
+def job_type_detail(j):
+    t = _lc(j.get("type"))
+    if t == "backupcopy":
+        return j.get("mode")   # Immediate / Periodic
+    return JOB_TYPE_DETAILS.get(t)
 
 
 RETENTION_UNITS = {"days": "day", "restorepoints": "restore point", "weeks": "week", "months": "month", "years": "year"}
@@ -1260,7 +1267,7 @@ def build_model(raw, csv_rows=()):
         # As in the console: no result without a run time, and N/A for policies the agent manages itself
         st = job_state.get(jid) or {}
         res = st.get("lastResult")
-        if "ManagedByAgent" in job_type:
+        if job_type.endswith("Agent Policy"):
             return {"lastRun": st.get("lastRun"), "lastResult": "N/A"}
         if st.get("status") == "Running":   # lastResult is None while the job runs
             return {"lastRun": st.get("lastRun"), "lastResult": "Running"}
@@ -1322,7 +1329,7 @@ def build_model(raw, csv_rows=()):
             objects.append({"name": tenant, "type": "Entra ID tenant", "location": "", "size": "", "excluded": False})
         if j.get("primaryJobId") and job_names.get(j["primaryJobId"]):
             objects.append({"name": job_names[j["primaryJobId"]], "type": "Job", "location": "", "size": "", "excluded": False})
-        job_rows.append({"name": name, "type": job_type_label(j), "disabled": j.get("isDisabled"),
+        job_rows.append({"name": name, "type": job_type_label(j), "typeDetail": job_type_detail(j), "disabled": j.get("isDisabled"),
                          "repository": (nodes.get(repo) or {}).get("name"),
                          "sources": sources, "proxies": proxies, "objects": objects,
                          "retention": job_retention(j), "encrypted": job_encrypted(j),
@@ -1450,7 +1457,7 @@ def build_model(raw, csv_rows=()):
         enc = (cb.get("encryption") or {}).get("isEnabled")
         if isinstance(enc, bool):
             nodes["vbr"]["details"]["Config backup encrypted"] = "Yes" if enc else "No"
-        job_rows.append({"name": "Backup Configuration Job", "type": "Configuration backup", "disabled": cb_disabled,
+        job_rows.append({"name": "Backup Configuration Job", "type": "Configuration Backup", "disabled": cb_disabled,
                          "repository": (nodes.get(rid) or {}).get("name"), "sources": [vbr_name],
                          "proxies": "—", "objects": [], "encrypted": enc if isinstance(enc, bool) else None,
                          "retention": retention_text(cb.get("restorePointsToKeep"), "restore point"),

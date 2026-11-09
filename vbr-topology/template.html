@@ -648,7 +648,9 @@ function tables() {
       const row = `<tr class="job${has ? " has" : ""}" data-i="${i}"><td><span class="caret">${has ? "▸" : ""}</span>${esc(j.name)}${
         // count included objects only, as the console's Objects column: File / Tag masks are filters and a
         // SureBackup virtual lab is where the job runs, not objects
-        has ? `<span class="count">(${objs.filter(o => !o.excluded && !/ mask$|^Virtual lab$/.test(o.type)).length})</span>` : ""}</td><td>${esc(j.type)}</td>
+        has ? `<span class="count">(${objs.filter(o => !o.excluded && !/ mask$|^Virtual lab$/.test(o.type)).length})</span>` : ""}</td><td>${esc(j.type)}${
+          // the type as the console names it; what that name leaves out (copy mode, content scan) under it
+          j.typeDetail ? `<div class="tmeta">${esc(td(j.typeDetail))}</div>` : ""}</td>
         <td>${na(j, "sources", (j.sources || []).join(", "))}</td><td>${esc(j.proxies)}</td><td>${
           // Target, as the console: a replica's target host (its repository holds the metadata), a SureBackup job's
           // virtual lab, else the repository or media pool
