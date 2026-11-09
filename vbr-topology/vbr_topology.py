@@ -237,6 +237,18 @@ def _ts(v):
     return v[:16].replace("T", " ") if v else None
 
 
+def _parse_time(v):
+    """ISO time -> aware datetime (UTC when no offset is given), None when it cannot be read. Python 3.8's
+    fromisoformat needs 3 or 6 fraction digits and no "Z", so the fraction is dropped."""
+    if not v:
+        return None
+    try:
+        t = dt.datetime.fromisoformat(re.sub(r"\.\d+", "", str(v)).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return t if t.tzinfo else t.replace(tzinfo=dt.timezone.utc)
+
+
 def backup_job_id(b, job_ids_by_name, known_ids):
     """The job of a backup: its jobId, or the job of the same name when jobId is not a known job (a
     backup copy's backups can name another id)."""
@@ -1420,21 +1432,33 @@ def build_model(raw, csv_rows=()):
             pj = plugin_jobs.setdefault(jid, {"name": b.get("name"), "type": PLUGIN_JOB_LABELS[plat], "platform": plat, "repo": None})
             if not pj["repo"] and b.get("repositoryId") in nodes:
                 pj["repo"] = b["repositoryId"]
-    # Their objects: the backed-up objects named in the files of their backups
+    # Their objects: the backed-up objects named in the files of their backups. The backups also keep VMs
+    # the job no longer protects, so only VMs backed up within a day of the job's newest backup are kept
+    # (one run backs up its VMs minutes apart)
     obj_names = {o.get("id"): o for o in raw.get("backupObjects") or [] if o.get("id")}
+    point_times = raw.get("restorePointTimes") or {}
     backup_ids_of = {}
     for b in raw.get("backups") or []:
         backup_ids_of.setdefault(b.get("jobId"), []).append(b.get("id"))
     for jid, pj in plugin_jobs.items():
-        seen, objs = set(), []
+        newest = {}  # VM name -> its newest backup time (None when no file gives a time)
         for bid in backup_ids_of.get(jid, []):
             for f in (raw.get("backupFiles") or {}).get(bid) or []:
+                times = [_parse_time(point_times.get(p)) for p in f.get("restorePointIds") or []]
+                times = [t for t in times if t] or [_parse_time(f.get("creationTime"))]
+                t = max([t for t in times if t], default=None)
                 for oid in f.get("objectIds") or []:
                     o = obj_names.get(oid) or {}
-                    if o.get("name") and o["name"] not in seen:
-                        seen.add(o["name"])
-                        objs.append({"name": o["name"], "type": "Virtual Machine" if o.get("type") == "VM" else o.get("type") or "",
-                                     "location": "", "size": "", "excluded": False})
+                    if o.get("name"):
+                        if o["name"] not in newest:
+                            pj.setdefault("types", {})[o["name"]] = o.get("type")
+                            newest[o["name"]] = t
+                        elif t and (newest[o["name"]] is None or t > newest[o["name"]]):
+                            newest[o["name"]] = t
+        last = max([t for t in newest.values() if t], default=None)
+        objs = [{"name": n, "type": "Virtual Machine" if pj["types"][n] == "VM" else pj["types"][n] or "",
+                 "location": "", "size": "", "excluded": False}
+                for n, t in newest.items() if not last or not t or last - t <= dt.timedelta(days=1)]
         job_rows.append({"name": pj["name"], "type": pj["type"], "disabled": None,
                          "repository": (nodes.get(pj["repo"]) or {}).get("name"),
                          "sources": [], "proxies": "—", "objects": sorted(objs, key=lambda x: x["name"]),

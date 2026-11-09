@@ -70,8 +70,8 @@ Current as of v1.11.0 (checked on VBR v13.1, REST API 1.3-rev2).
 - No plug-in platform hosts and no ESXi versions (the vCenter REST API has none either).
 - Plug-in platform jobs (Nutanix AHV, Proxmox VE, HPE Morpheus VME) are not in `/jobs`. Python finds them
   in `/backups` with their repository, VMs, restore points and last run, but without state, sources,
-  retention, encryption or data-flow links. Their objects are every VM found in their backups, including
-  VMs the job no longer protects, so the count can be higher than the console's.
+  retention, encryption or data-flow links. Their objects are the VMs backed up within a day of the job's
+  newest backup, so a VM that has failed in every run for more than a day is missing.
 - On VBR v13 the inventory does not return VMs per host: without `--vcenter-user`, components are usually
   not placed on ESXi hosts. A vCenter whose login is rejected shows no ESXi hosts (`managedServers` lists
   only the vCenter, even with `includeNestedHosts`).
@@ -96,6 +96,13 @@ Current as of v1.11.0 (checked on VBR v13.1, REST API 1.3-rev2).
 - Job object locations: PowerShell shows the full inventory path, Python only the host name (vCenter /
   Hyper-V host). Object type names differ slightly (`Vapp` / `vApp`, `Virtual machine` / `Virtual Machine`
   for Hyper-V), and PowerShell lists the computers of an agent job as `Protection group`.
+
+## Unreleased
+
+### Fixed
+- Python: plug-in platform jobs (Nutanix AHV, Proxmox VE, HPE Morpheus VME) no longer list VMs the job no
+  longer protects. Their objects are now the VMs backed up within a day of the job's newest backup, so the
+  count matches the console's Jobs view. The Backups table still lists every VM with restore points.
 
 ## v1.11.0 (2026-11-09)
 
