@@ -54,7 +54,11 @@ function Get-VBRBackupRepository([switch]$ScaleOut) {
     $global:R5 = New-Obj @{ Id = (gid "r5"); Name = "DataDomain01"; Type = "DDBoost"; HostId = [guid]::Empty; Host = $H.vbr
         GatewayAutoDetect = $true; FriendlyPath = "ddboost://dd01.corp.local:Repository@/" } @{
         GetActualGateways = { [pscustomobject]@{ Name = "vbr01.corp.local" }; [pscustomobject]@{ Name = "repo01.corp.local" } } }
-    $global:R1; $global:R4; $global:R5   # like VBR v12+: SOBR extents (R2, R3) are not returned; object storage (R4) is
+    # Dedup appliance with a selected gateway: GetActualGateways() returns it
+    $global:R6 = New-Obj @{ Id = (gid "r6"); Name = "StoreOnce01"; Type = "HPStoreOnceIntegration"; HostId = [guid]::Empty; Host = $H.vbr
+        GatewayAutoDetect = $false; FriendlyPath = "storeonce://so01.corp.local:Catalyst01@/" } @{
+        GetActualGateways = { [pscustomobject]@{ Name = "repo01.corp.local" } } }
+    $global:R1; $global:R4; $global:R5; $global:R6   # like VBR v12+: SOBR extents (R2, R3) are not returned; object storage (R4) is
 }
 $global:R4 = New-Obj @{ Id = (gid "r4"); Name = "Wasabi-Offsite"; Type = "WasabiCloud"; BucketName = "veeam-offsite"
     ConnectionType = "Gateway"; GatewayServer = @([pscustomobject]@{ Name = "repo01.corp.local" }) } @{

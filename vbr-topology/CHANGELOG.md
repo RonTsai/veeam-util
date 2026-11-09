@@ -101,11 +101,13 @@ Current as of v1.11.0 (checked on VBR v13.1, REST API 1.3-rev2).
 
 ### Changed
 - Both: a repository's Host detail follows the console's Host column: `Direct` or `Gateway` for object
-  storage, `Gateway (auto)` for dedup appliances and NAS shares that let VBR pick the gateway (their cards
-  show it too). Gateway servers are listed only when the data goes through them: not in Direct mode (the
-  API and `GetActualGateways()` still return the configured servers) and not for automatic selection
-  (`GetActualGateways()` returns every server that could be one). PowerShell reads `GatewayAutoDetect` of
-  `Get-VBRBackupRepository`; Python names the connection mode `Gateway` instead of `SelectedGateway`.
+  storage, `Gateway (auto)` for dedup appliances and NAS shares that let VBR pick the gateway, `Gateway`
+  for those with selected gateways (their cards show it too, with the first gateway). Gateway servers are
+  listed only when the data goes through them: not in Direct mode (the API and `GetActualGateways()` still
+  return the configured servers) and not for automatic selection (`GetActualGateways()` returns every
+  server that could be one). PowerShell reads `GatewayAutoDetect` of `Get-VBRBackupRepository`; Python
+  reads `gatewayServer` of dedup appliances, and names the connection mode `Gateway` instead of
+  `SelectedGateway`.
 
 ### Fixed
 - Python: Dell Data Domain and HPE StoreOnce repositories (REST types `DellDataDomain`, `HPEStoreOnce`)

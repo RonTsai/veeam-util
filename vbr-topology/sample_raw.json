@@ -194,6 +194,23 @@
       }
     },
     {
+      "id": "r-so",
+      "name": "StoreOnce01",
+      "type": "HPEStoreOnce",
+      "hpeStoreOnce": {
+        "storeOnceServerName": "so01.corp.local",
+        "gatewayServer": {
+          "autoSelection": false,
+          "gatewayServerIds": [
+            "ms-repo1"
+          ]
+        }
+      },
+      "repository": {
+        "path": "storeonce://so01.corp.local:Catalyst01@/"
+      }
+    },
+    {
       "id": "r-tmp",
       "name": "Temp Local Repository",
       "type": "LinuxLocal",
@@ -227,6 +244,13 @@
       "freeGB": 700,
       "path": "ddboost://dd01.corp.local:Repository@/",
       "hostName": "Gateway (auto)"
+    },
+    {
+      "id": "r-so",
+      "capacityGB": 1000,
+      "freeGB": 600,
+      "path": "storeonce://so01.corp.local:Catalyst01@/",
+      "hostName": "Gateway"
     }
   ],
   "scaleOutRepositories": [

@@ -513,7 +513,9 @@ function render() {
   const place = (n, w) => {
     // Object storage gateways: the first one (short name) and how many more; the full list is in the hover details
     // In Direct connection mode the data does not go through the gateways: the chip says Direct
-    const gws = n.kind === "object" && n.details?.Gateway ? String(n.details.Gateway).split(/,\s*/) : [];
+    // (also dedup appliances and NAS shares with selected gateways, whose Host is "Gateway" as in the console)
+    const gwCard = n.kind === "object" || (n.kind === "repo" && n.details?.Host === "Gateway");
+    const gws = gwCard && n.details?.Gateway ? String(n.details.Gateway).split(/,\s*/) : [];
     const gw1 = gws.length > 1 && !/^\d+\.\d+\.\d+\.\d+$/.test(gws[0]) ? gws[0].split(".")[0] : gws[0];
     const direct = n.kind === "object" && /^direct$/i.test(n.details?.["Connection mode"] || "");
     // Dedup appliances and NAS shares that let VBR pick the gateway: "Gateway (auto)", as the console's Host column

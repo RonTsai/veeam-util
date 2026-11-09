@@ -484,10 +484,17 @@ foreach ($r in $repos) {
     }
     $hostName = Resolve-HostName $r
     # Dedup appliances and NAS shares that let VBR pick the gateway: the console's Host column says
-    # "Gateway (auto)", and GetActualGateways() returns every server that could be one
-    if ((Get-Prop $r @("GatewayAutoDetect")) -eq $true -and $t -match "Cifs|Smb|Nfs|$dedupTypes") {
-        if ($hostName) { $RepoPlaceHost[$id] = $hostName }
-        $hostName = "Gateway (auto)"; $gw = $null
+    # "Gateway (auto)", and GetActualGateways() returns every server that could be one. With selected
+    # gateways and no host of their own, the console says "Gateway" and GetActualGateways() returns those
+    $autoGw = Get-Prop $r @("GatewayAutoDetect")
+    if ($t -match "Cifs|Smb|Nfs|$dedupTypes") {
+        if ($autoGw -eq $true) {
+            if ($hostName) { $RepoPlaceHost[$id] = $hostName }
+            $hostName = "Gateway (auto)"; $gw = $null
+        } elseif ($autoGw -eq $false -and $gw -and "$(Get-Prop $r @('HostId'))" -match '^(0{8}-0{4}-0{4}-0{4}-0{12})?$') {
+            if ($hostName) { $RepoPlaceHost[$id] = $hostName }
+            $hostName = "Gateway"
+        }
     }
     $n = Add-Node $id $kind $r.Name $label $badges @{
         Type = $t; Host = $hostName; Path = (Get-Prop $r @("FriendlyPath", "Path")); Gateway = $gw

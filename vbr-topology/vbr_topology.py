@@ -1171,6 +1171,13 @@ def build_model(raw, csv_rows=()):
             mode = "Gateway"
         if tl in OBJECT_REPO_TYPES and _lc(mode) != "direct":
             gateways += find_all(r.get("account") or {}, "gatewayServerIds")
+        # Dedup appliances with selected gateways (gatewayServer.autoSelection false); with automatic selection
+        # the console's Host column says "Gateway (auto)" and lists none
+        if tl in DEDUP_REPO_TYPES:
+            for g in find_all(r, "gatewayServer"):
+                if isinstance(g, dict) and g.get("autoSelection") is False:
+                    gateways.append(g.get("gatewayServerIds") or [])
+                    used_hosts.update(g.get("gatewayServerIds") or [])
         gw_names = [host_name(g) for gl in gateways for g in (gl or []) if host_name(g)]
         if tl in OBJECT_REPO_TYPES:
             kind, label, badges = "object", f"Object storage · {t}", []
