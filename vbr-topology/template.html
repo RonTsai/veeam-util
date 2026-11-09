@@ -45,6 +45,7 @@
   .caret { display:inline-block; width:16px; color:var(--mute); }
   .count { color:var(--mute); font-size:12px; margin-left:6px; }
   .hint { color:var(--mute); font-size:13px; margin:-4px 0 8px; }
+  .tmeta { color:var(--mute); font-size:12px; white-space:nowrap; }
   .na { color:var(--mute); font-style:italic; } .na sup { font-style:normal; margin-left:1px; }
   .notes { color:var(--mute); font-size:12px; margin:6px 0 0; } .notes ol { margin:2px 0 0; padding-left:20px; }
   table.jtab tr.objs > td { background:#fafbfb; padding:6px 10px 12px 36px; }
@@ -117,6 +118,7 @@ const I18N = {
     thHost: "ESXi / Hyper-V host", thComponent: "Component", thRoleShort: "Role", thVm: "VM name", thMatched: "Matched by",
     thJob: "Job", thType: "Type", thSource: "Sources", thProxy: "Proxy", thRepo: "Repository", thState: "State",
     thPoints: "Restore points", thLast: "Last backup", thDisk: "On disk",
+    thTarget: "Target", metadataRepo: "Metadata: {r}",
     thLastRun: "Last run", thLastResult: "Last result", thRetention: "Retention", thEncryption: "Encryption", yes: "Yes", no: "No",
     notAvailable: "n/a", jobNotesTitle: "Notes",
     note_tapeLastRun: "PowerShell gives no run time for tape jobs: Get-VBRTapeJob returns only the last result.",
@@ -151,6 +153,7 @@ const I18N = {
     thHost: "ESXi / Hyper-V 主機", thComponent: "元件", thRoleShort: "角色", thVm: "VM 名稱", thMatched: "比對來源",
     thJob: "Job", thType: "類型", thSource: "來源", thProxy: "Proxy", thRepo: "Repository", thState: "狀態",
     thPoints: "還原點", thLast: "最新備份", thDisk: "佔用空間",
+    thTarget: "目標", metadataRepo: "中繼資料：{r}",
     thLastRun: "上次執行", thLastResult: "上次結果", thRetention: "保留設定", thEncryption: "加密", yes: "是", no: "否",
     notAvailable: "n/a", jobNotesTitle: "附註",
     note_tapeLastRun: "PowerShell 讀不到磁帶 job 的執行時間：Get-VBRTapeJob 只回傳上次結果。",
@@ -639,14 +642,18 @@ function tables() {
     if (!noteNums.includes(code)) noteNums.push(code);
     return `<span class="na">${esc(t("notAvailable"))}<sup>${noteNums.indexOf(code) + 1}</sup></span>`;
   };
-  document.getElementById("jobTable").innerHTML = th(["thJob", "thType", "thSource", "thProxy", "thRepo", "thRetention", "thEncryption", "thLastRun", "thLastResult", "thState"]) +
+  document.getElementById("jobTable").innerHTML = th(["thJob", "thType", "thSource", "thProxy", "thTarget", "thRetention", "thEncryption", "thLastRun", "thLastResult", "thState"]) +
     (MODEL.jobs || []).map((j, i) => {
       const objs = j.objects || [], has = objs.length > 0;
       const row = `<tr class="job${has ? " has" : ""}" data-i="${i}"><td><span class="caret">${has ? "▸" : ""}</span>${esc(j.name)}${
         // count included objects only, as the console's Objects column: File / Tag masks are filters and a
         // SureBackup virtual lab is where the job runs, not objects
         has ? `<span class="count">(${objs.filter(o => !o.excluded && !/ mask$|^Virtual lab$/.test(o.type)).length})</span>` : ""}</td><td>${esc(j.type)}</td>
-        <td>${na(j, "sources", (j.sources || []).join(", "))}</td><td>${esc(j.proxies)}</td><td>${esc(j.repository)}</td>
+        <td>${na(j, "sources", (j.sources || []).join(", "))}</td><td>${esc(j.proxies)}</td><td>${
+          // Target, as the console: a replica's target host (its repository holds the metadata), a SureBackup job's
+          // virtual lab, else the repository or media pool
+          j.target ? esc(j.target) + (j.repository ? `<div class="tmeta">${esc(t("metadataRepo", { r: j.repository }))}</div>` : "")
+                   : esc(j.repository)}</td>
         <td class="nowrap">${na(j, "retention", j.retention ? td(j.retention) : "—")}</td><td>${na(j, "encrypted", j.encrypted == null ? "—" : t(j.encrypted ? "yes" : "no"))}</td>
         <td class="nowrap">${na(j, "lastRun", j.lastRun ?? "—")}</td><td class="result ${esc((j.lastResult || "").toLowerCase())}">${na(j, "lastResult", j.lastResult ?? "—")}</td>
         <td>${na(j, "disabled", j.disabled == null ? "—" : t(j.disabled ? "disabled" : "enabled"))}</td></tr>`;

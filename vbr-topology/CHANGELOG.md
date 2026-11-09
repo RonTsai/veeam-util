@@ -113,6 +113,9 @@ Current as of v1.10.0 (checked on VBR v13.1, REST API 1.3-rev2).
 - Both: policies that the agent manages itself show "N/A" as their last result, as the VBR console does.
 - Both: a job that is running at scan time shows "Running" as its last result, instead of none (Python:
   `status` in `/jobs/states`; PowerShell: the `State` of the job's newest session).
+- Both: the Jobs table's Repository column is now Target, as the VBR console's: replicas show their target
+  host, with the repository that holds the replica metadata under it, and SureBackup jobs (PowerShell) their
+  virtual lab; PowerShell CDP policies show their target host too. The model gains an optional `target`.
 
 ### Fixed
 - PowerShell: repositories missing from three kinds of jobs. File backup copy jobs only carry

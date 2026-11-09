@@ -1346,6 +1346,8 @@ def build_model(raw, csv_rows=()):
             dest = _obj((j.get("destination") or {}).get("host") or {})
             if dest.get("name"):
                 replica_targets.append((px or srcs, dest["name"], dest.get("hostName"), label))
+                # The Jobs table shows the target host, as the console does (the repository holds the replica metadata)
+                job_rows[-1]["target"] = dest["name"]
             continue
         if repo not in nodes:
             continue

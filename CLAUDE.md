@@ -35,9 +35,11 @@ The maintainer's personal working rules and lab notes are in `CLAUDE.local.md` (
   - `kind` is one of `backup, em, vone, agent, hv_host, vi_host, ext_host, proxy, repo, sobr, object, server`
     (`ext_host`: plug-in platforms such as Proxmox VE; PowerShell only, the REST API does not return them)
   - `links[]`: `source, target, kind (data | auto | copy | inferred), jobs`
-  - `jobs[]`: `name, type, disabled, repository, sources, proxies, objects`, optionally `lastRun, lastResult,
-    retention, encrypted, unavailable` (`lastRun`: `yyyy-MM-dd HH:mm`; `lastResult`: `Success | Warning | Failed`,
-    `Running` for a job running at scan time, `N/A` for policies the agent manages; `retention`: `7 days`, `14 restore points`, `1 year`; `encrypted`: bool;
+  - `jobs[]`: `name, type, disabled, repository, sources, proxies, objects`, optionally `target, lastRun, lastResult,
+    retention, encrypted, unavailable` (`target`: a replica's or CDP policy's target host, a SureBackup job's
+    virtual lab, shown instead of `repository`; `lastRun`: `yyyy-MM-dd HH:mm`;
+    `lastResult`: `Success | Warning | Failed`, `Running` for a job running at scan time, `N/A` for policies the
+    agent manages; `retention`: `7 days`, `14 restore points`, `1 year`; `encrypted`: bool;
     `unavailable`: `{field: note code}` for cells the collector cannot read, shown as "n/a" with the footnote
     `note_<code>` from `template.html`'s `I18N`)
   - `backups[]`: `name, job, created, repository, platform`, optionally `restorePoints, lastBackup, onDisk`,

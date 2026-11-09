@@ -599,6 +599,8 @@ foreach ($j in $jobs) {
     }
     if ($all -match "Replica") {
         $tgt = "$(Get-Prop $j @('Info.TargetHostId', 'TargetHostId'))"
+        # The Jobs table shows the target host, as the console does (the repository holds the replica metadata)
+        if ((Test-Node $tgt)) { $JobRows[$JobRows.Count - 1]["target"] = $Nodes[$tgt].name }
         if ($all -match "Hv|HyperV") {
             # Hyper-V: off-host proxies when the job selects them, else the hosts' on-host proxies (host to host)
             foreach ($h in $hosts) {
@@ -786,6 +788,7 @@ foreach ($x in $sbJobs) {
     $agVms = (@(@(Get-Prop $ag @("VM")) | Where-Object { $_ } | ForEach-Object { $vn = Get-Prop $_ @('Name'); if ($vn) { "$vn" } else { "$_" } }) | Where-Object { $_ }) -join ", "
     $JobRows.Add([ordered]@{ name = $x.Name; type = $(if ($vlName) { "SureBackup" } else { "SureBackup (content scan)" })
         disabled = ($enabled -eq $false); repository = $null; sources = $linked; proxies = "—"
+        target = $(if ($vlName) { $vlName } else { $null })   # the virtual lab, as the console's Target column
         objects = @(@($linked | ForEach-Object { New-JobObject $_ "Job" }) + @($(if ($appGroup) { New-JobObject $appGroup "Application group" $agVms })) +
                     @($(if ($vlName) { New-JobObject $vlName "Virtual lab" }))) })
 }
@@ -816,6 +819,7 @@ foreach ($x in $cdpPolicies) {
     foreach ($p in $px) { Add-Link $p $tgt $label "copy" }
     $JobRows.Add([ordered]@{ name = $x.Name; type = "CDP policy"; disabled = ($enabled -eq $false)
         repository = $(if ((Test-Node "$repo")) { $Nodes["$repo"].name } else { $null }); sources = @($hosts); proxies = "Automatic"
+        target = $(if ((Test-Node "$tgt")) { $Nodes["$tgt"].name } else { $null })
         objects = @($objs | ForEach-Object { New-JobObject "$(Get-Prop $_ @('Name'))" "Virtual machine" "$(Get-Prop $_ @('Host.Name', 'Object.Host.Name', 'HostName'))" }) })
 }
 
