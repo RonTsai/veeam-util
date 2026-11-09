@@ -364,7 +364,8 @@ Without PowerCLI, the script falls back to the Veeam inventory automatically.
 ![Jobs table with one job expanded](docs/images/report-jobs-en.png)
 
 Each job also shows its retention (short-term: days or restore points), whether it encrypts its backups,
-and its last run and last result (Success / Warning / Failed), as the VBR console's Jobs view. A cell that the
+and its last run and last result (Success / Warning / Failed, or Running for a job that runs during the
+scan), as the VBR console's Jobs view. A cell that the
 collector cannot read (for example the last run of a tape job in PowerShell, or the retention of a plug-in
 platform job in Python) shows "n/a" with a numbered note under the table that explains why; "—" means the
 value does not apply or does not exist yet.

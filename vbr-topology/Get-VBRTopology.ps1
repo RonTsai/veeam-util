@@ -1031,22 +1031,23 @@ $BackupRows = @($BackupRows | Sort-Object { "$($_.name)".ToLower() }, { "$($_.re
 #   FindLastSession(), which Veeam does not support
 # - agent, file share, SureBackup and Entra ID jobs: their own session cmdlets
 # - tape jobs and the configuration backup: their LastResult and, when there is one, last run time
+# A session whose State is not Stopped (Working, Starting, Postprocessing, ...) is still running: "Running"
 $lastByJob = @{}
-function Add-LastSession([string]$JobId, $Time, $Result) {
+function Add-LastSession([string]$JobId, $Time, $Result, $State = "") {
     if (-not $JobId -or -not $Time) { return }
     $cur = $lastByJob[$JobId]
-    if (-not $cur -or $Time -gt $cur.Time) { $lastByJob[$JobId] = @{ Time = $Time; Result = "$Result" } }
+    if (-not $cur -or $Time -gt $cur.Time) { $lastByJob[$JobId] = @{ Time = $Time; Result = "$Result"; State = "$State" } }
 }
 foreach ($j in $jobs) {
     if (-not $j) { continue }
-    try { $s = $j.FindLastSession(); if ($s) { Add-LastSession (Get-IdStr $j) (Get-Prop $s @("CreationTime")) (Get-Prop $s @("Result")) } } catch { }
+    try { $s = $j.FindLastSession(); if ($s) { Add-LastSession (Get-IdStr $j) (Get-Prop $s @("CreationTime")) (Get-Prop $s @("Result")) (Get-Prop $s @("State")) } } catch { }
 }
 foreach ($cmd in @("Get-VBRComputerBackupJobSession", "Get-VBRNASBackupJobSession", "Get-VBRSureBackupSession",
                    "Get-VBREntraIDTenantBackupJobSession", "Get-VBREntraIDLogsBackupJobSession")) {
     if (-not (Get-Command $cmd -ErrorAction SilentlyContinue)) { continue }
     $sessions = Invoke-Safe $cmd ([scriptblock]::Create("$cmd -WarningAction SilentlyContinue"))
     foreach ($s in $sessions) {
-        if ($s) { Add-LastSession "$(Get-Prop $s @('JobId', 'Job.Id'))" (Get-Prop $s @("CreationTime", "StartTime")) (Get-Prop $s @("Result")) }
+        if ($s) { Add-LastSession "$(Get-Prop $s @('JobId', 'Job.Id'))" (Get-Prop $s @("CreationTime", "StartTime")) (Get-Prop $s @("Result")) (Get-Prop $s @("State")) }
     }
 }
 $resultByJob = @{}
@@ -1062,7 +1063,9 @@ foreach ($r in $JobRows) {
     $res = $(if ($ls) { $ls.Result } else { $resultByJob[$jid] })
     # As in the console: no result without a run time, and N/A for policies the agent manages itself
     $r["lastRun"] = $(if ($ls) { & $fmtTime $ls.Time } else { $null })
-    $r["lastResult"] = $(if ($r.type -match "ManagedByAgent") { "N/A" } elseif ($ls -and $res -and $res -ne "None") { $res } else { $null })
+    $running = $ls -and $ls.State -and $ls.State -notmatch '^(Stopped|Idle|None)$'
+    $r["lastResult"] = $(if ($r.type -match "ManagedByAgent") { "N/A" } elseif ($running) { "Running" }
+                         elseif ($ls -and $res -and $res -ne "None") { $res } else { $null })
 }
 
 # Cells PowerShell cannot fill: the report shows "n/a" with a footnote (texts: note_<code> in template.html I18N)

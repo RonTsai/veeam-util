@@ -1252,7 +1252,7 @@ def build_model(raw, csv_rows=()):
     job_ids_by_name = {j.get("name"): j.get("id") for j in jobs if j.get("name")}
     per_backup = backup_stats(raw)
     # Last run and result: /jobs/states, else the job's last session (plug-in jobs, configuration backup)
-    job_state = {x.get("id"): {"lastRun": _ts(x.get("lastRun")), "lastResult": x.get("lastResult")}
+    job_state = {x.get("id"): {"lastRun": _ts(x.get("lastRun")), "lastResult": x.get("lastResult"), "status": x.get("status")}
                  for x in raw.get("jobStates") or [] if x.get("id")}
     job_state.update({jid: v for jid, v in (raw.get("lastSessions") or {}).items() if jid not in job_state})
 
@@ -1262,6 +1262,8 @@ def build_model(raw, csv_rows=()):
         res = st.get("lastResult")
         if "ManagedByAgent" in job_type:
             return {"lastRun": st.get("lastRun"), "lastResult": "N/A"}
+        if st.get("status") == "Running":   # lastResult is None while the job runs
+            return {"lastRun": st.get("lastRun"), "lastResult": "Running"}
         keep = st.get("lastRun") and res not in (None, "None")
         return {"lastRun": st.get("lastRun"), "lastResult": res if keep else None}
     replica_targets = []   # (proxies or source hosts, destination host, its vCenter, label): linked once ESXi hosts are known

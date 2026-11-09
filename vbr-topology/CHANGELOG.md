@@ -111,6 +111,8 @@ Current as of v1.10.0 (checked on VBR v13.1, REST API 1.3-rev2).
 
 ### Changed
 - Both: policies that the agent manages itself show "N/A" as their last result, as the VBR console does.
+- Both: a job that is running at scan time shows "Running" as its last result, instead of none (Python:
+  `status` in `/jobs/states`; PowerShell: the `State` of the job's newest session).
 
 ### Fixed
 - PowerShell: repositories missing from three kinds of jobs. File backup copy jobs only carry

@@ -111,7 +111,10 @@ function lastsess($job, $time, $result) {
     $job | Add-Member -Force -MemberType ScriptMethod -Name FindLastSession -Value ([scriptblock]::Create("[pscustomobject]@{ CreationTime = [datetime]'$time'; Result = '$result' }"))
 }
 lastsess $J1 "2026-10-27 22:00" "Success"; lastsess $J2 "2026-10-27 23:00" "Warning"; lastsess $J3 "2026-10-27 21:00" "Failed"; lastsess $J4 "2026-10-27 01:00" "Success"
-function Get-VBRComputerBackupJobSession { [pscustomobject]@{ JobId = (gid "a1"); CreationTime = [datetime]"2026-10-27 20:00"; Result = "Success" } }
+function Get-VBRComputerBackupJobSession {
+    [pscustomobject]@{ JobId = (gid "a1"); CreationTime = [datetime]"2026-10-27 20:00"; Result = "Success"; State = "Stopped" }
+    [pscustomobject]@{ JobId = (gid "a2"); CreationTime = [datetime]"2026-10-28 01:00"; Result = "None"; State = "Working" }   # still running
+}
 function Get-VBRNASBackupJobSession { [pscustomobject]@{ JobId = (gid "n1"); CreationTime = [datetime]"2026-10-27 19:00"; Result = "Success" } }
 function Get-VBRSureBackupSession { [pscustomobject]@{ JobId = (gid "sb1"); CreationTime = [datetime]"2026-10-26 08:00"; Result = "Success" } }
 function Get-VBRJob { $J1; $J2; $J3; $J4; $J5; $J6; $J7; $J8 }
