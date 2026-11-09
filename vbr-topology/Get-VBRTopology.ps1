@@ -586,7 +586,7 @@ foreach ($j in $jobs) {
             $size ("$($_.Type)" -eq "Exclude") })
 
     # TypeToString, with the names the console's Jobs view uses where they differ
-    $rowType = $(if ($typeStr) { $typeStr } else { $type })
+    $rowType = $(if ($typeStr.Trim()) { $typeStr.Trim() } else { $type })   # TypeToString can end in a space ("Proxmox ")
     $rowType = switch -Regex ($rowType) { '^Proxmox$' { "Proxmox VE Replica" } '^Proxmox Backup$' { "Proxmox VE Backup" } default { $rowType } }
     $JobRows.Add([ordered]@{ name = $j.Name; type = $rowType; disabled = $disabled
         repository = $(if ((Test-Node $repo)) { $Nodes[$repo].name } else { $null }); sources = @($hosts)
