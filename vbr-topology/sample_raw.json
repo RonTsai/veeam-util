@@ -172,10 +172,25 @@
       },
       "account": {
         "connectionSettings": {
+          "connectionType": "SelectedGateway",
           "gatewayServerIds": [
             "ms-repo1"
           ]
         }
+      }
+    },
+    {
+      "id": "r-dd",
+      "name": "DataDomain01",
+      "type": "DellDataDomain",
+      "dellDataDomain": {
+        "ddServername": "dd01.corp.local",
+        "gatewayServer": {
+          "autoSelection": true
+        }
+      },
+      "repository": {
+        "path": "ddboost://dd01.corp.local:Repository@/"
       }
     },
     {
@@ -205,6 +220,13 @@
       "id": "r-3",
       "capacityGB": 100000,
       "freeGB": 9000
+    },
+    {
+      "id": "r-dd",
+      "capacityGB": 800,
+      "freeGB": 700,
+      "path": "ddboost://dd01.corp.local:Repository@/",
+      "hostName": "Gateway (auto)"
     }
   ],
   "scaleOutRepositories": [

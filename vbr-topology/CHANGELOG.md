@@ -99,7 +99,17 @@ Current as of v1.11.0 (checked on VBR v13.1, REST API 1.3-rev2).
 
 ## Unreleased
 
+### Changed
+- Both: a repository's Host detail follows the console's Host column: `Direct` or `Gateway` for object
+  storage, `Gateway (auto)` for dedup appliances and NAS shares that let VBR pick the gateway (their cards
+  show it too). Gateway servers are listed only when the data goes through them: not in Direct mode (the
+  API and `GetActualGateways()` still return the configured servers) and not for automatic selection
+  (`GetActualGateways()` returns every server that could be one). PowerShell reads `GatewayAutoDetect` of
+  `Get-VBRBackupRepository`; Python names the connection mode `Gateway` instead of `SelectedGateway`.
+
 ### Fixed
+- Python: Dell Data Domain and HPE StoreOnce repositories (REST types `DellDataDomain`, `HPEStoreOnce`)
+  show as dedup appliances, as in PowerShell, instead of plain repositories.
 - Python: plug-in platform jobs (Nutanix AHV, Proxmox VE, HPE Morpheus VME) no longer list VMs the job no
   longer protects. Their objects are now the VMs backed up within a day of the job's newest backup, so the
   count matches the console's Jobs view. The Backups table still lists every VM with restore points.

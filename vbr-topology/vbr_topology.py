@@ -724,7 +724,8 @@ OBJECT_REPO_TYPES = {"amazons3", "s3compatible", "azureblob", "azurearchive", "g
                      "amazons3external", "amazons3glacierexternal", "azurestorageexternal",
                      "azurearchivestorageexternal", "googlecloudstorageexternal", "googlearchivestorageexternal"}
 SHARE_REPO_TYPES = {"smb", "nfs"}
-DEDUP_REPO_TYPES = {"ddboost", "exagrid", "hpstoreonce", "quantum", "infinidat", "fujitsu"}
+DEDUP_REPO_TYPES = {"ddboost", "exagrid", "hpstoreonce", "quantum", "infinidat", "fujitsu",
+                    "delldatadomain", "hpestoreonce"}   # REST 1.3-rev2 names (lab)
 
 
 LOCAL_HOSTS = {"localhost", ".", "127.0.0.1", "::1"}
@@ -1163,7 +1164,12 @@ def build_model(raw, csv_rows=()):
         for gl in gateways:
             used_hosts.update(gl or [])
         tl = _lc(t)
-        if tl in OBJECT_REPO_TYPES:
+        # Object storage connection mode, named as PowerShell does (Direct / Gateway). As in the console, the
+        # gateways are listed only in Gateway mode: in Direct mode the API still returns unused gatewayServerIds
+        mode = find_first(r.get("account") or {}, "connectionType") if tl in OBJECT_REPO_TYPES else None
+        if _lc(mode) == "selectedgateway":
+            mode = "Gateway"
+        if tl in OBJECT_REPO_TYPES and _lc(mode) != "direct":
             gateways += find_all(r.get("account") or {}, "gatewayServerIds")
         gw_names = [host_name(g) for gl in gateways for g in (gl or []) if host_name(g)]
         if tl in OBJECT_REPO_TYPES:
@@ -1181,11 +1187,11 @@ def build_model(raw, csv_rows=()):
                 label += " (immutable)"
             badges = ["M"]
         cap, free = st.get("capacityGB"), st.get("freeGB")
-        details = {"Type": t, "Host": host_name(hid) or st.get("hostName"),
+        details = {"Type": t, "Host": host_name(hid) or st.get("hostName") or mode,
                    "Path": st.get("path") or (r.get("repository") or {}).get("path")
                    or (r.get("share") or {}).get("sharePath") or find_first(r, "bucketName"),
                    "Gateway": ", ".join(gw_names) or None,
-                   "Connection mode": find_first(r.get("account") or {}, "connectionType") if tl in OBJECT_REPO_TYPES else None,
+                   "Connection mode": mode,
                    "Capacity": fmt_gb(cap), "Free": fmt_gb(free),
                    "Description": r.get("description")}
         if r["id"] in sobr_extents:

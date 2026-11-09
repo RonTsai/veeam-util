@@ -460,6 +460,9 @@ foreach ($sb in $sobrs) {
 }
 
 $dedupTypes = "DDBoost|ExaGrid|StoreOnce|Quantum|Infinidat|Fujitsu"
+# Repositories whose Host detail is a connection mode, as in the console's Host column, by id: the host name
+# they are still placed on (the diagram places them as before)
+$RepoPlaceHost = @{}
 # Object storage (S3, Azure, Veeam Vault, Object First, ...): Get-VBRBackupRepository returns most of them too,
 # before Get-VBRObjectStorageRepository, so they are classified here (Python: OBJECT_REPO_TYPES)
 $objectTypes = "S3|Azure(Blob|Archive)|Google|IBM|Wasabi|Vault|Snowball|Glacier|SmartObject"
@@ -479,8 +482,15 @@ foreach ($r in $repos) {
         $immut = Get-Prop $r @("IsImmutabilityEnabled", "ImmutabilityEnabled")
         if ($immut -eq $true -and $label -notmatch "Hardened") { $label += " (immutable)" }
     }
+    $hostName = Resolve-HostName $r
+    # Dedup appliances and NAS shares that let VBR pick the gateway: the console's Host column says
+    # "Gateway (auto)", and GetActualGateways() returns every server that could be one
+    if ((Get-Prop $r @("GatewayAutoDetect")) -eq $true -and $t -match "Cifs|Smb|Nfs|$dedupTypes") {
+        if ($hostName) { $RepoPlaceHost[$id] = $hostName }
+        $hostName = "Gateway (auto)"; $gw = $null
+    }
     $n = Add-Node $id $kind $r.Name $label $badges @{
-        Type = $t; Host = (Resolve-HostName $r); Path = (Get-Prop $r @("FriendlyPath", "Path")); Gateway = $gw
+        Type = $t; Host = $hostName; Path = (Get-Prop $r @("FriendlyPath", "Path")); Gateway = $gw
         Capacity = (Format-GB $cap); Free = (Format-GB $free); Description = $r.Description }
     if ($cap) { $n["usage"] = [math]::Round(1 - ([double]$free / [double]$cap), 3) }
 }
@@ -496,11 +506,15 @@ foreach ($o in $objRepos) {
     Add-Node $id "object" $o.Name "Object storage · $($o.Type)" @() @{
         Type = "$($o.Type)"; Bucket = (Get-Prop $o @("AmazonBucket.Name", "Bucket.Name", "Container.Name", "BucketName")); Description = $o.Description } | Out-Null
     # Connection mode (Direct, or through gateway servers) and the gateway servers; GetActualGateways() above
-    # does not cover repositories that only Get-VBRObjectStorageRepository returns (Veeam Vault)
+    # does not cover repositories that only Get-VBRObjectStorageRepository returns (Veeam Vault). As in the
+    # console's Host column, Host is the mode; the gateways are listed only in Gateway mode (in Direct mode
+    # GetActualGateways() still returns servers that are not used)
     $nd = $Nodes[$id]
-    if ("$($o.ConnectionType)") { $nd.details["Connection mode"] = "$($o.ConnectionType)" }
+    $mode = "$($o.ConnectionType)"
+    if ($mode) { $nd.details["Connection mode"] = $mode; $nd.details["Host"] = $mode }
     $gws = @(@($o.GatewayServer) | Where-Object { $_ } | ForEach-Object { $_.Name })
-    if ($gws.Count -and -not $nd.details["Gateway"]) { $nd.details["Gateway"] = $gws -join ", " }
+    if ($mode -match "^Direct$") { $nd.details.Remove("Gateway") }
+    elseif ($gws.Count) { $nd.details["Gateway"] = $gws -join ", " }
 }
 foreach ($sb in $sobrs) {
     $sid = Get-IdStr $sb
@@ -1317,7 +1331,8 @@ foreach ($n in @($Nodes.Values)) {
     # Virtual labs are placed already; tape libraries and Cloud Connect providers are not VMs
     if ($n["placement"] -or $n.id -match '^(tapelib|cloud):') { continue }
     $names = @()
-    if ($n.details["Host"]) { $names += $n.details["Host"] }
+    if ($RepoPlaceHost.ContainsKey($n.id)) { $names += $RepoPlaceHost[$n.id] }
+    elseif ($n.details["Host"]) { $names += $n.details["Host"] }
     if ($n.kind -ne "repo") { $names += $n.name }
     if ($n.kind -eq "backup" -and $vbrLocal) { $names += [Environment]::MachineName }
     if ($n.kind -eq "backup" -and $vbrConnectedAs) { $names += $vbrConnectedAs }
@@ -1353,7 +1368,7 @@ Write-Host ("  [OK]   {0,-28} {1}" -f "Components placed", $placedCount)
 # IP addresses for the hover details: the VM's guest IPs (PowerCLI) when known, else DNS
 foreach ($n in @($Nodes.Values)) {
     if ($n.kind -in @("agent", "sobr", "object") -or $n.details["IP"] -or $n.id -match '^(vlab|tapelib):') { continue }
-    $nm = if ($n.details["Host"]) { $n.details["Host"] } elseif ($n.kind -ne "repo") { $n.name } else { $null }
+    $nm = if ($RepoPlaceHost.ContainsKey($n.id)) { $null } elseif ($n.details["Host"]) { $n.details["Host"] } elseif ($n.kind -ne "repo") { $n.name } else { $null }
     if (-not $nm) { continue }
     $ip = $null
     if ([System.Net.IPAddress]::TryParse($nm, [ref]$ip)) { $n.details["IP"] = $nm; continue }

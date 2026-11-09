@@ -354,7 +354,8 @@ Without PowerCLI, the script falls back to the Veeam inventory automatically.
 - **SOBR extents**: merged into their SOBR. Click a SOBR card to show its tiers under it: performance
   extents (with their hosts), capacity tier and archive tier. Object storage cards show their connection
   mode: "Direct connection", or the gateway servers the data goes through (the first one and how many
-  more; hover for the full list).
+  more; hover for the full list). Dedup appliances and NAS shares that let VBR pick the gateway show
+  "Gateway (auto)", as the console's Host column.
 - **Sources without job information**: get a gray dashed "inferred" link to the proxies. ESXi hosts are skipped
   when a vCenter is present.
 - **Managed servers without a role**: listed under "Other servers"

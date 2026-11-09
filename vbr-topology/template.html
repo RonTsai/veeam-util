@@ -516,7 +516,10 @@ function render() {
     const gws = n.kind === "object" && n.details?.Gateway ? String(n.details.Gateway).split(/,\s*/) : [];
     const gw1 = gws.length > 1 && !/^\d+\.\d+\.\d+\.\d+$/.test(gws[0]) ? gws[0].split(".")[0] : gws[0];
     const direct = n.kind === "object" && /^direct$/i.test(n.details?.["Connection mode"] || "");
-    const chip = n.placeLabel || (direct ? t("directMode") : gws.length ? `Gateway: ${gw1}${gws.length > 1 ? ` +${gws.length - 1}` : ""}` : null);
+    // Dedup appliances and NAS shares that let VBR pick the gateway: "Gateway (auto)", as the console's Host column
+    const autoGw = n.kind === "repo" && n.details?.Host === "Gateway (auto)";
+    const chip = n.placeLabel || (direct ? t("directMode") : gws.length ? `Gateway: ${gw1}${gws.length > 1 ? ` +${gws.length - 1}` : ""}`
+      : autoGw ? "Gateway (auto)" : null);
     if (chip) return `<rect class="placeChip" x="56" y="45" width="${w - 66}" height="16" rx="4"/>
       <text class="place" x="62" y="57">${esc(trunc(td(chip), Math.round(30 * (w - 66) / (W - 66))))}</text>`;
     if (!n.placement) return "";

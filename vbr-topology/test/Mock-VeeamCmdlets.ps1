@@ -49,9 +49,15 @@ function Get-VBRBackupRepository([switch]$ScaleOut) {
     $global:R1 = New-Obj @{ Id = (gid "r1"); Name = "Repo01-ReFS"; Type = "WinLocal"; HostId = (gid "repo1"); FriendlyPath = "E:\Backups" } @{ GetContainer = { [pscustomobject]@{ CachedTotalSpace = [pscustomobject]@{ InGigabytes = 40000 }; CachedFreeSpace = [pscustomobject]@{ InGigabytes = 12000 } } } }
     $global:R2 = New-Obj @{ Id = (gid "r2"); Name = "LHR01"; Type = "LinuxHardened"; HostId = (gid "lhr1"); FriendlyPath = "/mnt/veeam" } @{ GetContainer = { [pscustomobject]@{ CachedTotalSpace = [pscustomobject]@{ InGigabytes = 100000 }; CachedFreeSpace = [pscustomobject]@{ InGigabytes = 61000 } } } }
     $global:R3 = New-Obj @{ Id = (gid "r3"); Name = "LHR02"; Type = "LinuxHardened"; HostId = (gid "lhr2"); FriendlyPath = "/mnt/veeam" }
-    $global:R1; $global:R4   # like VBR v12+: SOBR extents (R2, R3) are not returned; object storage (R4) is
+    # Dedup appliance that lets VBR pick the gateway: no host of its own, Host is the backup server and
+    # GetActualGateways() returns every server that could be a gateway (as in the lab)
+    $global:R5 = New-Obj @{ Id = (gid "r5"); Name = "DataDomain01"; Type = "DDBoost"; HostId = [guid]::Empty; Host = $H.vbr
+        GatewayAutoDetect = $true; FriendlyPath = "ddboost://dd01.corp.local:Repository@/" } @{
+        GetActualGateways = { [pscustomobject]@{ Name = "vbr01.corp.local" }; [pscustomobject]@{ Name = "repo01.corp.local" } } }
+    $global:R1; $global:R4; $global:R5   # like VBR v12+: SOBR extents (R2, R3) are not returned; object storage (R4) is
 }
-$global:R4 = New-Obj @{ Id = (gid "r4"); Name = "Wasabi-Offsite"; Type = "WasabiCloud"; BucketName = "veeam-offsite" } @{
+$global:R4 = New-Obj @{ Id = (gid "r4"); Name = "Wasabi-Offsite"; Type = "WasabiCloud"; BucketName = "veeam-offsite"
+    ConnectionType = "Gateway"; GatewayServer = @([pscustomobject]@{ Name = "repo01.corp.local" }) } @{
     GetActualGateways = { [pscustomobject]@{ Name = "repo01.corp.local" } } }
 function Get-VBRObjectStorageRepository { $global:R4 }
 # No Host, as in the lab: the managed server of the same name must not be listed again
