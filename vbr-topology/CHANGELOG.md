@@ -62,6 +62,8 @@ Current as of v1.12.0 (checked on VBR v13.1, REST API 1.3-rev2).
   server (often the VBR server).
 - The objects of plug-in platform jobs (Nutanix AHV, Proxmox VE, HPE Morpheus VME) show no size or location:
   `Get-VBRJobObject` gives no location and a size of 0. Python shows their size.
+- Proxmox VE replica jobs list their VMs as `<id>:<VM ID>` (for example `2354b1f1-...:102`): the job objects carry
+  no VM name, and their IDs match no object of the Proxmox VE backups.
 
 **Python (REST API)**
 
