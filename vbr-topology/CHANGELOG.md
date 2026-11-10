@@ -60,6 +60,8 @@ Current as of v1.12.0 (checked on VBR v13.1, REST API 1.3-rev2).
   as enabled.
 - Repositories without a host of their own (object storage, dedup appliances) are placed on their gateway
   server (often the VBR server).
+- The objects of plug-in platform jobs (Nutanix AHV, Proxmox VE, HPE Morpheus VME) show no size or location:
+  `Get-VBRJobObject` gives no location and a size of 0. Python shows their size.
 
 **Python (REST API)**
 
@@ -82,6 +84,7 @@ Current as of v1.12.0 (checked on VBR v13.1, REST API 1.3-rev2).
   to it and takes its name from there. With several ABRs the copy has no source link, and each ABR shows by
   its server name, without path or retention.
 - Entra ID tenant backups show no restore point count (REST returns none).
+- The objects of plug-in platform jobs show no location: `/api/v1/backupObjects` has no host.
 - Repositories without a host of their own (object storage, dedup appliances) show as "Unknown / physical".
 - VBR 13.2 adds REST endpoints (Red Hat OpenStack and Virtuozzo, storage copy jobs, Application Client
   authentication) that this version does not use yet.
@@ -96,6 +99,16 @@ Current as of v1.12.0 (checked on VBR v13.1, REST API 1.3-rev2).
 - Job object locations: PowerShell shows the full inventory path, Python only the host name (vCenter /
   Hyper-V host). Object type names differ slightly (`Vapp` / `vApp`, `Virtual machine` / `Virtual Machine`
   for Hyper-V), and PowerShell lists the computers of an agent job as `Protection group`.
+
+## Unreleased
+
+### Fixed
+- Python: the objects of plug-in platform jobs (Nutanix AHV, Proxmox VE, HPE Morpheus VME) show the VM's
+  size from `/api/v1/backupObjects` (the largest of the platform's objects of that name: the objects of a
+  snapshot-only backup report 0).
+- Python: path masks of file share jobs (`{"type": "Path", "path": "\\.snapshot"}`) show the path, not
+  the raw JSON.
+- Python: a job object size of `0 B` (no estimate, as for some Hyper-V VMs) is left empty, as in PowerShell.
 
 ## v1.12.0 (2026-11-10)
 

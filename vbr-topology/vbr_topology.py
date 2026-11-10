@@ -350,6 +350,16 @@ def backup_totals(objs):
             "onDisk": sum(files.values()) if files else None}
 
 
+def size_str(n):
+    """Bytes as the VBR console writes sizes (16 GB, 104.1 GB, 1.3 TB); None for no size or 0."""
+    if not isinstance(n, (int, float)) or n <= 0:
+        return None
+    for unit in ("B", "KB", "MB", "GB", "TB"):
+        if n < 1024 or unit == "TB":
+            return f"{n:.1f}".rstrip("0").rstrip(".") + " " + unit
+        n /= 1024
+
+
 def _obj(item):
     """Inventory responses wrap the object in 'inventoryObject' in some API versions."""
     return item.get("inventoryObject", item) if isinstance(item, dict) else {}
@@ -367,6 +377,9 @@ def job_objects(j, names):
         if name:
             # "VirtualMachine" -> "Virtual Machine", as PowerShell's TypeDisplayName reads ("vApp" stays)
             typ = re.sub(r"(?<=[a-z]{2})(?=[A-Z])", " ", typ or "")
+            # "0 B" means no estimate (as PowerShell, which leaves it empty)
+            if re.fullmatch(r"0(\.0+)?\s*[KMGTP]?B", str(size or "").strip()):
+                size = None
             out.append({"name": name, "type": typ, "location": location or "", "size": size or "",
                         "excluded": excluded})
 
@@ -392,8 +405,9 @@ def job_objects(j, names):
             add(path, "File share", names.get(o.get("fileServerId")))
         for key, typ, excluded in masks:
             for m in o.get(key) or []:
-                if isinstance(m, dict):   # tag masks may come as {name, value}
-                    m = "=".join(str(x) for x in (m.get("name"), m.get("value")) if x) or json.dumps(m)
+                if isinstance(m, dict):   # tag masks: {name, value}; path masks: {type: Path, path}
+                    m = (m.get("path") or m.get("mask")
+                         or "=".join(str(x) for x in (m.get("name"), m.get("value")) if x) or json.dumps(m))
                 add(m, typ, path, excluded=excluded)
     src = j.get("sourceObjects") or {}
     for key, typ in (("jobs", "Job"), ("repositories", "Repository"), ("backups", "Backup")):
@@ -1449,12 +1463,20 @@ def build_model(raw, csv_rows=()):
     # the job no longer protects, so only VMs backed up within a day of the job's newest backup are kept
     # (one run backs up its VMs minutes apart)
     obj_names = {o.get("id"): o for o in raw.get("backupObjects") or [] if o.get("id")}
+    # A VM's size: the largest one of the platform's objects of that name (the objects of a snapshot-only
+    # backup report 0, another object of the same VM has its size)
+    vm_sizes = {}
+    for o in raw.get("backupObjects") or []:
+        if isinstance(o.get("size"), (int, float)) and o.get("name"):
+            k = (o.get("platformId"), o["name"])
+            vm_sizes[k] = max(vm_sizes.get(k, 0), o["size"])
     point_times = raw.get("restorePointTimes") or {}
     backup_ids_of = {}
     for b in raw.get("backups") or []:
         backup_ids_of.setdefault(b.get("jobId"), []).append(b.get("id"))
     for jid, pj in plugin_jobs.items():
         newest = {}  # VM name -> its newest backup time (None when no file gives a time)
+        sizes = {}   # VM name -> its size
         for bid in backup_ids_of.get(jid, []):
             for f in (raw.get("backupFiles") or {}).get(bid) or []:
                 times = [_parse_time(point_times.get(p)) for p in f.get("restorePointIds") or []]
@@ -1463,6 +1485,7 @@ def build_model(raw, csv_rows=()):
                 for oid in f.get("objectIds") or []:
                     o = obj_names.get(oid) or {}
                     if o.get("name"):
+                        sizes[o["name"]] = max(sizes.get(o["name"], 0), vm_sizes.get((o.get("platformId"), o["name"]), 0))
                         if o["name"] not in newest:
                             pj.setdefault("types", {})[o["name"]] = o.get("type")
                             newest[o["name"]] = t
@@ -1470,7 +1493,7 @@ def build_model(raw, csv_rows=()):
                             newest[o["name"]] = t
         last = max([t for t in newest.values() if t], default=None)
         objs = [{"name": n, "type": "Virtual Machine" if pj["types"][n] == "VM" else pj["types"][n] or "",
-                 "location": "", "size": "", "excluded": False}
+                 "location": "", "size": size_str(sizes.get(n)) or "", "excluded": False}
                 for n, t in newest.items() if not last or not t or last - t <= dt.timedelta(days=1)]
         job_rows.append({"name": pj["name"], "type": pj["type"], "disabled": None,
                          "repository": (nodes.get(pj["repo"]) or {}).get("name"),

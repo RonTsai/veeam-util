@@ -537,7 +537,10 @@
           ],
           "exclusionMask": [
             "\\.snapshot",
-            "*.tmp"
+            {
+              "type": "Path",
+              "path": "*.tmp"
+            }
           ]
         }
       ],
