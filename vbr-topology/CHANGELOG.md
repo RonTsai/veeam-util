@@ -87,6 +87,10 @@ Current as of v1.12.0 (checked on VBR v13.1, REST API 1.3-rev2).
   its server name, without path or retention.
 - Entra ID tenant backups show no restore point count (REST returns none).
 - The objects of plug-in platform jobs show no location: `/api/v1/backupObjects` has no host.
+- VMware job object sizes are larger than in the VBR console and PowerShell: the REST `size` of a job's
+  VMs and containers is the space the VM takes on the datastore (with the swap file, configuration files
+  and snapshots), while the console shows the capacity of its disks (for example 104.1 GB against 100 GB
+  for a VM with 4 GB of memory).
 - Repositories without a host of their own (object storage, dedup appliances) show as "Unknown / physical".
 - VBR 13.2 adds REST endpoints (Red Hat OpenStack and Virtuozzo, storage copy jobs, Application Client
   authentication) that this version does not use yet.
