@@ -2,7 +2,7 @@
 
 ## Known limitations
 
-Current as of v1.11.0 (checked on VBR v13.1, REST API 1.3-rev2).
+Current as of v1.12.0 (checked on VBR v13.1, REST API 1.3-rev2).
 
 **Testing**
 
@@ -97,7 +97,7 @@ Current as of v1.11.0 (checked on VBR v13.1, REST API 1.3-rev2).
   Hyper-V host). Object type names differ slightly (`Vapp` / `vApp`, `Virtual machine` / `Virtual Machine`
   for Hyper-V), and PowerShell lists the computers of an agent job as `Protection group`.
 
-## Unreleased
+## v1.12.0 (2026-11-10)
 
 ### Added
 - Both: gateway server links (purple dotted, link kind `gateway`) from a gateway server's proxy card to the
