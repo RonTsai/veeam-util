@@ -605,8 +605,10 @@ foreach ($j in $jobs) {
         $size = "$(Get-Prop $_ @('ApproxSizeString'))"; if ($size -match '^0(\.0+)?\s*[KMGTP]?B$') { $size = "" }
         # Plug-in platform objects (Nutanix AHV, Proxmox VE, HPE Morpheus VME) have no Location: use their host
         $loc = "$($_.Location)"; if (-not $loc) { $loc = "$(Get-Prop $_ @('Object.Host.Name'))" }
-        New-JobObject "$($_.Name)" "$(Get-Prop $_ @('TypeDisplayName', 'Object.ViType', 'Object.Type'))" $loc `
-            $size ("$($_.Type)" -eq "Exclude") })
+        $jo = New-JobObject "$($_.Name)" "$(Get-Prop $_ @('TypeDisplayName', 'Object.ViType', 'Object.Type'))" $loc `
+            $size ("$($_.Type)" -eq "Exclude")
+        if (-not $size) { $jo["unavailable"] = [ordered]@{ size = "psObjectSize" } }
+        $jo })
 
     # TypeToString, with the names the console's Jobs view uses where they differ
     $rowType = $(if ($typeStr.Trim()) { $typeStr.Trim() } else { $type })   # TypeToString can end in a space ("Proxmox ")
@@ -1103,6 +1105,10 @@ foreach ($r in $JobRows) {
 
 # Cells PowerShell cannot fill: the report shows "n/a" with a footnote (texts: note_<code> in template.html I18N)
 foreach ($r in $JobRows) {
+    # File shares and buckets: the job settings hold no size
+    foreach ($o in @($r.objects)) {
+        if ($o -and -not $o.size -and $o.type -match '^(SMB share|NFS share|File share|Object storage)$') { $o["unavailable"] = [ordered]@{ size = "shareSize" } }
+    }
     $na = [ordered]@{}
     if ($r.type -match "^(Backup to Tape|File to Tape Backup)$" -or $r.type -match "^Tape \(") {
         $na["retention"] = "tapeMediaPool"; $na["encrypted"] = "tapeMediaPool"

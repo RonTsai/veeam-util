@@ -377,11 +377,15 @@ def job_objects(j, names):
         if name:
             # "VirtualMachine" -> "Virtual Machine", as PowerShell's TypeDisplayName reads ("vApp" stays)
             typ = re.sub(r"(?<=[a-z]{2})(?=[A-Z])", " ", typ or "")
-            # "0 B" means no estimate (as PowerShell, which leaves it empty)
-            if re.fullmatch(r"0(\.0+)?\s*[KMGTP]?B", str(size or "").strip()):
-                size = None
-            out.append({"name": name, "type": typ, "location": location or "", "size": size or "",
-                        "excluded": excluded})
+            # "0 B" means no estimate (as PowerShell, which leaves it empty): n/a with a note in the report
+            no_estimate = bool(re.fullmatch(r"0(\.0+)?\s*[KMGTP]?B", str(size or "").strip()))
+            o = {"name": name, "type": typ, "location": location or "", "size": "" if no_estimate else size or "",
+                 "excluded": excluded}
+            if no_estimate:
+                o["unavailable"] = {"size": "restObjectSize"}
+            elif typ in ("File share", "Object storage") and not size:
+                o["unavailable"] = {"size": "shareSize"}   # the job settings hold no size of a share or bucket
+            out.append(o)
 
     vms = j.get("virtualMachines") or {}
     for inc in vms.get("includes") or []:
@@ -1493,7 +1497,9 @@ def build_model(raw, csv_rows=()):
                             newest[o["name"]] = t
         last = max([t for t in newest.values() if t], default=None)
         objs = [{"name": n, "type": "Virtual Machine" if pj["types"][n] == "VM" else pj["types"][n] or "",
-                 "location": "", "size": size_str(sizes.get(n)) or "", "excluded": False}
+                 "location": "", "size": size_str(sizes.get(n)) or "", "excluded": False,
+                 "unavailable": dict({"location": "pluginObjectLocation"},
+                                     **({} if size_str(sizes.get(n)) else {"size": "restObjectSize"}))}
                 for n, t in newest.items() if not last or not t or last - t <= dt.timedelta(days=1)]
         job_rows.append({"name": pj["name"], "type": pj["type"], "disabled": None,
                          "repository": (nodes.get(pj["repo"]) or {}).get("name"),

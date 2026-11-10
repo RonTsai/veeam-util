@@ -104,6 +104,13 @@ Current as of v1.12.0 (checked on VBR v13.1, REST API 1.3-rev2).
 
 ## Unreleased
 
+### Added
+- Both: a job object's Size or Location that the collector cannot read shows "n/a" with a note under the Jobs
+  table that gives the reason: no size estimate from `Get-VBRJobObject` (plug-in platform VMs, some replicas) or
+  from the REST API (`0 B`), no host for plug-in platform VMs in the REST API, and no size for file shares and
+  object storage buckets in the job settings. Cells that do not apply (a job, a mask, a tenant) show "—". The
+  model gains an optional `unavailable` map per object.
+
 ### Fixed
 - Python: the objects of plug-in platform jobs (Nutanix AHV, Proxmox VE, HPE Morpheus VME) show the VM's
   size from `/api/v1/backupObjects` (the largest of the platform's objects of that name: the objects of a

@@ -127,6 +127,10 @@ const I18N = {
     note_pluginSettings: "The REST API does not list plug-in platform jobs (Nutanix AHV, Proxmox VE, HPE Morpheus VME) in /jobs. They are found through their backups, which carry no state, sources, retention or encryption. The PowerShell collector reads these settings.",
     note_tapeMediaPool: "Tape jobs keep their retention and encryption on the media pool, which the report does not read.",
     note_tapeState: "Get-VBRTapeJob has one Enabled flag for both a disabled tape job and one without a schedule (the console shows Next run <Disabled> or <Not scheduled>), so the state of a job whose flag is off is unknown.",
+    note_psObjectSize: "Get-VBRJobObject gives no size estimate for this object (0 B). Plug-in platform VMs (Nutanix AHV, Proxmox VE, HPE Morpheus VME) never have one; the Python collector reads their size from their backups.",
+    note_restObjectSize: "The REST API gives no size estimate for this object (0 B). The PowerShell collector may read it.",
+    note_pluginObjectLocation: "The REST API gives no host for plug-in platform VMs (/api/v1/backupObjects). The PowerShell collector shows it.",
+    note_shareSize: "The job settings hold no size for a file share or an object storage bucket.",
     backupsTitle: "Backups", backupsHint: "As the VBR console's Backups view lists them, including storage snapshots and backups whose job no longer exists. Click a backup to see its VMs.",
     thBackup: "Backup", thPlatform: "Platform", thCreated: "Created",
     enabled: "Enabled", disabled: "Disabled",
@@ -162,6 +166,10 @@ const I18N = {
     note_pluginSettings: "REST API 的 /jobs 不列出 plug-in 平台的 job（Nutanix AHV、Proxmox VE、HPE Morpheus VME）。這些 job 是從備份找到的，備份不含狀態、來源、保留設定和加密。PowerShell collector 讀得到這些設定。",
     note_tapeMediaPool: "磁帶 job 的保留設定和加密設在 media pool 上，報告沒有讀取 media pool。",
     note_tapeState: "Get-VBRTapeJob 只有一個 Enabled 旗標，停用的磁帶 job 和沒有排程的磁帶 job 都是關閉（主控台的 Next run 分別顯示 <Disabled> 和 <Not scheduled>），所以旗標關閉的 job 無法判斷狀態。",
+    note_psObjectSize: "Get-VBRJobObject 沒有提供這個物件的估計大小（0 B）。Plug-in 平台的 VM（Nutanix AHV、Proxmox VE、HPE Morpheus VME）一律沒有；Python collector 會從備份讀取它們的大小。",
+    note_restObjectSize: "REST API 沒有提供這個物件的估計大小（0 B）。PowerShell collector 可能讀得到。",
+    note_pluginObjectLocation: "REST API 沒有提供 plug-in 平台 VM 的主機（/api/v1/backupObjects）。PowerShell collector 會顯示主機。",
+    note_shareSize: "Job 設定不含 file share 或 object storage bucket 的大小。",
     backupsTitle: "Backups", backupsHint: "與 VBR 主控台的 Backups 畫面相同，包含儲存快照，以及 job 已不存在的備份。點一下備份可看各台 VM。",
     thBackup: "備份", thPlatform: "平台", thCreated: "建立時間",
     enabled: "Enabled", disabled: "Disabled",
@@ -642,7 +650,8 @@ function tables() {
   // Jobs with protected objects expand on click (see toggleJob)
   // Size on disk in bytes -> GB / TB
   const fmtBytes = v => v == null ? "—" : v >= 1024 ** 4 ? (v / 1024 ** 4).toFixed(1) + " TB" : (v / 1024 ** 3).toFixed(1) + " GB";
-  // Cells a collector cannot fill (j.unavailable: field -> note code) show "n/a" with a footnote number
+  // Cells a collector cannot fill (j.unavailable / an object's unavailable: field -> note code) show "n/a" with a
+  // footnote number; "—" is a cell that does not apply (a job, a mask or a tenant has no size)
   const noteNums = [];
   const na = (j, f, text) => {
     const code = (j.unavailable || {})[f];
@@ -650,6 +659,11 @@ function tables() {
     if (!noteNums.includes(code)) noteNums.push(code);
     return `<span class="na">${esc(t("notAvailable"))}<sup>${noteNums.indexOf(code) + 1}</sup></span>`;
   };
+  // Number the notes of the job rows first, in column order: object rows start collapsed, so their notes come last
+  (MODEL.jobs || []).forEach(j => ["sources", "retention", "encrypted", "lastRun", "lastResult", "disabled"].forEach(f => {
+    const code = (j.unavailable || {})[f];
+    if (code && !noteNums.includes(code)) noteNums.push(code);
+  }));
   document.getElementById("jobTable").innerHTML = th(["thJob", "thType", "thSource", "thProxy", "thTarget", "thRetention", "thEncryption", "thLastRun", "thLastResult", "thState"]) +
     (MODEL.jobs || []).map((j, i) => {
       const objs = j.objects || [], has = objs.length > 0;
@@ -669,7 +683,7 @@ function tables() {
         <td>${na(j, "disabled", j.disabled == null ? "—" : t(j.disabled ? "disabled" : "enabled"))}</td></tr>`;
       const sub = has ? `<tr class="objs" data-for="${i}" hidden><td colspan="10"><table>${
         th(["objType", "objName", "objLocation", "objSize", "objMode"])}${objs.map(o => `<tr class="${o.excluded ? "ex" : ""}">
-        <td>${esc(td(o.type))}</td><td>${esc(o.name)}</td><td>${esc(o.location)}</td><td>${esc(o.size)}</td>
+        <td>${esc(td(o.type))}</td><td>${esc(o.name)}</td><td>${na(o, "location", o.location || "—")}</td><td class="nowrap">${na(o, "size", o.size || "—")}</td>
         <td>${esc(t(o.excluded ? "objExclude" : "objInclude"))}</td></tr>`).join("")}</table></td></tr>` : "";
       return row + sub;
     }).join("");

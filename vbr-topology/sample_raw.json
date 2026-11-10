@@ -393,14 +393,16 @@
             "inventoryObject": {
               "hostName": "hv01.corp.local",
               "name": "hv01",
-              "type": "Host"
+              "type": "Host",
+              "size": "220 GB"
             }
           },
           {
             "inventoryObject": {
               "hostName": "hvclu01.corp.local",
               "name": "clu",
-              "type": "Cluster"
+              "type": "Cluster",
+              "size": "1.1 TB"
             }
           }
         ]
@@ -676,7 +678,8 @@
             "inventoryObject": {
               "hostName": "hv01.corp.local",
               "name": "app01",
-              "type": "VirtualMachine"
+              "type": "VirtualMachine",
+              "size": "0 B"
             }
           }
         ]

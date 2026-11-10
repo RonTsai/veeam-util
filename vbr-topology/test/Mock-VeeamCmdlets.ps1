@@ -137,14 +137,14 @@ $vc = "vcsa01.corp.local"
 $J1 | Add-Member _objs @((jo "Prod-Cluster" "Cluster" "$vc\DC01\Prod-Cluster" $vc $false "1.2 TB"),
     (jo "SQL-Servers" "Folder" "$vc\DC01\vm\SQL-Servers" $vc $false "640 GB"), (jo "test-sql01" "Virtual Machine" "$vc\DC01\vm\SQL-Servers\test-sql01" $vc $true "80 GB"))
 $J2 | Add-Member _objs @((jo "Dev" "Resource Pool" "$vc\DC01\Prod-Cluster\Dev" $vc $false "300 GB"))
-$J3 | Add-Member _objs @((jo "app01" "Virtual Machine" "hv01.corp.local" "hv01.corp.local"), (jo "hvclu01.corp.local" "Cluster" "hvclu01.corp.local" "hvclu01.corp.local"))
-$J4 | Add-Member _objs @((jo "web01" "Virtual Machine" "" "ahv01.corp.local"), (jo "web02" "Virtual Machine" "" "ahv01.corp.local"))
-$J5 | Add-Member _objs @((jo "pve-vm01" "Virtual Machine" "" "pveclu01"))
-$J6 | Add-Member _objs @((jo "vme-app01" "Virtual Machine" "" "VMECluster"))
+$J3 | Add-Member _objs @((jo "app01" "Virtual Machine" "hv01.corp.local" "hv01.corp.local" $false "60 GB"), (jo "hvclu01.corp.local" "Cluster" "hvclu01.corp.local" "hvclu01.corp.local" $false "420 GB"))
+$J4 | Add-Member _objs @((jo "web01" "Virtual Machine" "" "ahv01.corp.local" $false "0 B"), (jo "web02" "Virtual Machine" "" "ahv01.corp.local" $false "0 B"))
+$J5 | Add-Member _objs @((jo "pve-vm01" "Virtual Machine" "" "pveclu01" $false "0 B"))
+$J6 | Add-Member _objs @((jo "vme-app01" "Virtual Machine" "" "VMECluster" $false "0 B"))
 # ExtendedChild: a VM VBR expanded itself (not set in the job), not listed in the report
-$J7 | Add-Member _objs @((jo "app-sql01" "Virtual Machine" "$vc\DC01\vm\app-sql01" $vc),
+$J7 | Add-Member _objs @((jo "app-sql01" "Virtual Machine" "$vc\DC01\vm\app-sql01" $vc $false "120 GB"),
     ([pscustomobject]@{ Name = "app-sql02"; Type = "ExtendedChild"; Location = "$vc\DC01\vm\app-sql02"; TypeDisplayName = "Virtual Machine" }))
-$J8 | Add-Member _objs @((jo "app01" "Virtual Machine" "hv01.corp.local" "hv01.corp.local"))
+$J8 | Add-Member _objs @((jo "app01" "Virtual Machine" "hv01.corp.local" "hv01.corp.local" $false "0 B"))
 function Get-VBRJobObject($Job) { $Job._objs }
 function Get-VBRComputerBackupJob {
     New-Obj @{ Id = (gid "a1"); Name = "Agent-Windows"; OSPlatform = "Windows"; Mode = "ManagedByBackupServer"; JobEnabled = $true; BackupRepository = $global:R1; BackupObject = @($PG1)
