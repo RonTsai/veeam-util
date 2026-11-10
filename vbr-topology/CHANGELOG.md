@@ -60,8 +60,8 @@ Current as of v1.12.0 (checked on VBR v13.1, REST API 1.3-rev2).
   as enabled.
 - Repositories without a host of their own (object storage, dedup appliances) are placed on their gateway
   server (often the VBR server).
-- The objects of plug-in platform jobs (Nutanix AHV, Proxmox VE, HPE Morpheus VME) show no size or location:
-  `Get-VBRJobObject` gives no location and a size of 0. Python shows their size.
+- The objects of plug-in platform jobs (Nutanix AHV, Proxmox VE, HPE Morpheus VME) show no size:
+  `Get-VBRJobObject` gives a size of 0. Python shows their size.
 - Proxmox VE replica jobs list their VMs as `<id>:<VM ID>` (for example `2354b1f1-...:102`): the job objects carry
   no VM name, and their IDs match no object of the Proxmox VE backups.
 
@@ -110,6 +110,8 @@ Current as of v1.12.0 (checked on VBR v13.1, REST API 1.3-rev2).
   snapshot-only backup report 0).
 - Python: path masks of file share jobs (`{"type": "Path", "path": "\\.snapshot"}`) show the path, not
   the raw JSON.
+- PowerShell: the objects of plug-in platform jobs (Nutanix AHV, Proxmox VE, HPE Morpheus VME) show their host
+  as location (`Object.Host.Name`), as `Get-VBRJobObject` gives them no `Location`.
 - Python: a job object size of `0 B` (no estimate, as for some Hyper-V VMs) is left empty, as in PowerShell.
 
 ## v1.12.0 (2026-11-10)

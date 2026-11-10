@@ -603,7 +603,9 @@ foreach ($j in $jobs) {
     $jobObjs = @($objs | ForEach-Object {
         # "0 B" means no estimate (plug-in platform VMs report no size): leave it empty
         $size = "$(Get-Prop $_ @('ApproxSizeString'))"; if ($size -match '^0(\.0+)?\s*[KMGTP]?B$') { $size = "" }
-        New-JobObject "$($_.Name)" "$(Get-Prop $_ @('TypeDisplayName', 'Object.ViType', 'Object.Type'))" "$($_.Location)" `
+        # Plug-in platform objects (Nutanix AHV, Proxmox VE, HPE Morpheus VME) have no Location: use their host
+        $loc = "$($_.Location)"; if (-not $loc) { $loc = "$(Get-Prop $_ @('Object.Host.Name'))" }
+        New-JobObject "$($_.Name)" "$(Get-Prop $_ @('TypeDisplayName', 'Object.ViType', 'Object.Type'))" $loc `
             $size ("$($_.Type)" -eq "Exclude") })
 
     # TypeToString, with the names the console's Jobs view uses where they differ
