@@ -74,7 +74,7 @@ function Get-VBRTapeLibrary {
 function Get-VBRTapeJob {
     New-Obj @{ Id = (gid "tj1"); Name = "Weekly-to-Tape"; Type = "BackupToTape"; Enabled = $true; Target = [pscustomobject]@{ Name = "GFS Media Pool" }; Object = @($J2) }
     New-Obj @{ Id = (gid "tj2"); Name = "Shares-to-Tape"; Type = "FileToTape"; Enabled = $false; Target = [pscustomobject]@{ Name = "Media Pool" }
-        Object = @([pscustomobject]@{ Path = "\\nas01.corp.local\projects" }) }
+        Object = @([pscustomobject]@{ Path = "\\nas01.corp.local\projects"; Server = "\\nas01.corp.local\projects(6f1c0e2a-1b2c-4d5e-8f90-a1b2c3d4e5f6)" }) }
 }
 # Virtual lab on esx01; Server prints as "<name>(<id>)" in the real module
 function Get-VBRVirtualLab { New-Obj @{ Id = (gid "vlab"); Name = "Lab01"; Platform = "VMWare"; Server = $H.esx1 } }
@@ -108,6 +108,10 @@ $J7.Info | Add-Member TargetHostId (gid "esx2")
 # Hyper-V replica without off-host proxies: host to host (on-host proxies), not through the VMware proxies
 $J8 = job "j8" "HyperV-Replica-DR" "Replica" "EHyperV" "r1" @() $true @("hv01.corp.local"); $J8.TypeToString = "Hyper-V Replication"
 $J8.Info | Add-Member TargetHostId (gid "hvc")
+# Proxmox VE replica: JobType Replica, TypeToString "Proxmox " (trailing space); the source host is "proxmox",
+# not a registered host; the target is a registered Proxmox VE host
+$J9 = job "j9" "Proxmox-Replica-DR" "Replica" "" "r1" @() $true @("proxmox"); $J9.TypeToString = "Proxmox "
+$J9.Info | Add-Member TargetHostId (gid "pve2")
 # Retention and encryption (Options.BackupStorageOptions), as in sample_raw.json. Plug-in jobs have none there.
 function bso($job, $type, $n, $enc) {
     $job.Options | Add-Member BackupStorageOptions ([pscustomobject]@{ RetentionType = $type; RetainCycles = $(if ($type -eq "Cycles") { $n } else { 7 })
@@ -127,7 +131,7 @@ function Get-VBRComputerBackupJobSession {
 }
 function Get-VBRNASBackupJobSession { [pscustomobject]@{ JobId = (gid "n1"); CreationTime = [datetime]"2026-10-27 19:00"; Result = "Success" } }
 function Get-VBRSureBackupSession { [pscustomobject]@{ JobId = (gid "sb1"); CreationTime = [datetime]"2026-10-26 08:00"; Result = "Success" } }
-function Get-VBRJob { $J1; $J2; $J3; $J4; $J5; $J6; $J7; $J8 }
+function Get-VBRJob { $J1; $J2; $J3; $J4; $J5; $J6; $J7; $J8; $J9 }
 # Job objects as Get-VBRJobObject returns them. Plug-in objects have no Location, only Object.Host.
 function jo($name, $disp, $loc, $hostName, $excl = $false, $size = "") {
     [pscustomobject]@{ Name = $name; Type = $(if ($excl) { "Exclude" } else { "Include" }); Location = $loc; TypeDisplayName = $disp
@@ -145,6 +149,7 @@ $J6 | Add-Member _objs @((jo "vme-app01" "Virtual Machine" "" "VMECluster" $fals
 $J7 | Add-Member _objs @((jo "app-sql01" "Virtual Machine" "$vc\DC01\vm\app-sql01" $vc $false "120 GB"),
     ([pscustomobject]@{ Name = "app-sql02"; Type = "ExtendedChild"; Location = "$vc\DC01\vm\app-sql02"; TypeDisplayName = "Virtual Machine" }))
 $J8 | Add-Member _objs @((jo "app01" "Virtual Machine" "hv01.corp.local" "hv01.corp.local" $false "0 B"))
+$J9 | Add-Member _objs @((jo "a1b2c3d4-0000-4000-8000-000000000001:101" "Virtual Machine" "" "proxmox" $false "0 B"))
 function Get-VBRJobObject($Job) { $Job._objs }
 function Get-VBRComputerBackupJob {
     New-Obj @{ Id = (gid "a1"); Name = "Agent-Windows"; OSPlatform = "Windows"; Mode = "ManagedByBackupServer"; JobEnabled = $true; BackupRepository = $global:R1; BackupObject = @($PG1)
@@ -177,20 +182,21 @@ function Get-VBRSureBackupJob {
         VirtualLab = [pscustomobject]@{ Name = "Lab01" }
         ApplicationGroup = [pscustomobject]@{ Name = "DC-AppGroup"; VM = @([pscustomobject]@{ Name = "dc01" }, [pscustomobject]@{ Name = "dc02" }) } }
 }
-if (-not ("Mock.VBRNASSMBServer" -as [type])) { Add-Type -TypeDefinition "namespace Mock { public class VBRNASSMBServer { } public class VBRAmazonS3ObjectStorageServer { } }" }
+# The share's or account's managed server (its Name is the job object's location)
+if (-not ("Mock.VBRNASSMBServer" -as [type])) { Add-Type -TypeDefinition "namespace Mock { public class VBRNASSMBServer { public string Name; } public class VBRAmazonS3ObjectStorageServer { public string Name; } }" }
 function Get-VBRNASBackupJob {
     New-Obj @{ Id = (gid "n1"); Name = "NAS-Shares"; JobEnabled = $true; ShortTermBackupRepository = $global:R1; ShortTermRetentionPeriod = 28; ShortTermRetentionType = "Daily"; StorageOptions = [pscustomobject]@{ EncryptionEnabled = $false }
-        BackupObject = @([pscustomobject]@{ Path = "\\nas01.corp.local\projects"; Server = (New-Object Mock.VBRNASSMBServer)
+        BackupObject = @([pscustomobject]@{ Path = "\\nas01.corp.local\projects"; Server = (New-Object Mock.VBRNASSMBServer -Property @{ Name = "\\nas01.corp.local\projects" })
                                             InclusionMask = @("*.docx", "*.xlsx"); ExclusionMask = @("\.snapshot", "*.tmp") }) }
     # Object storage: Path is the folder only, the bucket is separate (shown as "<bucket>/<folder>")
     New-Obj @{ Id = (gid "n2"); Name = "Bucket-Backup"; JobEnabled = $true; ShortTermBackupRepository = $global:R1; ShortTermRetentionPeriod = 28; ShortTermRetentionType = "Daily"; StorageOptions = [pscustomobject]@{ EncryptionEnabled = $false }
         BackupObject = @([pscustomobject]@{ Path = "/Backup/data/"; Container = [pscustomobject]@{ Name = "veeam-bucket" }
-                                            Server = (New-Object Mock.VBRAmazonS3ObjectStorageServer) }) }
+                                            Server = (New-Object Mock.VBRAmazonS3ObjectStorageServer -Property @{ Name = "Amazon S3" }) }) }
     # A Veeam Vault archive repository: no repository cmdlet returns it, only the job does
     New-Obj @{ Id = (gid "n5"); Name = "NAS-Archive"; JobEnabled = $true; ShortTermRetentionPeriod = 180; ShortTermRetentionType = "Daily"
         ShortTermBackupRepository = [pscustomobject]@{ Id = (gid "arch1"); Name = "Vault-Archive"; Group = "ArchiveRepository"; Type = "VeeamVaultAzureArchive"; Description = "" }
         StorageOptions = [pscustomobject]@{ EncryptionEnabled = $true }
-        BackupObject = @([pscustomobject]@{ Path = "\\nas01.corp.local\archive"; Server = (New-Object Mock.VBRNASSMBServer) }) }
+        BackupObject = @([pscustomobject]@{ Path = "\\nas01.corp.local\archive"; Server = (New-Object Mock.VBRNASSMBServer -Property @{ Name = "\\nas01.corp.local\archive" }) }) }
 }
 # v13 Get-VBRUnstructuredBackupJob also returns Entra ID audit log backups and file backup copies
 function Get-VBRUnstructuredBackupJob { Get-VBRNASBackupJob; Get-VBREntraIDLogsBackupJob; Get-VBRNASBackupCopyJob }

@@ -566,6 +566,19 @@ function Resolve-SourceNode([string]$HostName, [string]$Platform) {
     return $nid
 }
 
+# A file share's or bucket's managed server (the share root, or the object storage account), as Python's
+# location. Get-VBRServer lists shares and accounts; the job object holds the server, or prints it as "name(id)"
+function Get-ShareServerName($Obj) {
+    $srv = Get-Prop $Obj @("Server", "NASServer", "ShareServer", "Storage")
+    if ($null -eq $srv) { return "" }
+    $id = $null; try { if ($srv.Id) { $id = "$($srv.Id)" } } catch { }
+    if (-not $id -and "$srv" -match '\(([0-9a-fA-F-]{36})\)$') { $id = $Matches[1] }
+    if ($id -and $serverById.ContainsKey($id)) { return "$($serverById[$id].Name)" }
+    $n = "$(Get-Prop $srv @('Name', 'FriendlyName', 'Path'))"; if (-not $n -and $srv -is [string]) { $n = $srv }
+    if ($n -and $n -notmatch '^Mock\.|^Veeam\.') { return ($n -replace '\([0-9a-fA-F-]{36}\)$', '') }
+    return ""
+}
+
 # One row of a job's protected-object list (shown when the job is expanded in the report)
 function New-JobObject([string]$Name, [string]$Type, [string]$Location = "", [string]$Size = "", [bool]$Excluded = $false) {
     return [ordered]@{ name = $Name; type = $Type; location = $Location; size = $Size; excluded = $Excluded }
@@ -618,6 +631,11 @@ foreach ($j in $jobs) {
         proxies = $(if ($sel.Count) { ($sel | ForEach-Object { $Nodes[$_].name }) -join ", " } else { "Automatic" })
         objects = $jobObjs })
 
+    # Plug-in platform (Proxmox VE, Nutanix AHV, HPE Morpheus VME): only TypeToString names it
+    $jobPlat = if ($typeStr -match "Proxmox") { "Proxmox VE" } elseif ($typeStr -match "Nutanix|AHV") { "Nutanix AHV" }
+               elseif ($typeStr -match "Morpheus") { "HPE Morpheus VME" } elseif ($type -match "VmbApi") { "Plug-in platform" } else { $null }
+    $platHosts = @($(if ($jobPlat) { $Nodes.Values | Where-Object { $_.kind -eq "ext_host" -and $_.details["Platform"] -eq $jobPlat } }))
+
     if ($all -match "Copy|BackupSync|SimpleBackupCopy") {
         $srcRepos = @()
         foreach ($lj in @(Get-Prop $j @("LinkedJobIds"))) { if ($lj) { $srcRepos += $jobRepo["$lj"] } }
@@ -629,6 +647,17 @@ foreach ($j in $jobs) {
         $tgt = "$(Get-Prop $j @('Info.TargetHostId', 'TargetHostId'))"
         # The Jobs table shows the target host, as the console does (the repository holds the replica metadata)
         if ((Test-Node $tgt)) { $JobRows[$JobRows.Count - 1]["target"] = $Nodes[$tgt].name }
+        if ($jobPlat) {
+            # Plug-in platform replica (Proxmox VE): proxies are not readable, so the source host links to
+            # the target host. A source that is not a registered host (Proxmox names its cluster or "proxmox")
+            # gets inferred links from the platform's other hosts, not a VMware placeholder host.
+            foreach ($h in $hosts) {
+                $hit = @($platHosts | Where-Object { $_.name -ieq $h })
+                if ($hit.Count) { foreach ($x in $hit) { Add-Link $x.id $tgt $label "copy" } }
+                else { foreach ($x in $platHosts) { Add-Link $x.id $tgt $label "inferred" } }
+            }
+            continue
+        }
         if ($all -match "Hv|HyperV") {
             # Hyper-V: off-host proxies when the job selects them, else the hosts' on-host proxies (host to host)
             foreach ($h in $hosts) {
@@ -647,10 +676,7 @@ foreach ($j in $jobs) {
     # Plug-in platform jobs (checked before Hyper-V: "AHV" would match "Hv"). Their proxies are not
     # readable, so the source links straight to the repository. A source that is not a registered
     # plug-in host (e.g. a cluster name) gets inferred links from every host of that platform.
-    $jobPlat = if ($typeStr -match "Proxmox") { "Proxmox VE" } elseif ($typeStr -match "Nutanix|AHV") { "Nutanix AHV" }
-               elseif ($typeStr -match "Morpheus") { "HPE Morpheus VME" } elseif ($type -match "VmbApi") { "Plug-in platform" } else { $null }
     if ($jobPlat) {
-        $platHosts = @($Nodes.Values | Where-Object { $_.kind -eq "ext_host" -and $_.details["Platform"] -eq $jobPlat })
         foreach ($h in $hosts) {
             $hit = @($platHosts | Where-Object { $_.name -ieq $h })
             if ($hit.Count) { foreach ($x in $hit) { Add-Link $x.id $repo $label "auto" } }
@@ -785,7 +811,7 @@ foreach ($n in @($nasJobs) + @($entraLogJobs) + @($nasCopyJobs)) {
                 $path = (@($bucket, $path) | Where-Object { $_ }) -join "/"
             }
         } elseif ($path.Length -gt 3) { $path = $path.TrimEnd("\", "/") }   # no trailing separator (keeps "C:\")
-        New-JobObject $path $kind
+        New-JobObject $path $kind (Get-ShareServerName $b)
         foreach ($mk in @(@("InclusionMask", "File mask", $false), @("InclusionPathMask", "File mask", $false), @("ExclusionMask", "File mask", $true),
                           @("ExclusionPathMask", "File mask", $true), @("InclusionTagMask", "Tag mask", $false), @("ExclusionTagMask", "Tag mask", $true))) {
             foreach ($m in @(Get-Prop $b @($mk[0]))) { if ($m) { New-JobObject "$m" $mk[1] $path "" $mk[2] } }
@@ -828,12 +854,14 @@ foreach ($x in $sbJobs) {
 foreach ($x in $tapeJobs) {
     $tt = "$($x.Type)"
     $type = switch -Regex ($tt) { '^BackupToTape$' { "Backup to Tape" } '^FileToTape$' { "File to Tape Backup" } default { "Tape ($tt)" } }
-    $srcs = @(@($x.Object) | Where-Object { $_ } | ForEach-Object { "$(Get-Prop $_ @('Name', 'Path'))" } | Where-Object { $_ })
+    $srcObjs = @(@($x.Object) | Where-Object { $_ -and "$(Get-Prop $_ @('Name', 'Path'))" })
+    $srcs = @($srcObjs | ForEach-Object { "$(Get-Prop $_ @('Name', 'Path'))" })
     # Enabled is False both for a disabled tape job and for one without a schedule (console: <Disabled> or
     # <Not scheduled>), so False leaves the state unknown (footnote tapeState)
     $JobRows.Add([ordered]@{ name = $x.Name; type = $type; disabled = $(if ((Get-Prop $x @("Enabled", "JobEnabled")) -eq $true) { $false } else { $null })
         repository = "$(Get-Prop $x @('Target.Name', 'Target'))"; sources = $srcs; proxies = "—"
-        objects = @($srcs | ForEach-Object { New-JobObject $_ $(if ($tt -match "File") { "File share" } else { "Job" }) }) })
+        objects = @($srcObjs | ForEach-Object { if ($tt -match "File") { New-JobObject "$(Get-Prop $_ @('Name', 'Path'))" "File share" (Get-ShareServerName $_) }
+                                                else { New-JobObject "$(Get-Prop $_ @('Name', 'Path'))" "Job" } }) })
 }
 
 # CDP policies (VMware CDP): source hosts -> CDP proxies -> target host, as replicas are drawn

@@ -120,6 +120,11 @@ Current as of v1.12.0 (checked on VBR v13.1, REST API 1.3-rev2).
 - PowerShell: the objects of plug-in platform jobs (Nutanix AHV, Proxmox VE, HPE Morpheus VME) show their host
   as location (`Object.Host.Name`), as `Get-VBRJobObject` gives them no `Location`.
 - Python: a job object size of `0 B` (no estimate, as for some Hyper-V VMs) is left empty, as in PowerShell.
+- PowerShell: file share and object storage objects of file backup, object storage backup and file to tape
+  jobs show their managed server as location (the share root or the object storage account), as in Python.
+- PowerShell: a Proxmox VE replica job no longer draws its source as a VMware host "(not in managed servers)"
+  linked to the VMware proxies. The source links to the target host, from the matching Proxmox VE host or,
+  when the source names no registered host, inferred from the platform's hosts.
 
 ## v1.12.0 (2026-11-10)
 
