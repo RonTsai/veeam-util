@@ -136,6 +136,9 @@ Current as of v1.12.0 (checked on VBR v13.1, REST API 1.3-rev2).
   instead of the type code (and `ProtectionGroup:<name>` in Python's job objects).
 - Python: an Enterprise Manager that cannot be verified (login rejected, timeout) is also listed under the
   report's warnings, not only in the console output.
+- Python: host names are looked up in DNS all at once, and names that cannot be host names (such as
+  `Azure Blob` or a share path) are not looked up. One by one, every name DNS did not know waited for its
+  timeout, so the scan seemed to hang after "Querying vCenter" for minutes. The console now shows the step.
 
 ## v1.12.0 (2026-11-10)
 

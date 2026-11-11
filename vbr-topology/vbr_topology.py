@@ -987,6 +987,36 @@ def _strings(obj, skip=()):
 
 
 _dns_cache = {}
+# Only names that can be a host name or an IP are looked up: node names such as "Azure Blob",
+# "\\nas01\share" or "Lab01 - Virtual Lab" would only wait for DNS (and NetBIOS / LLMNR on Windows) to fail
+_HOST_LIKE = re.compile(r"^[A-Za-z0-9_.:-]+$")
+
+
+def _dns_lookup(name):
+    if not _is_ip(name) and not _HOST_LIKE.match(name or ""):
+        return None
+    try:
+        return socket.gethostbyaddr(name) if _is_ip(name) else socket.gethostbyname_ex(name)
+    except (OSError, UnicodeError):
+        return None
+
+
+def prefetch_dns(names):
+    """Look the names up in parallel, into the cache name_variants reads: one by one, every name DNS does not
+    know waits for its timeout (5 s or more each)."""
+    todo = sorted({n for n in names if n and n not in _dns_cache})
+    for n in todo:
+        if not _is_ip(n) and not _HOST_LIKE.match(n):
+            _dns_cache[n] = None
+    todo = [n for n in todo if n not in _dns_cache]
+    if not todo:
+        return
+    print(f"  Resolving {len(todo)} host names (DNS)...", end="", flush=True)
+    start = dt.datetime.now()
+    with ThreadPoolExecutor(max_workers=min(64, len(todo))) as pool:
+        for n, res in zip(todo, pool.map(_dns_lookup, todo)):
+            _dns_cache[n] = res
+    print(f" done in {(dt.datetime.now() - start).total_seconds():.0f} s")
 
 
 def name_variants(name):
@@ -995,12 +1025,7 @@ def name_variants(name):
     if not _is_ip(name):
         out.append(name.split(".")[0])
     if name not in _dns_cache:
-        res = None
-        try:
-            res = socket.gethostbyaddr(name) if _is_ip(name) else socket.gethostbyname_ex(name)
-        except OSError:
-            pass
-        _dns_cache[name] = res
+        _dns_cache[name] = _dns_lookup(name)
     res = _dns_cache[name]
     if res:
         fqdn, aliases, addrs = res
@@ -1631,6 +1656,12 @@ def build_model(raw, csv_rows=()):
 
     # ---- Which ESXi host each component runs on
     place_by, place_short = placement_index(raw, csv_rows)
+    # The names placement and add_ips look up, all at once
+    def node_names():
+        return [x for n in nodes.values() if n["kind"] not in ("agent", "sobr", "object")
+                for x in (n["details"].get("Host"), n["name"] if n["kind"] != "repo" else None)] + [conn_host]
+    # (with the ESXi hosts placement may add)
+    prefetch_dns(node_names() + [(h or {}).get("host") for h in list(place_by.values()) + list(place_short.values())])
     if place_by or place_short:
         apply_placement(nodes, by_name, place_by, place_short, add_node, conn_host)
     elif raw.get("inventory"):
@@ -1656,6 +1687,7 @@ def build_model(raw, csv_rows=()):
             n["cluster"] = c
             n["details"]["Cluster"] = c["name"]
 
+    prefetch_dns(node_names())   # ESXi hosts placement added
     add_ips(nodes)
 
     for n in nodes.values():
