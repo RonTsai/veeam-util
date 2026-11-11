@@ -2,7 +2,7 @@
 
 ## Known limitations
 
-Current as of v1.12.0 (checked on VBR v13.1, REST API 1.3-rev2).
+Current as of v1.12.1 (checked on VBR v13.1, REST API 1.3-rev2).
 
 **Testing**
 
@@ -108,7 +108,7 @@ Current as of v1.12.0 (checked on VBR v13.1, REST API 1.3-rev2).
 - The built-in "Manually Added" protection group shows as "Individual computers" in PowerShell
   (`Container.Type`) and "Manually added" in Python (REST `type`). The console shows no type for it.
 
-## Unreleased
+## v1.12.1 (2026-11-11)
 
 ### Added
 - Both: a job object's Size or Location that the collector cannot read shows "n/a" with a note under the Jobs
