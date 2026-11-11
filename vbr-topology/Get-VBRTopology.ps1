@@ -579,6 +579,19 @@ function Get-ShareServerName($Obj) {
     return ""
 }
 
+# A protection group type as the VBR console names it (Python: pg_type_name); an unknown code is shown as it is
+function Get-PgTypeName([string]$Code) {
+    switch -Regex ($Code) {
+        '^Individual' { return "Individual computers" }
+        '^(AD|ActiveDirectory)' { return "Microsoft Active Directory objects" }
+        'CSV' { return "Computers listed in a CSV file" }
+        'PreInstalled|ManuallyDeployed' { return "Computers with pre-installed backup agents" }
+        'Cloud' { return "Cloud machines" }
+        '^ManuallyAdded$' { return "Manually added" }
+    }
+    return $Code
+}
+
 # One row of a job's protected-object list (shown when the job is expanded in the report)
 function New-JobObject([string]$Name, [string]$Type, [string]$Location = "", [string]$Size = "", [bool]$Excluded = $false) {
     return [ordered]@{ name = $Name; type = $Type; location = $Location; size = $Size; excluded = $Excluded }
@@ -731,7 +744,7 @@ foreach ($a in $agentJobs) {
         repository = $(if ((Test-Node "$repo")) { $Nodes["$repo"].name } else { $null })
         sources = @($pgIds | ForEach-Object { $Nodes[$_].name }); proxies = "—"
         objects = @(@($a.BackupObject) | Where-Object { $_ } | ForEach-Object {
-            New-JobObject "$($_.Name)" "Protection group" "$(Get-Prop $_ @('Container.Type', 'Container'))" }) })
+            New-JobObject "$($_.Name)" "Protection group" (Get-PgTypeName "$(Get-Prop $_ @('Container.Type', 'Type'))") }) })
 }
 
 # Backup copy jobs (v12+ cmdlet)

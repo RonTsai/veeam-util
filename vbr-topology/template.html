@@ -195,6 +195,9 @@ const DATA_ZH = {
   "Could not read jobs; data flow is shown as inferred (dashed) links.": "無法讀取 Jobs，資料流以推測方式 (虛線) 呈現。",
   "vSphere inventory unavailable; component hosts not matched (use --placement-csv)": "無法取得 vSphere 清冊，未比對元件所在主機 (可用 --placement-csv 手動指定)",
   "Plug-in platform": "Plug-in 平台",
+  "Individual computers": "個別電腦", "Microsoft Active Directory objects": "Microsoft Active Directory 物件",
+  "Computers listed in a CSV file": "CSV 檔列出的電腦", "Computers with pre-installed backup agents": "預先安裝 backup agent 的電腦",
+  "Cloud machines": "雲端機器", "Manually added": "手動新增",
   "File share": "檔案共用", "SMB share": "SMB 共用", "NFS share": "NFS 共用",
   "Object storage": "物件儲存",
   "Hosts": "主機",
@@ -210,6 +213,7 @@ const DATA_ZH = {
 const DATA_ZH_RULES = [
   [/^Veeam inventory \((.+)\)$/, "Veeam 清冊 ($1)"],
   [/^Failed: (.*)$/s, "失敗: $1"],
+  [/^Enterprise Manager (\S+): verification failed: (.*)$/s, "Enterprise Manager $1 驗證失敗: $2"],
   [/^Enterprise Manager auto-detection \(SBackupOptions\.GetEnterpriseServerInfo\) failed: (.*)$/s, "Enterprise Manager 自動偵測 (SBackupOptions.GetEnterpriseServerInfo) 失敗: $1"],
   [/^PowerCLI could not be loaded: (.*)$/s, "PowerCLI 無法載入: $1"],
   [/^Reading the inventory of (\S+) failed: (.*)$/s, "讀取 $1 清冊失敗: $2"],
@@ -683,7 +687,7 @@ function tables() {
         <td>${na(j, "disabled", j.disabled == null ? "—" : t(j.disabled ? "disabled" : "enabled"))}</td></tr>`;
       const sub = has ? `<tr class="objs" data-for="${i}" hidden><td colspan="10"><table>${
         th(["objType", "objName", "objLocation", "objSize", "objMode"])}${objs.map(o => `<tr class="${o.excluded ? "ex" : ""}">
-        <td>${esc(td(o.type))}</td><td>${esc(o.name)}</td><td>${na(o, "location", o.location || "—")}</td><td class="nowrap">${na(o, "size", o.size || "—")}</td>
+        <td>${esc(td(o.type))}</td><td>${esc(o.name)}</td><td>${na(o, "location", o.location ? td(o.location) : "—")}</td><td class="nowrap">${na(o, "size", o.size || "—")}</td>
         <td>${esc(t(o.excluded ? "objExclude" : "objInclude"))}</td></tr>`).join("")}</table></td></tr>` : "";
       return row + sub;
     }).join("");

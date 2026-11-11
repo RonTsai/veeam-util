@@ -350,6 +350,18 @@ def backup_totals(objs):
             "onDisk": sum(files.values()) if files else None}
 
 
+def pg_type_name(code):
+    """A protection group type as the VBR console names it (REST protectionGroupType, PowerShell
+    Container.Type); an unknown code is shown as it is."""
+    c = str(code or "")
+    for pat, name in ((r"^Individual", "Individual computers"), (r"^(AD|ActiveDirectory)", "Microsoft Active Directory objects"),
+                      (r"CSV", "Computers listed in a CSV file"), (r"PreInstalled|ManuallyDeployed", "Computers with pre-installed backup agents"),
+                      (r"Cloud", "Cloud machines"), (r"^ManuallyAdded$", "Manually added")):
+        if re.search(pat, c, re.I):
+            return name
+    return c
+
+
 def size_str(n):
     """Bytes as the VBR console writes sizes (16 GB, 104.1 GB, 1.3 TB); None for no size or 0."""
     if not isinstance(n, (int, float)) or n <= 0:
@@ -395,7 +407,10 @@ def job_objects(j, names):
         o = _obj(exc)
         add(o.get("name"), o.get("type"), o.get("hostName"), o.get("size"), True)
     for c in j.get("computers") or []:
-        add(c.get("name"), "Protection group" if c.get("type") == "ProtectionGroup" else c.get("type"), c.get("path"))
+        if c.get("type") == "ProtectionGroup":
+            add(c.get("name"), "Protection group", pg_type_name(c.get("protectionGroupType")))
+        else:
+            add(c.get("name"), c.get("type"), c.get("path"))
     # Include / exclude masks, as VBR calls them: File masks, plus tag masks for buckets
     masks = (("inclusionMask", "File mask", False), ("inclusionPathMask", "File mask", False),
              ("exclusionMask", "File mask", True), ("exclusionPathMask", "File mask", True),
@@ -1088,6 +1103,8 @@ def build_model(raw, csv_rows=()):
             "Registered backup servers": ", ".join(reg) if reg else (EM_NONE_VISIBLE if reg == [] else None),
             "Registered to this EM": {True: "Yes", False: "No"}.get(is_reg),
             "Verification": f"Failed: {em['error']}" if em.get("error") else ("OK" if em.get("connected") else None)})
+        if em.get("error"):
+            warnings.append(f"Enterprise Manager {em['host']}: verification failed: {em['error']}")
 
     # ---- Managed servers
     servers = {s["id"]: s for s in raw.get("managedServers") or []}

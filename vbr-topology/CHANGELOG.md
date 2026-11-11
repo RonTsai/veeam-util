@@ -129,6 +129,11 @@ Current as of v1.12.0 (checked on VBR v13.1, REST API 1.3-rev2).
 - PowerShell: a Proxmox VE replica job no longer draws its source as a VMware host "(not in managed servers)"
   linked to the VMware proxies. The source links to the target host, from the matching Proxmox VE host or,
   when the source names no registered host, inferred from the platform's hosts.
+- Both: an agent job's protection group shows its type as the console names it (for example "Individual
+  computers", "Microsoft Active Directory objects") as location, instead of the type code (PowerShell) or
+  `ProtectionGroup:<name>` (Python).
+- Python: an Enterprise Manager that cannot be verified (login rejected, timeout) is also listed under the
+  report's warnings, not only in the console output.
 
 ## v1.12.0 (2026-11-10)
 

@@ -437,7 +437,9 @@
           "id": "pg-1",
           "type": "ProtectionGroup",
           "name": "Physical Windows Servers",
-          "path": "IndividualComputers"
+          "path": "ProtectionGroup:Physical Windows Servers",
+          "protectionGroupType": "IndividualComputers",
+          "protectionGroupId": "pg-1"
         }
       ],
       "storage": {
@@ -466,7 +468,9 @@
           "id": "pg-2",
           "type": "ProtectionGroup",
           "name": "Linux AD OU",
-          "path": "ADObjects"
+          "path": "ProtectionGroup:Linux AD OU",
+          "protectionGroupType": "ADObjects",
+          "protectionGroupId": "pg-2"
         }
       ],
       "storage": {
