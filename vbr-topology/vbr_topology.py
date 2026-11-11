@@ -1283,8 +1283,9 @@ def build_model(raw, csv_rows=()):
 
     # ---- Agents (protection groups)
     for pg in raw.get("protectionGroups") or []:
-        add_node(pg["id"], "agent", pg.get("name"), f"Veeam Agent · {pg.get('type', 'Protection group')}",
-                 badges=["A"], details={"Type": pg.get("type"), "Description": pg.get("description"),
+        pg_type = pg_type_name(pg.get("type"))
+        add_node(pg["id"], "agent", pg.get("name"), f"Veeam Agent · {pg_type or 'Protection group'}",
+                 badges=["A"], details={"Type": pg_type or None, "Description": pg.get("description"),
                                         "Computers": pg.get("computersCount") or pg.get("objectsCount")})
 
     # ---- Jobs -> data flow

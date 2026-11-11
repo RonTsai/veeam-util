@@ -545,11 +545,25 @@ foreach ($sb in $sobrs) {
     if ($archIds.Count) { $n["archive"] = $archIds }
 }
 
+# A protection group type as the VBR console names it (Python: pg_type_name); an unknown code is shown as it is
+function Get-PgTypeName([string]$Code) {
+    switch -Regex ($Code) {
+        '^Individual' { return "Individual computers" }
+        '^(AD|ActiveDirectory)' { return "Microsoft Active Directory objects" }
+        'CSV' { return "Computers listed in a CSV file" }
+        'PreInstalled|ManuallyDeployed' { return "Computers with pre-installed backup agents" }
+        'Cloud' { return "Cloud machines" }
+        '^ManuallyAdded$' { return "Manually added" }
+    }
+    return $Code
+}
+
 foreach ($pg in $pgs) {
     $id = Get-IdStr $pg
     $count = $null; try { $count = @(Get-VBRDiscoveredComputer -ProtectionGroup $pg).Count } catch { }
-    Add-Node $id "agent" $pg.Name "Veeam Agent · $(Get-Prop $pg @('Container.Type', 'Type'))" @("A") @{
-        Type = (Get-Prop $pg @("Container.Type", "Type")); Computers = $count; Description = $pg.Description } | Out-Null
+    $pgType = Get-PgTypeName "$(Get-Prop $pg @('Container.Type', 'Type'))"
+    Add-Node $id "agent" $pg.Name "Veeam Agent · $(if ($pgType) { $pgType } else { 'Protection group' })" @("A") @{
+        Type = $pgType; Computers = $count; Description = $pg.Description } | Out-Null
 }
 
 # ---------------------------------------------------------------------------
@@ -577,19 +591,6 @@ function Get-ShareServerName($Obj) {
     $n = "$(Get-Prop $srv @('Name', 'FriendlyName', 'Path'))"; if (-not $n -and $srv -is [string]) { $n = $srv }
     if ($n -and $n -notmatch '^Mock\.|^Veeam\.') { return ($n -replace '\([0-9a-fA-F-]{36}\)$', '') }
     return ""
-}
-
-# A protection group type as the VBR console names it (Python: pg_type_name); an unknown code is shown as it is
-function Get-PgTypeName([string]$Code) {
-    switch -Regex ($Code) {
-        '^Individual' { return "Individual computers" }
-        '^(AD|ActiveDirectory)' { return "Microsoft Active Directory objects" }
-        'CSV' { return "Computers listed in a CSV file" }
-        'PreInstalled|ManuallyDeployed' { return "Computers with pre-installed backup agents" }
-        'Cloud' { return "Cloud machines" }
-        '^ManuallyAdded$' { return "Manually added" }
-    }
-    return $Code
 }
 
 # One row of a job's protected-object list (shown when the job is expanded in the report)
