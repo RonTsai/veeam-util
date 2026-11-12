@@ -61,7 +61,7 @@ $ErrorActionPreference = "Stop"
 $script:Warnings = New-Object System.Collections.Generic.List[string]
 
 # This tool's version (set at each release, as in vbr_topology.py) and, in a git clone, its commit
-$ToolVersion = "1.12.1"
+$ToolVersion = "1.12.2"
 $ToolCommit = $null
 try {
     if (Get-Command git -ErrorAction SilentlyContinue) {

@@ -2,7 +2,7 @@
 
 ## Known limitations
 
-Current as of v1.12.1 (checked on VBR v13.1, REST API 1.3-rev2).
+Current as of v1.12.2 (checked on VBR v13.1, REST API 1.3-rev2).
 
 **Testing**
 
@@ -115,11 +115,15 @@ Current as of v1.12.1 (checked on VBR v13.1, REST API 1.3-rev2).
 - The built-in "Manually Added" protection group shows as "Individual computers" in PowerShell
   (`Container.Type`) and "Manually added" in Python (REST `type`). The console shows no type for it.
 
-## Unreleased
+## v1.12.2 (2026-11-12)
 
 ### Added
 - Both: the report header and the console show the tool's version and, when the collector runs from a git
-  clone, its commit (`vbr-topology v1.12.1 (8b48965)`). The model gains `vbr.toolVersion` and `vbr.toolCommit`.
+  clone, its commit (`vbr-topology v1.12.2 (abc1234)`). The model gains `vbr.toolVersion` and `vbr.toolCommit`.
+
+### Known limitations
+- New entries: Proxmox VE nodes are not grouped into the clusters the console shows, and a plug-in host of
+  an unknown platform shows as "Plug-in platform".
 
 ## v1.12.1 (2026-11-11)
 
