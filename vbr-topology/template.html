@@ -769,7 +769,8 @@ function renderAll() {
   const v = MODEL.vbr || {};
   document.title = t("pageTitle") + (v.name ? " · " + v.name.split(".")[0] : "");
   document.getElementById("meta").textContent = t("meta",
-    { name: v.name || "?", build: v.build || "?", api: v.apiVersion || "?", time: v.collectedAt || MODEL.generatedAt });
+    { name: v.name || "?", build: v.build || "?", api: v.apiVersion || "?", time: v.collectedAt || MODEL.generatedAt })
+    + (v.toolVersion ? `  ·  vbr-topology v${v.toolVersion}${v.toolCommit ? " (" + v.toolCommit + ")" : ""}` : "");
   document.getElementById("warnings").innerHTML = MODEL.warnings?.length
     ? `<div class="warn">⚠ ${MODEL.warnings.map(w => esc(td(w))).join("<br>⚠ ")}</div>` : "";
   render(); tables();

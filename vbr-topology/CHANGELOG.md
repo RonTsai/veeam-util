@@ -115,6 +115,12 @@ Current as of v1.12.1 (checked on VBR v13.1, REST API 1.3-rev2).
 - The built-in "Manually Added" protection group shows as "Individual computers" in PowerShell
   (`Container.Type`) and "Manually added" in Python (REST `type`). The console shows no type for it.
 
+## Unreleased
+
+### Added
+- Both: the report header and the console show the tool's version and, when the collector runs from a git
+  clone, its commit (`vbr-topology v1.12.1 (8b48965)`). The model gains `vbr.toolVersion` and `vbr.toolCommit`.
+
 ## v1.12.1 (2026-11-11)
 
 ### Added

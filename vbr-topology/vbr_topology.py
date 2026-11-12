@@ -37,11 +37,28 @@ import os
 import re
 import socket
 import ssl
+import subprocess
 from concurrent.futures import ThreadPoolExecutor
 import sys
 import urllib.error
 import urllib.parse
 import urllib.request
+
+# This tool's version (set at each release, as in Get-VBRTopology.ps1)
+TOOL_VERSION = "1.12.1"
+TOOL_COMMIT = None   # set in main()
+
+
+def tool_commit():
+    """The git commit this script runs from, in a git clone; else None."""
+    try:
+        out = subprocess.run(["git", "-C", os.path.dirname(os.path.abspath(__file__)), "rev-parse", "--short", "HEAD"],
+                             capture_output=True, text=True, timeout=5)
+        c = out.stdout.strip()
+        return c if out.returncode == 0 and re.fullmatch(r"[0-9a-f]{7,}", c) else None
+    except (OSError, subprocess.SubprocessError):
+        return None
+
 
 # Tried newest to oldest; the first one the server accepts wins.
 # v13 -> 1.3-revX, v12.3 -> 1.2-revX, v12.1/12.2 -> 1.1-rev1/rev2, v12.0 -> 1.1-rev0
@@ -1716,7 +1733,8 @@ def build_model(raw, csv_rows=()):
     return {
         "generatedAt": dt.datetime.now().isoformat(timespec="seconds"),
         "vbr": {"name": vbr_name, "base": meta.get("base"), "apiVersion": meta.get("apiVersion"),
-                "build": info.get("buildVersion"), "collectedAt": meta.get("collectedAt")},
+                "build": info.get("buildVersion"), "collectedAt": meta.get("collectedAt"),
+                "toolVersion": TOOL_VERSION, "toolCommit": TOOL_COMMIT},
         "nodes": list(nodes.values()),
         "links": list(links.values()),
         "jobs": job_rows,
@@ -1824,6 +1842,9 @@ def main():
     ap.add_argument("--no-timestamp", action="store_true", help="write straight into --out, overwriting the last run")
     args = ap.parse_args()
     args.em_password = args.em_password or os.environ.get("EM_PASSWORD")
+    global TOOL_COMMIT
+    TOOL_COMMIT = tool_commit()
+    print(f"vbr-topology v{TOOL_VERSION}" + (f" ({TOOL_COMMIT})" if TOOL_COMMIT else ""))
 
     if args.from_raw:
         with open(args.from_raw, encoding="utf-8") as f:

@@ -49,7 +49,8 @@ The maintainer's personal working rules and lab notes are in `CLAUDE.local.md` (
     (`created` / `lastBackup`: `yyyy-MM-dd HH:mm`; `onDisk`: bytes)
     (`objects[]`: `name, type, location, size, excluded`, optionally `unavailable` as for jobs (`location`, `size`),
     the job's protected objects)
-  - `warnings[]`, `vbr`, `lang`
+  - `warnings[]`, `vbr`, `lang` (`vbr`: `name, base, apiVersion, build, collectedAt, toolVersion`, optionally
+    `toolCommit`: this tool's version and, in a git clone, its commit, shown in the report header)
 - **i18n.** Collectors write English only. All on-screen text lives in `template.html`:
   `I18N` for UI strings, `DATA_ZH` / `DATA_ZH_RULES` for collector text. Whenever a collector
   emits new display text, add its Traditional Chinese translation there.

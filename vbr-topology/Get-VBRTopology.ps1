@@ -60,6 +60,17 @@ param(
 $ErrorActionPreference = "Stop"
 $script:Warnings = New-Object System.Collections.Generic.List[string]
 
+# This tool's version (set at each release, as in vbr_topology.py) and, in a git clone, its commit
+$ToolVersion = "1.12.1"
+$ToolCommit = $null
+try {
+    if (Get-Command git -ErrorAction SilentlyContinue) {
+        $c = & git -C $PSScriptRoot rev-parse --short HEAD 2>$null
+        if ($LASTEXITCODE -eq 0 -and "$c" -match '^[0-9a-f]{7,}$') { $ToolCommit = "$c" }
+    }
+} catch { }
+Write-Host ("vbr-topology v$ToolVersion" + $(if ($ToolCommit) { " ($ToolCommit)" } else { "" }))
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -1489,7 +1500,8 @@ foreach ($k in $Links.Keys) { $l = $Links[$k]; $l["jobs"] = [string[]]$l["jobs"]
 $model = [ordered]@{
     generatedAt = $now
     lang = $Language
-    vbr = [ordered]@{ name = $vbrName; base = $Server; apiVersion = "PowerShell"; build = $build; collectedAt = $now }
+    vbr = [ordered]@{ name = $vbrName; base = $Server; apiVersion = "PowerShell"; build = $build; collectedAt = $now
+                      toolVersion = $ToolVersion; toolCommit = $ToolCommit }
     nodes = $nodeList
     links = $linkList
     jobs = $JobRows
