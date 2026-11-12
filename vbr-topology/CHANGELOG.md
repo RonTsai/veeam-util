@@ -62,8 +62,15 @@ Current as of v1.12.1 (checked on VBR v13.1, REST API 1.3-rev2).
   server (often the VBR server).
 - The objects of plug-in platform jobs (Nutanix AHV, Proxmox VE, HPE Morpheus VME) show no size:
   `Get-VBRJobObject` gives a size of 0. Python shows their size.
-- Proxmox VE replica jobs list their VMs as `<id>:<VM ID>` (for example `2354b1f1-...:102`): the job objects carry
+- Proxmox VE replica jobs list their VMs as `<id>:<VM ID>` (for example `a1b2c3d4-...:102`): the job objects carry
   no VM name, and their IDs match no object of the Proxmox VE backups.
+- Plug-in platform hosts are drawn as `Get-VBRServer` returns them. Proxmox VE nodes are separate cards, not
+  grouped into the clusters the console shows (Managed Servers > Proxmox VE > Clusters): neither PowerShell
+  nor the REST API gives that relation. A job whose source is a cluster name gets inferred links from every
+  node of the platform, including the nodes of other clusters.
+- A plug-in host whose platform ID the report does not know shows as "Plug-in platform". `Get-VBRServer` can
+  return such hosts although the console lists them under no platform (for example after a plug-in was
+  removed).
 
 **Python (REST API)**
 
