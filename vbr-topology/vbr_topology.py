@@ -857,6 +857,20 @@ def job_retention(j):
     return retention_text((j.get("jobSettings") or {}).get("restorePointsToKeep"), "restore point")
 
 
+def job_gfs(j):
+    """GFS (long-term) retention: storage / target / top-level gfsPolicy -> {weekly, monthly, yearly}, only the
+    enabled ones; None when GFS is off."""
+    gp = next((x for x in find_all(j, "gfsPolicy") if isinstance(x, dict)), None)
+    if not gp or not gp.get("isEnabled"):
+        return None
+    out = {}
+    for key, num in (("weekly", "keepForNumberOfWeeks"), ("monthly", "keepForNumberOfMonths"), ("yearly", "keepForNumberOfYears")):
+        part = gp.get(key) or {}
+        if part.get("isEnabled") and isinstance(part.get(num), int) and part[num] > 0:
+            out[key] = part[num]
+    return out or None
+
+
 def job_encrypted(j):
     """Whether a job encrypts its backups (None when the job has no encryption setting)."""
     return next((x.get("isEnabled") for x in find_all(j, "encryption")
@@ -1436,6 +1450,7 @@ def build_model(raw, csv_rows=()):
                          "repository": (nodes.get(repo) or {}).get("name"),
                          "sources": sources, "proxies": proxies, "objects": objects,
                          "retention": job_retention(j), "encrypted": job_encrypted(j),
+                         **({"gfs": job_gfs(j)} if job_gfs(j) else {}),
                          **last_run(j.get("id"), job_type_label(j))})
         label = name + (" (disabled)" if j.get("isDisabled") else "")
         if jtl in PLUGIN_JOB_TYPES:

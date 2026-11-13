@@ -120,6 +120,7 @@ const I18N = {
     thPoints: "Restore points", thLast: "Last backup", thDisk: "On disk",
     thTarget: "Target", metadataRepo: "Metadata: {r}",
     thLastRun: "Last run", thLastResult: "Last result", thRetention: "Retention", thEncryption: "Encryption", yes: "Yes", no: "No",
+    gfsLine: "GFS: {list}", listSep: ", ",
     notAvailable: "n/a", jobNotesTitle: "Notes",
     note_tapeLastRun: "PowerShell gives no run time for tape jobs: Get-VBRTapeJob returns only the last result.",
     note_configLastRun: "PowerShell gives no run time for the configuration backup: Get-VBRConfigurationBackupJob returns only the last result.",
@@ -159,6 +160,7 @@ const I18N = {
     thPoints: "還原點", thLast: "最新備份", thDisk: "佔用空間",
     thTarget: "目標", metadataRepo: "中繼資料：{r}",
     thLastRun: "上次執行", thLastResult: "上次結果", thRetention: "保留設定", thEncryption: "加密", yes: "是", no: "否",
+    gfsLine: "GFS：{list}", listSep: "、",
     notAvailable: "n/a", jobNotesTitle: "附註",
     note_tapeLastRun: "PowerShell 讀不到磁帶 job 的執行時間：Get-VBRTapeJob 只回傳上次結果。",
     note_configLastRun: "PowerShell 讀不到組態備份的執行時間：Get-VBRConfigurationBackupJob 只回傳上次結果。",
@@ -657,6 +659,12 @@ function tables() {
   // Cells a collector cannot fill (j.unavailable / an object's unavailable: field -> note code) show "n/a" with a
   // footnote number; "—" is a cell that does not apply (a job, a mask or a tenant has no size)
   const noteNums = [];
+  // GFS (long-term) retention under the short-term one: "GFS: 12 weeks, 12 months, 3 years"
+  const gfsLine = j => {
+    const g = j.gfs || {}, units = { weekly: "week", monthly: "month", yearly: "year" };
+    const parts = Object.keys(units).filter(k => g[k]).map(k => td(`${g[k]} ${units[k]}${g[k] === 1 ? "" : "s"}`));
+    return parts.length ? `<div class="tmeta">${esc(t("gfsLine", { list: parts.join(t("listSep")) }))}</div>` : "";
+  };
   const na = (j, f, text) => {
     const code = (j.unavailable || {})[f];
     if (!code) return esc(text);
@@ -682,7 +690,7 @@ function tables() {
           // virtual lab, else the repository or media pool
           j.target ? esc(j.target) + (j.repository ? `<div class="tmeta">${esc(t("metadataRepo", { r: j.repository }))}</div>` : "")
                    : esc(j.repository)}</td>
-        <td class="nowrap">${na(j, "retention", j.retention ? td(j.retention) : "—")}</td><td>${na(j, "encrypted", j.encrypted == null ? "—" : t(j.encrypted ? "yes" : "no"))}</td>
+        <td class="nowrap">${na(j, "retention", j.retention ? td(j.retention) : "—")}${gfsLine(j)}</td><td>${na(j, "encrypted", j.encrypted == null ? "—" : t(j.encrypted ? "yes" : "no"))}</td>
         <td class="nowrap">${na(j, "lastRun", j.lastRun ?? "—")}</td><td class="result ${esc((j.lastResult || "").toLowerCase())}">${na(j, "lastResult", j.lastResult ?? "—")}</td>
         <td>${na(j, "disabled", j.disabled == null ? "—" : t(j.disabled ? "disabled" : "enabled"))}</td></tr>`;
       const sub = has ? `<tr class="objs" data-for="${i}" hidden><td colspan="10"><table>${

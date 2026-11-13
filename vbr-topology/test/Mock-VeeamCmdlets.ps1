@@ -120,6 +120,14 @@ function bso($job, $type, $n, $enc) {
     $job.Options | Add-Member NasBackupRetentionPolicy ([pscustomobject]@{ ShortTermRetention = 28; ShortTermRetentionUnit = "Day" })
 }
 bso $J1 "Cycles" 14 $true; bso $J2 "Days" 7 $false; bso $J3 "Days" 30 $false; bso $J7 "Cycles" 7 $false; bso $J8 "Cycles" 7 $false
+# GFS (Options.GfsPolicy, as on v13): VMware-Prod-Daily keeps 4 weekly, 12 monthly and 3 yearly backups; VMware-Dev has it off
+function gfs($job, $on, $w, $m, $y) {
+    $part = { param($n) [pscustomobject]@{ IsEnabled = ($n -gt 0); KeepBackupsForNumberOfWeeks = [math]::Max($n, 1)
+        KeepBackupsForNumberOfMonths = [math]::Max($n, 1); KeepBackupsForNumberOfYears = [math]::Max($n, 1) } }
+    $job.Options | Add-Member GfsPolicy ([pscustomobject]@{ IsEnabled = $on
+        Model = [pscustomobject]@{ Weekly = (& $part $w); Monthly = (& $part $m); Yearly = (& $part $y) } })
+}
+gfs $J1 $true 4 12 3; gfs $J2 $false 0 0 0
 # Last sessions (FindLastSession() on Get-VBRJob objects; session cmdlets for the others), as in sample_raw.json
 function lastsess($job, $time, $result) {
     $job | Add-Member -Force -MemberType ScriptMethod -Name FindLastSession -Value ([scriptblock]::Create("[pscustomobject]@{ CreationTime = [datetime]'$time'; Result = '$result' }"))
@@ -163,7 +171,11 @@ function Get-VBRComputerBackupJob {
 }
 function Get-VBRBackupCopyJob {
     New-Obj @{ Id = (gid "c1"); Name = "Copy-to-Wasabi"; Mode = "Periodic"; JobEnabled = $true; BackupJob = @($J2); TargetRepository = $global:R4
-        RetentionType = "Days"; RetentionNumber = 30; StorageOptions = [pscustomobject]@{ EncryptionEnabled = $true } }
+        RetentionType = "Days"; RetentionNumber = 30; StorageOptions = [pscustomobject]@{ EncryptionEnabled = $true }
+        # GFS as v13 shows it (VBRComputerGFSOptions): 6 monthly backups
+        GFSOptions = [pscustomobject]@{ WeeklyGFSEnabled = $false; WeeklyOptions = [pscustomobject]@{ RetentionPeriod = 1 }
+            MonthlyGFSEnabled = $true; MonthlyOptions = [pscustomobject]@{ RetentionPeriod = 6 }
+            YearlyGFSEnabled = $false; YearlyOptions = [pscustomobject]@{ RetentionPeriod = 1 } } }
     # From an Application Backup Repository (the source is a repository, not a job)
     New-Obj @{ Id = (gid "c2"); Name = "ABR-to-Repo01"; Mode = "Immediate"; JobEnabled = $true; BackupJob = @()
         SourceRepository = (New-Obj @{ Id = (gid "abrvirtual"); Name = "Application Backup Repository"; Type = "AbrVirtual" })

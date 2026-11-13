@@ -37,11 +37,12 @@ The maintainer's personal working rules and lab notes are in `CLAUDE.local.md` (
   - `links[]`: `source, target, kind (data | auto | copy | inferred | gateway), jobs` (`gateway`: a gateway
     server's proxy card to a repository whose data goes through it, no jobs)
   - `jobs[]`: `name, type, disabled, repository, sources, proxies, objects`, optionally `typeDetail, target, lastRun,
-    lastResult, retention, encrypted, unavailable` (`type`: the VBR console's Jobs view name; `typeDetail`: what
+    lastResult, retention, gfs, encrypted, unavailable` (`type`: the VBR console's Jobs view name; `typeDetail`: what
     that name leaves out, such as a backup copy's mode; `target`: a replica's or CDP policy's target host, a
     SureBackup job's virtual lab, shown instead of `repository`; `lastRun`: `yyyy-MM-dd HH:mm`;
     `lastResult`: `Success | Warning | Failed`, `Running` for a job running at scan time, `N/A` for policies the
-    agent manages; `retention`: `7 days`, `14 restore points`, `1 year`; `encrypted`: bool;
+    agent manages; `retention`: `7 days`, `14 restore points`, `1 year`;
+    `gfs`: `{weekly, monthly, yearly}`, the GFS backups kept, only the enabled ones; `encrypted`: bool;
     `unavailable`: `{field: note code}` for cells the collector cannot read, shown as "n/a" with the footnote
     `note_<code>` from `template.html`'s `I18N`)
   - `backups[]`: `name, job, created, repository, platform`, optionally `restorePoints, lastBackup, onDisk`,

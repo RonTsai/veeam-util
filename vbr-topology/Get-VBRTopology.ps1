@@ -964,6 +964,34 @@ function Get-Encrypted($x) {
     if ($e -is [bool]) { return $e }
     return $null
 }
+# GFS (long-term) retention -> [ordered]@{ weekly; monthly; yearly }, only the enabled ones; $null when GFS is off.
+# Get-VBRJob and file backup copy jobs (CBackupJob): Options.GfsPolicy (IsEnabled, Model.Weekly.IsEnabled +
+# KeepBackupsForNumberOfWeeks, ...). Backup copy and agent jobs (v12+ cmdlets): GFSOptions (WeeklyGFSEnabled +
+# WeeklyOptions.RetentionPeriod, ...); agent jobs also have GFSRetentionEnabled. Options.GenerationPolicy.GFS* is an
+# old copy that does not match the job's settings.
+function Get-Gfs($x) {
+    $g = [ordered]@{}
+    $p = $null; try { $p = $x.Options.GfsPolicy } catch { }
+    $o = $null; try { $o = $x.GFSOptions } catch { }
+    if ($null -ne $p) {
+        if ((Get-Prop $p @("IsEnabled")) -ne $true) { return $null }
+        foreach ($k in @(@("weekly", "Weekly", "KeepBackupsForNumberOfWeeks"), @("monthly", "Monthly", "KeepBackupsForNumberOfMonths"),
+                         @("yearly", "Yearly", "KeepBackupsForNumberOfYears"))) {
+            $on = Get-Prop $p @("Model.$($k[1]).IsEnabled", "$($k[1]).IsEnabled")
+            $n = Get-Prop $p @("Model.$($k[1]).$($k[2])", "$($k[1]).$($k[2])")
+            if ($on -eq $true -and "$n" -match '^\d+$' -and [int]"$n" -gt 0) { $g[$k[0]] = [int]"$n" }
+        }
+    } elseif ($null -ne $o) {
+        if ((Get-Prop $x @("GFSRetentionEnabled")) -eq $false) { return $null }
+        foreach ($k in @(@("weekly", "Weekly"), @("monthly", "Monthly"), @("yearly", "Yearly"))) {
+            $on = Get-Prop $o @("$($k[1])GFSEnabled")
+            $n = Get-Prop $o @("$($k[1])Options.RetentionPeriod")
+            if ($on -eq $true -and "$n" -match '^\d+$' -and [int]"$n" -gt 0) { $g[$k[0]] = [int]"$n" }
+        }
+    }
+    if ($g.Count) { return $g }
+    return $null
+}
 $settingsSrc = @{}   # job name -> objects to read, the job's own cmdlet first
 foreach ($x in @($agentJobs) + @($copyJobs) + @($nasJobs) + @($entraJobs) + @($entraLogJobs) + @($nasCopyJobs) + @($cdpPolicies) +
                @($vcdReplicas) + @($jobs)) {
@@ -971,12 +999,14 @@ foreach ($x in @($agentJobs) + @($copyJobs) + @($nasJobs) + @($entraJobs) + @($e
 }
 foreach ($r in $JobRows) {
     $srcs = $(if ($r.type -eq "Configuration Backup") { @($cfgJobs) } else { @($settingsSrc[$r.name]) })
-    $ret = $null; $enc = $null
+    $ret = $null; $enc = $null; $gfs = $null
     foreach ($x in $srcs) {
         if (-not $x) { continue }
         if (-not $ret) { $ret = Get-RetentionText $x }
         if ($null -eq $enc) { $enc = Get-Encrypted $x }
+        if (-not $gfs) { $gfs = Get-Gfs $x }
     }
+    if ($gfs -and $r.type -notmatch "Replica|Replication|CDP") { $r["gfs"] = $gfs }
     # Replicas keep VMs, not backup files: no encryption setting (REST has none for them either)
     if ($r.type -match "Replica|Replication|CDP") { $enc = $null }
     $r["retention"] = $ret; $r["encrypted"] = $enc

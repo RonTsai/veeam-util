@@ -342,6 +342,24 @@
               "isEnabled": true
             }
           }
+        },
+        "gfsPolicy": {
+          "isEnabled": true,
+          "weekly": {
+            "desiredTime": "Saturday",
+            "isEnabled": true,
+            "keepForNumberOfWeeks": 4
+          },
+          "monthly": {
+            "desiredTime": "First",
+            "isEnabled": true,
+            "keepForNumberOfMonths": 12
+          },
+          "yearly": {
+            "desiredTime": "January",
+            "isEnabled": true,
+            "keepForNumberOfYears": 3
+          }
         }
       }
     },
@@ -508,6 +526,24 @@
               "encryptionType": "ByUserPassword",
               "isEnabled": true
             }
+          }
+        },
+        "gfsPolicy": {
+          "isEnabled": true,
+          "weekly": {
+            "desiredTime": "Saturday",
+            "isEnabled": false,
+            "keepForNumberOfWeeks": 1
+          },
+          "monthly": {
+            "desiredTime": "First",
+            "isEnabled": true,
+            "keepForNumberOfMonths": 6
+          },
+          "yearly": {
+            "desiredTime": "January",
+            "isEnabled": false,
+            "keepForNumberOfYears": 1
           }
         }
       },

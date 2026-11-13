@@ -30,8 +30,8 @@ Current as of v1.12.2 (checked on VBR v13.1, REST API 1.3-rev2).
   registered by IP, and VMs whose name differs from their hostname, show as "Physical / unknown host".
 - As in the VBR console, a job shows no last result without a last run time, and N/A for agent policies
   the agent manages itself.
-- Retention is the job's short-term retention only (no GFS). Replicas, CDP policies, SureBackup and tape
-  jobs show no encryption.
+- Replicas, CDP policies, SureBackup and tape jobs show no encryption. GFS retention of backup copy and agent
+  jobs in PowerShell (`GFSOptions`) was checked in the lab with GFS off only.
 - A file backup copy job without its own encryption settings uses the source job's, but both collectors show
   the copy job's own flag.
 
@@ -114,6 +114,14 @@ Current as of v1.12.2 (checked on VBR v13.1, REST API 1.3-rev2).
   for Hyper-V), and PowerShell lists the computers of an agent job as `Protection group`.
 - The built-in "Manually Added" protection group shows as "Individual computers" in PowerShell
   (`Container.Type`) and "Manually added" in Python (REST `type`). The console shows no type for it.
+
+## Unreleased
+
+### Added
+- Both: the Jobs table shows GFS (long-term) retention under the short-term one, for example "GFS: 4 weeks,
+  12 months, 3 years". PowerShell reads `Options.GfsPolicy` (Get-VBRJob, file backup copy jobs) and `GFSOptions`
+  (backup copy and agent jobs), Python `gfsPolicy` (`storage`, `target` or the job itself). The model gains an
+  optional `gfs` per job.
 
 ## v1.12.2 (2026-11-12)
 
