@@ -1004,8 +1004,12 @@ foreach ($r in $JobRows) {
         if (-not $x) { continue }
         if (-not $ret) { $ret = Get-RetentionText $x }
         if ($null -eq $enc) { $enc = Get-Encrypted $x }
-        if (-not $gfs) { $gfs = Get-Gfs $x }
     }
+    # GFS: a Get-VBRJob object (Options.GfsPolicy) first, as only it has the GFS switch itself: a backup copy job's
+    # GFSOptions keeps the weekly / monthly / yearly ticks when GFS is turned off
+    $withPolicy = @($srcs | Where-Object { $_ -and $(try { $null -ne $_.Options.GfsPolicy } catch { $false }) })
+    if ($withPolicy.Count) { $gfs = Get-Gfs $withPolicy[0] }
+    else { foreach ($x in $srcs) { if ($x -and -not $gfs) { $gfs = Get-Gfs $x } } }
     if ($gfs -and $r.type -notmatch "Replica|Replication|CDP") { $r["gfs"] = $gfs }
     # Replicas keep VMs, not backup files: no encryption setting (REST has none for them either)
     if ($r.type -match "Replica|Replication|CDP") { $enc = $null }

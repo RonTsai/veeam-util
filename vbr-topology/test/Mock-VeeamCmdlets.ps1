@@ -128,6 +128,11 @@ function gfs($job, $on, $w, $m, $y) {
         Model = [pscustomobject]@{ Weekly = (& $part $w); Monthly = (& $part $m); Yearly = (& $part $y) } })
 }
 gfs $J1 $true 4 12 3; gfs $J2 $false 0 0 0
+# Get-VBRJob also returns backup copy jobs (JobType SimpleBackupCopyPolicy, the same Id as Get-VBRBackupCopyJob).
+# ABR-to-Repo01 has GFS off with weekly / monthly / yearly still ticked: only this object has the switch
+$J10 = job "c2" "ABR-to-Repo01" "SimpleBackupCopyPolicy" "" "r1" @() $true @(); $J10.TypeToString = "Backup Copy"
+$J10 | Add-Member _objs @()
+gfs $J10 $false 1 1 1
 # Last sessions (FindLastSession() on Get-VBRJob objects; session cmdlets for the others), as in sample_raw.json
 function lastsess($job, $time, $result) {
     $job | Add-Member -Force -MemberType ScriptMethod -Name FindLastSession -Value ([scriptblock]::Create("[pscustomobject]@{ CreationTime = [datetime]'$time'; Result = '$result' }"))
@@ -139,7 +144,7 @@ function Get-VBRComputerBackupJobSession {
 }
 function Get-VBRNASBackupJobSession { [pscustomobject]@{ JobId = (gid "n1"); CreationTime = [datetime]"2026-10-27 19:00"; Result = "Success" } }
 function Get-VBRSureBackupSession { [pscustomobject]@{ JobId = (gid "sb1"); CreationTime = [datetime]"2026-10-26 08:00"; Result = "Success" } }
-function Get-VBRJob { $J1; $J2; $J3; $J4; $J5; $J6; $J7; $J8; $J9 }
+function Get-VBRJob { $J1; $J2; $J3; $J4; $J5; $J6; $J7; $J8; $J9; $J10 }
 # Job objects as Get-VBRJobObject returns them. Plug-in objects have no Location, only Object.Host.
 function jo($name, $disp, $loc, $hostName, $excl = $false, $size = "") {
     [pscustomobject]@{ Name = $name; Type = $(if ($excl) { "Exclude" } else { "Include" }); Location = $loc; TypeDisplayName = $disp
@@ -179,7 +184,11 @@ function Get-VBRBackupCopyJob {
     # From an Application Backup Repository (the source is a repository, not a job)
     New-Obj @{ Id = (gid "c2"); Name = "ABR-to-Repo01"; Mode = "Immediate"; JobEnabled = $true; BackupJob = @()
         SourceRepository = (New-Obj @{ Id = (gid "abrvirtual"); Name = "Application Backup Repository"; Type = "AbrVirtual" })
-        TargetRepository = $global:R1; RetentionType = "Days"; RetentionNumber = 7; StorageOptions = [pscustomobject]@{ EncryptionEnabled = $false } }
+        TargetRepository = $global:R1; RetentionType = "Days"; RetentionNumber = 7; StorageOptions = [pscustomobject]@{ EncryptionEnabled = $false }
+        # GFS off, but GFSOptions keeps the ticks (as in the lab); Get-VBRJob's Options.GfsPolicy.IsEnabled is False
+        GFSOptions = [pscustomobject]@{ WeeklyGFSEnabled = $true; WeeklyOptions = [pscustomobject]@{ RetentionPeriod = 1 }
+            MonthlyGFSEnabled = $true; MonthlyOptions = [pscustomobject]@{ RetentionPeriod = 1 }
+            YearlyGFSEnabled = $true; YearlyOptions = [pscustomobject]@{ RetentionPeriod = 1 } } }
 }
 # Application Backup Repository (v13); Server prints as "name(id)" like the real object
 $global:ABR = New-Obj @{ Id = (gid "abr"); Name = "Application Backup Repository"; ZFSPool = "veeam-stg-abr01"

@@ -768,6 +768,24 @@
               "isEnabled": false
             }
           }
+        },
+        "gfsPolicy": {
+          "isEnabled": false,
+          "weekly": {
+            "desiredTime": "Sunday",
+            "isEnabled": true,
+            "keepForNumberOfWeeks": 1
+          },
+          "monthly": {
+            "desiredTime": "First",
+            "isEnabled": true,
+            "keepForNumberOfMonths": 1
+          },
+          "yearly": {
+            "desiredTime": "January",
+            "isEnabled": true,
+            "keepForNumberOfYears": 1
+          }
         }
       }
     },
