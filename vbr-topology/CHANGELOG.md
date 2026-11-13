@@ -68,6 +68,9 @@ Current as of v1.12.2 (checked on VBR v13.1, REST API 1.3-rev2).
   grouped into the clusters the console shows (Managed Servers > Proxmox VE > Clusters): neither PowerShell
   nor the REST API gives that relation. A job whose source is a cluster name gets inferred links from every
   node of the platform, including the nodes of other clusters.
+- Plug-in platform jobs (Nutanix AHV, Proxmox VE, HPE Morpheus VME): PowerShell reads their retention and GFS
+  from `Get-VBRJob`; the VBR console may fail to open these jobs' settings, so the values could not be checked
+  against it.
 - A plug-in host whose platform ID the report does not know shows as "Plug-in platform". `Get-VBRServer` can
   return such hosts although the console lists them under no platform (for example after a plug-in was
   removed).
