@@ -2,7 +2,7 @@
 
 ## Known limitations
 
-Current as of v1.12.2 (checked on VBR v13.1, REST API 1.3-rev2).
+Current as of v1.12.3 (checked on VBR v13.1, REST API 1.3-rev2).
 
 **Testing**
 
@@ -118,13 +118,17 @@ Current as of v1.12.2 (checked on VBR v13.1, REST API 1.3-rev2).
 - The built-in "Manually Added" protection group shows as "Individual computers" in PowerShell
   (`Container.Type`) and "Manually added" in Python (REST `type`). The console shows no type for it.
 
-## Unreleased
+## v1.12.3 (2026-11-16)
 
 ### Added
 - Both: the Jobs table shows GFS (long-term) retention under the short-term one, for example "GFS: 4 weeks,
   12 months, 3 years". PowerShell reads `Options.GfsPolicy` (Get-VBRJob, file backup copy jobs) and `GFSOptions`
   (backup copy and agent jobs), Python `gfsPolicy` (`storage`, `target` or the job itself). The model gains an
   optional `gfs` per job.
+
+### Known limitations
+- New entry: plug-in platform jobs' retention and GFS come from `Get-VBRJob` and could not be checked against
+  the console, which may fail to open these jobs' settings.
 
 ## v1.12.2 (2026-11-12)
 
