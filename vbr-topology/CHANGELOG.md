@@ -2,7 +2,7 @@
 
 ## Known limitations
 
-Current as of v1.12.3 (checked on VBR v13.1, REST API 1.3-rev2).
+Current as of v1.12.4 (checked on VBR v13.1, REST API 1.3-rev2).
 
 **Testing**
 
@@ -122,7 +122,7 @@ Current as of v1.12.3 (checked on VBR v13.1, REST API 1.3-rev2).
 - The built-in "Manually Added" protection group shows as "Individual computers" in PowerShell
   (`Container.Type`) and "Manually added" in Python (REST `type`). The console shows no type for it.
 
-## Unreleased
+## v1.12.4 (2026-11-17)
 
 ### Fixed
 
@@ -137,6 +137,12 @@ Current as of v1.12.3 (checked on VBR v13.1, REST API 1.3-rev2).
   REST `size` of running VMs. A VM with a memory reservation has a smaller swap file, so its size shows a little
   low.
 - Both: sizes have three significant digits, as in the console (`25.0 GB`, `113 GB`, `1.25 TB`).
+
+### Known limitations
+- New entries: VMware VM sizes can be 0.1 GB above the console's job wizard (25.1 GB against 25.0 GB);
+  PowerShell shows no size for the VMs of Hyper-V replication jobs and the stored `ApproxSize` for Hyper-V
+  backup jobs; PowerShell shows `ApproxSizeString` for VMware containers (clusters, folders, resource pools).
+- Removed: PowerShell's missing last run of tape jobs and the configuration backup.
 
 ## v1.12.3 (2026-11-16)
 
