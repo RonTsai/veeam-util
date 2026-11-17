@@ -614,7 +614,16 @@
               "hostName": "vcsa01.corp.local",
               "name": "app-sql01",
               "type": "VirtualMachine",
-              "size": "120 GB"
+              "size": "130 GB",
+              "platform": "VSphere",
+              "powerState": "PoweredOn",
+              "objectId": "vm-101",
+              "metadata": [
+                {
+                  "field": "ramSize",
+                  "data": "8589934592"
+                }
+              ]
             }
           }
         ],

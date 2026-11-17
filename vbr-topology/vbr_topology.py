@@ -380,13 +380,37 @@ def pg_type_name(code):
 
 
 def size_str(n):
-    """Bytes as the VBR console writes sizes (16 GB, 104.1 GB, 1.3 TB); None for no size or 0."""
+    """Bytes as the VBR console writes sizes: three significant digits (25.0 GB, 113 GB, 1.25 TB); None for none."""
     if not isinstance(n, (int, float)) or n <= 0:
         return None
-    for unit in ("B", "KB", "MB", "GB", "TB"):
-        if n < 1024 or unit == "TB":
-            return f"{n:.1f}".rstrip("0").rstrip(".") + " " + unit
+    units = ("B", "KB", "MB", "GB", "TB", "PB")
+    i = 0
+    while n >= 1000 and i < len(units) - 1:
         n /= 1024
+        i += 1
+    return (f"{n:.0f}" if n >= 100 else f"{n:.1f}" if n >= 10 else f"{n:.2f}") + " " + units[i]
+
+
+SIZE_UNITS = {"B": 1, "KB": 1024, "MB": 1024 ** 2, "GB": 1024 ** 3, "TB": 1024 ** 4, "PB": 1024 ** 5}
+
+
+def size_bytes(s):
+    """'104.1 GB' -> bytes; None if it is not a size."""
+    m = re.fullmatch(r"\s*([\d.]+)\s*([KMGTP]?B)\s*", str(s or ""))
+    return float(m.group(1)) * SIZE_UNITS[m.group(2)] if m else None
+
+
+def vm_size(o):
+    """A vSphere VM's size as the console's job wizard shows it: the REST size is the space the VM takes on the
+    datastore, with the swap file (as large as the memory) of a running VM, which the wizard leaves out."""
+    size = o.get("size")
+    b = size_bytes(size)
+    if not b or o.get("type") != "VirtualMachine" or o.get("platform") != "VSphere":
+        return size
+    meta = {x.get("field"): x.get("data") for x in o.get("metadata") or [] if isinstance(x, dict)}
+    if o.get("powerState") == "PoweredOn" and str(meta.get("ramSize", "")).isdigit():
+        b -= int(meta["ramSize"])
+    return size_str(b) or size
 
 
 def _obj(item):
@@ -419,10 +443,10 @@ def job_objects(j, names):
     vms = j.get("virtualMachines") or {}
     for inc in vms.get("includes") or []:
         o = _obj(inc)
-        add(o.get("name"), o.get("type"), o.get("hostName"), o.get("size"))
+        add(o.get("name"), o.get("type"), o.get("hostName"), vm_size(o))
     for exc in (vms.get("excludes") or {}).get("vms") or []:
         o = _obj(exc)
-        add(o.get("name"), o.get("type"), o.get("hostName"), o.get("size"), True)
+        add(o.get("name"), o.get("type"), o.get("hostName"), vm_size(o), True)
     for c in j.get("computers") or []:
         if c.get("type") == "ProtectionGroup":
             add(c.get("name"), "Protection group", pg_type_name(c.get("protectionGroupType")))

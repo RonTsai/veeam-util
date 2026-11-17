@@ -131,6 +131,16 @@ function Add-Link {
     if ($Job -and -not $Links[$key].jobs.Contains($Job)) { $Links[$key].jobs.Add($Job) }
 }
 
+# Bytes as the VBR console writes sizes: three significant digits (25.0 GB, 113 GB, 1.25 TB); "" for none
+function Format-Size($Bytes) {
+    $b = 0.0
+    if (-not [double]::TryParse("$Bytes", [ref]$b) -or $b -le 0) { return "" }
+    $units = @("B", "KB", "MB", "GB", "TB", "PB"); $i = 0
+    while ($b -ge 1000 -and $i -lt $units.Count - 1) { $b = $b / 1024; $i++ }
+    $fmt = $(if ($b -ge 100) { "{0:F0} {1}" } elseif ($b -ge 10) { "{0:F1} {1}" } else { "{0:F2} {1}" })
+    return [string]::Format([Globalization.CultureInfo]::InvariantCulture, $fmt, $b, $units[$i])
+}
+
 function Format-GB($v) { if ($null -eq $v) { return $null }; return ("{0:N0} GB" -f [double]$v) }
 
 # ---------------------------------------------------------------------------
@@ -610,6 +620,9 @@ function New-JobObject([string]$Name, [string]$Type, [string]$Location = "", [st
 }
 
 $JobRows = New-Object System.Collections.Generic.List[object]
+# VMware VMs of Get-VBRJob jobs, sized from the Veeam inventory once it is read (Read-Inventory): ApproxSize is
+# what the VM took when it was added to the job, and is not updated
+$ViSizeTargets = New-Object System.Collections.Generic.List[object]
 $jobRepo = @{}   # job id -> repo id (used to find backup copy sources)
 # These jobs are handled by their own cmdlets; skip them in Get-VBRJob to avoid duplicates
 $handledElsewhere = New-Object System.Collections.Generic.HashSet[string]
@@ -646,6 +659,8 @@ foreach ($j in $jobs) {
         $jo = New-JobObject "$($_.Name)" "$(Get-Prop $_ @('TypeDisplayName', 'Object.ViType', 'Object.Type'))" $loc `
             $size ("$($_.Type)" -eq "Exclude")
         if (-not $size) { $jo["unavailable"] = [ordered]@{ size = "psObjectSize" } }
+        $vt = "$(Get-Prop $_ @('Object.ViType'))"; $hid = "$(Get-Prop $_ @('Object.HostId'))"; $ref = "$(Get-Prop $_ @('Object.ObjectId'))"
+        if ($vt -eq "VirtualMachine" -and $hid -and $ref) { $ViSizeTargets.Add(@{ obj = $jo; key = "${hid}_${ref}".ToLower() }) }
         $jo })
 
     # TypeToString, with the names the console's Jobs view uses where they differ
@@ -1367,6 +1382,7 @@ if ($UsePowerCLI) {
 
 # 3) Veeam's own vSphere / Hyper-V inventory (matched by VM name)
 $hostCluster = @{}  # lowercase ESXi host name -> vSphere cluster (the report groups hosts by cluster)
+$viVmSize = @{}     # "<vCenter id>_<vm-id>" -> the VM's size as the console's job wizard shows it
 function Read-Inventory($Srv, [string]$Platform) {
     $ents = @()
     try {
@@ -1399,6 +1415,13 @@ function Read-Inventory($Srv, [string]$Platform) {
     $n = 0
     foreach ($e in $ents) {
         if ("$($e.Type)" -notmatch '^(Vm|VirtualMachine)$') { continue }
+        # Used space without the swap file (as large as the memory) of a running VM: the size the job wizard shows
+        $used = 0.0
+        if ($Platform -eq "vi" -and $e.Id -and [double]::TryParse("$(Get-Prop $e @('UsedSize'))", [ref]$used) -and $used -gt 0) {
+            $mem = 0.0; [void][double]::TryParse("$(Get-Prop $e @('MemoryInMB'))", [ref]$mem)
+            if ("$(Get-Prop $e @('PowerState'))" -eq "PoweredOn") { $used -= $mem * 1MB }
+            $viVmSize["$($e.Id)".ToLower()] = $used
+        }
         $segs = @("$($e.Path)" -split '[\\/]' | Where-Object { $_ })
         $h = $null
         foreach ($sg in $segs) { if ($hostNames.ContainsKey($sg.ToLower())) { $h = $hostNames[$sg.ToLower()] } }
@@ -1413,6 +1436,13 @@ function Read-Inventory($Srv, [string]$Platform) {
 }
 foreach ($vc in $viScan) { Read-Inventory $vc "vi" }
 foreach ($hv in @($servers | Where-Object { "$($_.Type)" -match '^(HvServer|HvCluster)$' })) { Read-Inventory $hv "hv" }
+foreach ($t in $ViSizeTargets) {
+    if (-not $viVmSize.ContainsKey($t.key)) { continue }
+    $sz = Format-Size $viVmSize[$t.key]
+    if (-not $sz) { continue }
+    $t.obj["size"] = $sz
+    if ($t.obj.Contains("unavailable")) { $t.obj.Remove("unavailable") }
+}
 
 # Find the host of every component
 $dnsCache = @{}

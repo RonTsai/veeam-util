@@ -30,6 +30,10 @@ Current as of v1.12.3 (checked on VBR v13.1, REST API 1.3-rev2).
   registered by IP, and VMs whose name differs from their hostname, show as "Physical / unknown host".
 - As in the VBR console, a job shows no last result without a last run time, and N/A for agent policies
   the agent manages itself.
+- VMware VM sizes can be 0.1 GB above the console's job wizard (25.1 GB against 25.0 GB for a VM with 25 GB
+  of disks). Both collectors start from the used space of all the VM's files minus its swap file (PowerShell:
+  `UsedSize`, Python: the REST `size`, which has one decimal); the wizard seems to count the disks alone or to
+  round down, and the lab data could not tell which.
 - Replicas, CDP policies, SureBackup and tape jobs show no encryption. GFS retention of backup copy and agent
   jobs in PowerShell (`GFSOptions`) was checked in the lab with GFS off only.
 - A file backup copy job without its own encryption settings uses the source job's, but both collectors show
@@ -64,6 +68,8 @@ Current as of v1.12.3 (checked on VBR v13.1, REST API 1.3-rev2).
 - The VMs of Hyper-V replication jobs show no size: `Get-VBRJobObject` gives 0 and `Find-VBRHvEntity` reports
   `UsedSize` and `ProvisionedSize` of 0, while the console shows their disk size. The VMs of Hyper-V backup
   jobs show the size stored in the job (`ApproxSize`), which is not updated when the VM grows.
+- VMware containers in a job (clusters, folders, resource pools) show `ApproxSizeString`, the size when they were
+  added to the job, which VBR does not update. Their VMs' sizes are read again from the inventory.
 - Proxmox VE replica jobs list their VMs as `<id>:<VM ID>` (for example `a1b2c3d4-...:102`): the job objects carry
   no VM name, and their IDs match no object of the Proxmox VE backups.
 - Plug-in platform hosts are drawn as `Get-VBRServer` returns them. Proxmox VE nodes are separate cards, not
@@ -99,10 +105,6 @@ Current as of v1.12.3 (checked on VBR v13.1, REST API 1.3-rev2).
   its server name, without path or retention.
 - Entra ID tenant backups show no restore point count (REST returns none).
 - The objects of plug-in platform jobs show no location: `/api/v1/backupObjects` has no host.
-- VMware job object sizes are larger than in the VBR console and PowerShell: the REST `size` of a job's
-  VMs and containers is the space the VM takes on the datastore (with the swap file, configuration files
-  and snapshots), while the console shows the capacity of its disks (for example 104.1 GB against 100 GB
-  for a VM with 4 GB of memory).
 - Repositories without a host of their own (object storage, dedup appliances) show as "Unknown / physical".
 - VBR 13.2 adds REST endpoints (Red Hat OpenStack and Virtuozzo, storage copy jobs, Application Client
   authentication) that this version does not use yet.
@@ -127,6 +129,14 @@ Current as of v1.12.3 (checked on VBR v13.1, REST API 1.3-rev2).
 - PowerShell: tape jobs and the configuration backup show their last run and result, from their newest
   session (`Get-VBRSession -Job`). A tape job that never ran stays blank, as in the console; its
   `LastResult` (Success even without a run) is not used. "n/a" is shown only when the sessions cannot be read.
+- Both: VMware VM sizes in a job's objects match the console's job wizard. The used space of a running VM
+  includes its swap file (as large as its memory), which the wizard leaves out. PowerShell no longer shows
+  `ApproxSizeString` for VMs, the size when the VM was added to the job (a VM that grew from 100 GB to 113 GB
+  still showed 100 GB): it reads `UsedSize`, `MemoryInMB` and `PowerState` from the Veeam inventory it already
+  reads (`Find-VBRViEntity`), matched by the job object's vCenter and VM ID. Python subtracts `ramSize` from the
+  REST `size` of running VMs. A VM with a memory reservation has a smaller swap file, so its size shows a little
+  low.
+- Both: sizes have three significant digits, as in the console (`25.0 GB`, `113 GB`, `1.25 TB`).
 
 ## v1.12.3 (2026-11-16)
 

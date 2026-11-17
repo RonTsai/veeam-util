@@ -173,6 +173,10 @@ $J6 | Add-Member _objs @((jo "vme-app01" "Virtual Machine" "" "VMECluster" $fals
 $J7 | Add-Member _objs @((jo "app-sql01" "Virtual Machine" "$vc\DC01\vm\app-sql01" $vc $false "120 GB"),
     ([pscustomobject]@{ Name = "app-sql02"; Type = "ExtendedChild"; Location = "$vc\DC01\vm\app-sql02"; TypeDisplayName = "Virtual Machine" }))
 $J8 | Add-Member _objs @((jo "app01" "Virtual Machine" "hv01.corp.local" "hv01.corp.local" $false "0 B"))
+# app-sql01 grew since it was added to the job: ApproxSizeString keeps 120 GB, the inventory (Find-VBRViEntity) has
+# 130 GB used, 8 GB of it the swap file of the running VM, so the job wizard shows 122 GB
+$J7._objs[0].Object | Add-Member ViType "VirtualMachine"; $J7._objs[0].Object | Add-Member HostId "vc1"
+$J7._objs[0].Object | Add-Member ObjectId "vm-101"
 $J9 | Add-Member _objs @((jo "a1b2c3d4-0000-4000-8000-000000000001:101" "Virtual Machine" "" "proxmox" $false "0 B"))
 function Get-VBRJobObject($Job) { $Job._objs }
 function Get-VBRComputerBackupJob {
@@ -307,6 +311,9 @@ function Find-VBRViEntity($Server, [switch]$HostsAndClusters) {
     # Its first label is "vbr01" too: must not place the backup server (exact names win over short names)
     [pscustomobject]@{ Name = "VBR01.WIN.Demo";   Type = "Vm";   Path = "$q\esx02.corp.local\VBR01.WIN.Demo" }
     [pscustomobject]@{ Name = "vbr01";            Type = "Vm";   Path = "$p\esx01.corp.local\vbr01" }
+    # Id is "<vCenter id>_<vm-id>"; UsedSize includes the swap file of a running VM
+    [pscustomobject]@{ Name = "app-sql01"; Type = "Vm"; Path = "$p\esx01.corp.local\app-sql01"; Id = "vc1_vm-101"
+        UsedSize = [long](130 * 1GB); MemoryInMB = 8192; PowerState = "PoweredOn" }
     [pscustomobject]@{ Name = "em01";             Type = "Vm";   Path = "$p\esx01.corp.local\em01" }
     [pscustomobject]@{ Name = "vbrpx01";          Type = "Vm";   Path = "$p\esx01.corp.local\vbrpx01" }
     [pscustomobject]@{ Name = "vbrpx02.corp.local"; Type = "Vm"; Path = "$q\esx02.corp.local\vbrpx02.corp.local" }
