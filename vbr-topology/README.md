@@ -371,7 +371,7 @@ Each job also shows its target, retention (short-term: days or restore points), 
 backups, and its last run and last result (Success / Warning / Failed, or Running for a job that runs during
 the scan), as the VBR console's Jobs view. The target is the repository or media pool; for replicas and CDP
 policies it is the target host (with the repository that holds the metadata under it), and for SureBackup
-jobs the virtual lab. A cell that the collector cannot read (for example the last run of a tape job in PowerShell, or the retention of a plug-in
+jobs the virtual lab. A cell that the collector cannot read (for example the last run of an Entra ID tenant backup in PowerShell, or the retention of a plug-in
 platform job in Python) shows "n/a" with a numbered note under the table that explains why; "—" means the
 value does not apply or does not exist yet.
 

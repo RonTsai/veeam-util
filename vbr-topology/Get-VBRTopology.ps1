@@ -1152,7 +1152,8 @@ $BackupRows = @($BackupRows | Sort-Object { "$($_.name)".ToLower() }, { "$($_.re
 # - Get-VBRJob jobs (VMware, Hyper-V, Cloud Director, plug-in platforms, replicas, backup copies):
 #   FindLastSession(), which Veeam does not support
 # - agent, file share, SureBackup and Entra ID jobs: their own session cmdlets
-# - tape jobs and the configuration backup: their LastResult and, when there is one, last run time
+# - tape jobs and the configuration backup: Get-VBRSession -Job (their LastResult says Success even for a
+#   job that never ran, so it is not used)
 # A session whose State is not Stopped (Working, Starting, Postprocessing, ...) is still running: "Running"
 $lastByJob = @{}
 function Add-LastSession([string]$JobId, $Time, $Result, $State = "") {
@@ -1172,22 +1173,31 @@ foreach ($cmd in @("Get-VBRComputerBackupJobSession", "Get-VBRNASBackupJobSessio
         if ($s) { Add-LastSession "$(Get-Prop $s @('JobId', 'Job.Id'))" (Get-Prop $s @("CreationTime", "StartTime")) (Get-Prop $s @("Result")) (Get-Prop $s @("State")) }
     }
 }
-$resultByJob = @{}
-foreach ($x in @($tapeJobs) + @($cfgJobs)) {
-    if (-not $x) { continue }
-    $key = $(if ($cfgJobs -contains $x) { "cfg" } else { Get-IdStr $x })
-    $res = "$(Get-Prop $x @('LastResult'))"; if ($res) { $resultByJob[$key] = $res }
-    Add-LastSession $key (Get-Prop $x @("LastRun", "LastRunTime", "LastRunLocal")) $res
+# Jobs whose sessions were read: no session then means the job never ran (blank, as in the console), not "n/a"
+$sessionsRead = @{}
+if (Get-Command Get-VBRSession -ErrorAction SilentlyContinue) {
+    $n = 0
+    foreach ($x in @($tapeJobs) + @($cfgJobs)) {
+        if (-not $x) { continue }
+        $key = $(if ($cfgJobs -contains $x) { "cfg" } else { Get-IdStr $x })
+        try {
+            $sessions = @(Get-VBRSession -Job $x -WarningAction SilentlyContinue -ErrorAction Stop)
+            $sessionsRead[$key] = $true
+            foreach ($s in $sessions) {
+                if ($s) { $n++; Add-LastSession $key (Get-Prop $s @("CreationTime")) (Get-Prop $s @("Result")) (Get-Prop $s @("State")) }
+            }
+        } catch { $script:Warnings.Add("Get-VBRSession $($x.Name): $($_.Exception.Message)") }
+    }
+    Write-Host ("  [OK]   {0,-28} {1}" -f "Get-VBRSession (tape, config)", $n)
 }
 foreach ($r in $JobRows) {
     $jid = $(if ($r.type -eq "Configuration Backup") { "cfg" } else { "$($idByName[$r.name])" })
     $ls = $lastByJob[$jid]
-    $res = $(if ($ls) { $ls.Result } else { $resultByJob[$jid] })
     # As in the console: no result without a run time, and N/A for policies the agent manages itself
     $r["lastRun"] = $(if ($ls) { & $fmtTime $ls.Time } else { $null })
     $running = $ls -and $ls.State -and $ls.State -notmatch '^(Stopped|Idle|None)$'
     $r["lastResult"] = $(if ($r.type -match "Agent Policy$") { "N/A" } elseif ($running) { "Running" }
-                         elseif ($ls -and $res -and $res -ne "None") { $res } else { $null })
+                         elseif ($ls -and $ls.Result -and $ls.Result -ne "None") { $ls.Result } else { $null })
 }
 
 # Cells PowerShell cannot fill: the report shows "n/a" with a footnote (texts: note_<code> in template.html I18N)
@@ -1197,11 +1207,12 @@ foreach ($r in $JobRows) {
         if ($o -and -not $o.size -and $o.type -match '^(SMB share|NFS share|File share|Object storage)$') { $o["unavailable"] = [ordered]@{ size = "shareSize" } }
     }
     $na = [ordered]@{}
+    $read = $sessionsRead[$(if ($r.type -eq "Configuration Backup") { "cfg" } else { "$($idByName[$r.name])" })]
     if ($r.type -match "^(Backup to Tape|File to Tape Backup)$" -or $r.type -match "^Tape \(") {
         $na["retention"] = "tapeMediaPool"; $na["encrypted"] = "tapeMediaPool"
         if ($null -eq $r.disabled) { $na["disabled"] = "tapeState" }
-        if (-not $r.lastRun) { $na["lastRun"] = "tapeLastRun" }
-    } elseif ($r.type -eq "Configuration Backup" -and -not $r.lastRun) {
+        if (-not $r.lastRun -and -not $read) { $na["lastRun"] = "tapeLastRun"; $na["lastResult"] = "tapeLastRun" }
+    } elseif ($r.type -eq "Configuration Backup" -and -not $r.lastRun -and -not $read) {
         $na["lastRun"] = "configLastRun"; $na["lastResult"] = "configLastRun"
     } elseif ($r.type -eq "Entra ID Tenant Backup" -and -not $r.lastRun) {
         $na["lastRun"] = "entraLastRun"; $na["lastResult"] = "entraLastRun"

@@ -54,14 +54,16 @@ Current as of v1.12.3 (checked on VBR v13.1, REST API 1.3-rev2).
   from the vApp's, so they can differ from the console.
 - A backup's creation time is its oldest backup file, as `CreationTime` can be the date of a VBR upgrade;
   for a copied or imported backup the console shows a later date.
-- No last run (and so no last result) for tape jobs, the configuration backup and Entra ID tenant backups:
-  their cmdlets give no run time, and VBR v13.1 has no Entra ID session cmdlet.
+- No last run (and so no last result) for Entra ID tenant backups: VBR v13.1 has no Entra ID session cmdlet.
 - Entra ID tenant backup jobs have no enabled / disabled state (only `EnableSchedule`), so they always show
   as enabled.
 - Repositories without a host of their own (object storage, dedup appliances) are placed on their gateway
   server (often the VBR server).
 - The objects of plug-in platform jobs (Nutanix AHV, Proxmox VE, HPE Morpheus VME) show no size:
   `Get-VBRJobObject` gives a size of 0. Python shows their size.
+- The VMs of Hyper-V replication jobs show no size: `Get-VBRJobObject` gives 0 and `Find-VBRHvEntity` reports
+  `UsedSize` and `ProvisionedSize` of 0, while the console shows their disk size. The VMs of Hyper-V backup
+  jobs show the size stored in the job (`ApproxSize`), which is not updated when the VM grows.
 - Proxmox VE replica jobs list their VMs as `<id>:<VM ID>` (for example `a1b2c3d4-...:102`): the job objects carry
   no VM name, and their IDs match no object of the Proxmox VE backups.
 - Plug-in platform hosts are drawn as `Get-VBRServer` returns them. Proxmox VE nodes are separate cards, not
@@ -117,6 +119,14 @@ Current as of v1.12.3 (checked on VBR v13.1, REST API 1.3-rev2).
   for Hyper-V), and PowerShell lists the computers of an agent job as `Protection group`.
 - The built-in "Manually Added" protection group shows as "Individual computers" in PowerShell
   (`Container.Type`) and "Manually added" in Python (REST `type`). The console shows no type for it.
+
+## Unreleased
+
+### Fixed
+
+- PowerShell: tape jobs and the configuration backup show their last run and result, from their newest
+  session (`Get-VBRSession -Job`). A tape job that never ran stays blank, as in the console; its
+  `LastResult` (Success even without a run) is not used. "n/a" is shown only when the sessions cannot be read.
 
 ## v1.12.3 (2026-11-16)
 

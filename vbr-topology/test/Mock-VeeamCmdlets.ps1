@@ -72,8 +72,8 @@ function Get-VBRTapeLibrary {
 }
 # Object: the source jobs (Backup to tape) or file shares (File to tape)
 function Get-VBRTapeJob {
-    New-Obj @{ Id = (gid "tj1"); Name = "Weekly-to-Tape"; Type = "BackupToTape"; Enabled = $true; Target = [pscustomobject]@{ Name = "GFS Media Pool" }; Object = @($J2) }
-    New-Obj @{ Id = (gid "tj2"); Name = "Shares-to-Tape"; Type = "FileToTape"; Enabled = $false; Target = [pscustomobject]@{ Name = "Media Pool" }
+    New-Obj @{ Id = (gid "tj1"); Name = "Weekly-to-Tape"; Type = "BackupToTape"; Enabled = $true; LastResult = "Success"; Target = [pscustomobject]@{ Name = "GFS Media Pool" }; Object = @($J2) }
+    New-Obj @{ Id = (gid "tj2"); Name = "Shares-to-Tape"; Type = "FileToTape"; Enabled = $false; LastResult = "Success"; Target = [pscustomobject]@{ Name = "Media Pool" }
         Object = @([pscustomobject]@{ Path = "\\nas01.corp.local\projects"; Server = "\\nas01.corp.local\projects(6f1c0e2a-1b2c-4d5e-8f90-a1b2c3d4e5f6)" }) }
 }
 # Virtual lab on esx01; Server prints as "<name>(<id>)" in the real module
@@ -144,6 +144,17 @@ function Get-VBRComputerBackupJobSession {
 }
 function Get-VBRNASBackupJobSession { [pscustomobject]@{ JobId = (gid "n1"); CreationTime = [datetime]"2026-10-27 19:00"; Result = "Success" } }
 function Get-VBRSureBackupSession { [pscustomobject]@{ JobId = (gid "sb1"); CreationTime = [datetime]"2026-10-26 08:00"; Result = "Success" } }
+# Tape jobs and the configuration backup: Get-VBRSession -Job (Shares-to-Tape never ran: no session,
+# although Get-VBRTapeJob says LastResult = Success, as on a real server)
+function Get-VBRSession($Job) {
+    switch ("$($Job.Name)") {
+        "Weekly-to-Tape" {
+            [pscustomobject]@{ CreationTime = [datetime]"2026-10-25 06:00"; Result = "Success"; State = "Stopped" }
+            [pscustomobject]@{ CreationTime = [datetime]"2026-10-18 06:00"; Result = "Warning"; State = "Stopped" }
+        }
+        "Backup Configuration Job" { [pscustomobject]@{ CreationTime = [datetime]"2026-10-27 10:00"; Result = "Success"; State = "Stopped" } }
+    }
+}
 function Get-VBRJob { $J1; $J2; $J3; $J4; $J5; $J6; $J7; $J8; $J9; $J10 }
 # Job objects as Get-VBRJobObject returns them. Plug-in objects have no Location, only Object.Host.
 function jo($name, $disp, $loc, $hostName, $excl = $false, $size = "") {
