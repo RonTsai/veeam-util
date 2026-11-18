@@ -45,7 +45,7 @@ There are two collectors that produce the same diagram from one shared `template
 
 | | PowerShell (`Get-VBRTopology.ps1`) | Python (`vbr_topology.py`) |
 |---|---|---|
-| Runs on | The VBR server (or a machine with the VBR Console) | Any machine that can reach VBR on port 9419 |
+| Runs on | The VBR server (or a machine with the VBR Console of the same version as the server) | Any machine that can reach VBR on port 9419 |
 | Talks to | Veeam PowerShell module | VBR REST API |
 | Needs | Windows PowerShell 5.1 or PowerShell 7 | Python 3.8+, standard library only |
 | Enterprise Manager | Auto-detected | `--em <host>` (or auto, when EM is installed on the VBR host) |
@@ -104,6 +104,11 @@ instead, for example from a scheduled task.
 ---
 
 ## PowerShell version
+
+Run it on the VBR server, or on a machine with the VBR Console. The Console (and its Veeam PowerShell
+module) must be the same version as the backup server; otherwise `Connect-VBRServer` fails with "Backup
+server has a different version" or "local PowerShell module requires update". If the versions cannot be
+matched, run the script on the VBR server or use the [Python version](#python-version).
 
 ### Before you start: install VMware PowerCLI (recommended)
 

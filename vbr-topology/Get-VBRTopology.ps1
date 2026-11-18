@@ -158,8 +158,17 @@ $session = $null
 try { $session = Get-VBRServerSession } catch { }
 if (-not $session) {
     Write-Host "Connecting to VBR: $Server ..."
-    if ($Credential) { Connect-VBRServer -Server $Server -Credential $Credential }
-    else { Connect-VBRServer -Server $Server }
+    try {
+        if ($Credential) { Connect-VBRServer -Server $Server -Credential $Credential -ErrorAction Stop }
+        else { Connect-VBRServer -Server $Server -ErrorAction Stop }
+    } catch {
+        $msg = $_.Exception.Message
+        if ($msg -match "different version|requires update") {
+            Write-Host "The Veeam PowerShell module (installed with the VBR Console) must be the same version as the backup server." -ForegroundColor Yellow
+            Write-Host "Run this script on the VBR server, install the VBR Console of the server's version, or use the Python collector (vbr_topology.py, REST API)." -ForegroundColor Yellow
+        }
+        throw
+    }
     $connected = $true
 }
 

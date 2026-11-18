@@ -122,6 +122,14 @@ Current as of v1.12.4 (checked on VBR v13.1, REST API 1.3-rev2).
 - The built-in "Manually Added" protection group shows as "Individual computers" in PowerShell
   (`Container.Type`) and "Manually added" in Python (REST `type`). The console shows no type for it.
 
+## Unreleased
+
+### Changed
+
+- PowerShell: when `Connect-VBRServer` fails because the VBR Console (Veeam PowerShell module) is not the
+  same version as the backup server, the script explains this and suggests running on the VBR server,
+  installing the matching Console, or using the Python collector. README notes the version requirement.
+
 ## v1.12.4 (2026-11-17)
 
 ### Fixed
