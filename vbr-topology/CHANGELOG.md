@@ -124,6 +124,17 @@ Current as of v1.12.4 (checked on VBR v13.1, REST API 1.3-rev2).
 
 ## Unreleased
 
+### Added
+
+- Report: proxies, repositories, SOBRs and object storage that no job uses and that hold no backups get a
+  gray "0" badge and a dashed card, and are listed above the diagram (worked out in `template.html` from the
+  links, jobs and backups, so both collectors show it).
+- Both: file share and object storage backup jobs link their repository to their archive repository
+  (PowerShell `LongTermBackupRepository`, REST `archiveRepository.archiveRepositoryId`), so the archive object
+  storage shows in the job's data flow.
+- Both: each console status line shows the seconds since the previous one, and the last line the total scan
+  time.
+
 ### Changed
 
 - PowerShell: when `Connect-VBRServer` fails because the VBR Console (Veeam PowerShell module) is not the

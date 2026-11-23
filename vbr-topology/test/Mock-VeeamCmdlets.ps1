@@ -221,7 +221,7 @@ function Get-VBRSureBackupJob {
 # The share's or account's managed server (its Name is the job object's location)
 if (-not ("Mock.VBRNASSMBServer" -as [type])) { Add-Type -TypeDefinition "namespace Mock { public class VBRNASSMBServer { public string Name; } public class VBRAmazonS3ObjectStorageServer { public string Name; } }" }
 function Get-VBRNASBackupJob {
-    New-Obj @{ Id = (gid "n1"); Name = "NAS-Shares"; JobEnabled = $true; ShortTermBackupRepository = $global:R1; ShortTermRetentionPeriod = 28; ShortTermRetentionType = "Daily"; StorageOptions = [pscustomobject]@{ EncryptionEnabled = $false }
+    New-Obj @{ Id = (gid "n1"); Name = "NAS-Shares"; JobEnabled = $true; ShortTermBackupRepository = $global:R1; LongTermBackupRepository = $global:R4; ShortTermRetentionPeriod = 28; ShortTermRetentionType = "Daily"; StorageOptions = [pscustomobject]@{ EncryptionEnabled = $false }
         BackupObject = @([pscustomobject]@{ Path = "\\nas01.corp.local\projects"; Server = (New-Object Mock.VBRNASSMBServer -Property @{ Name = "\\nas01.corp.local\projects" })
                                             InclusionMask = @("*.docx", "*.xlsx"); ExclusionMask = @("\.snapshot", "*.tmp") }) }
     # Object storage: Path is the folder only, the bucket is separate (shown as "<bucket>/<folder>")

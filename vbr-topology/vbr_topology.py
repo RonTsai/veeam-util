@@ -38,6 +38,7 @@ import re
 import socket
 import ssl
 import subprocess
+import time
 from concurrent.futures import ThreadPoolExecutor
 import sys
 import urllib.error
@@ -179,7 +180,19 @@ class VbrClient:
                 return items
 
 
+_LAP = [time.monotonic()]
+_START = _LAP[0]
+
+
+def lap():
+    """Seconds since the previous console status line (to find slow steps in a scan)"""
+    now = time.monotonic()
+    t, _LAP[0] = now - _LAP[0], now
+    return f"{t:5.1f}s"
+
+
 def collect(client):
+    _LAP[0] = time.monotonic()   # login time is not counted in the first endpoint
     raw = {"_meta": {"base": client.base, "apiVersion": client.api_version,
                      "collectedAt": dt.datetime.now().isoformat(timespec="seconds")},
            "_errors": {}}
@@ -187,13 +200,13 @@ def collect(client):
         try:
             raw[key] = client.get_all(path, paged)
             n = len(raw[key]) if isinstance(raw[key], list) else 1
-            print(f"  [OK]   {key:<22} {n}")
+            print(f"  [OK]   {lap()} {key:<22} {n}")
         except urllib.error.HTTPError as e:
             raw["_errors"][key] = f"HTTP {e.code}"
-            print(f"  [skip] {key:<22} HTTP {e.code} (not supported by this version or account)")
+            print(f"  [skip] {lap()} {key:<22} HTTP {e.code} (not supported by this version or account)")
         except Exception as e:  # noqa: BLE001 - one failing endpoint must not stop the scan
             raw["_errors"][key] = str(e)
-            print(f"  [skip] {key:<22} {e}")
+            print(f"  [skip] {lap()} {key:<22} {e}")
     # Job details (the list response does not always include storage/proxy settings)
     details = {}
     for job in raw.get("jobs") or []:
@@ -235,18 +248,18 @@ def collect_backup_files(client, raw):
             else:
                 files[bid] = res
     raw["backupFiles"] = files
-    print(f"  [OK]   {'backupFiles':<22} {sum(len(f) for f in files.values())} in {len(files)} backups")
+    print(f"  [OK]   {lap()} {'backupFiles':<22} {sum(len(f) for f in files.values())} in {len(files)} backups")
     # Restore point times: the console shows an object's newest restore point, not its newest file
     try:
         raw["restorePointTimes"] = {p["id"]: p.get("creationTime") for p in client.get_all("/api/v1/restorePoints")
                                     if p.get("id")}
-        print(f"  [OK]   {'restorePoints':<22} {len(raw['restorePointTimes'])}")
+        print(f"  [OK]   {lap()} {'restorePoints':<22} {len(raw['restorePointTimes'])}")
     except Exception as e:  # noqa: BLE001
         raw["_errors"]["restorePoints"] = str(e)
-        print(f"  [skip] {'restorePoints':<22} {e}")
+        print(f"  [skip] {lap()} {'restorePoints':<22} {e}")
     if errors:
         raw["_errors"]["backupFiles"] = f"{len(errors)} of {len(backups)} backups failed: {errors[-1]}"
-        print(f"  [skip] {'backupFiles':<22} {raw['_errors']['backupFiles']}")
+        print(f"  [skip] {lap()} {'backupFiles':<22} {raw['_errors']['backupFiles']}")
 
 
 def _ts(v):
@@ -302,7 +315,7 @@ def collect_last_sessions(client, raw):
 
     with ThreadPoolExecutor(max_workers=8) as pool:
         raw["lastSessions"] = {k: v for k, v in pool.map(last, queries.items()) if v}
-    print(f"  [OK]   {'last sessions':<22} {len(raw['lastSessions'])}")
+    print(f"  [OK]   {lap()} {'last sessions':<22} {len(raw['lastSessions'])}")
 
 
 def backup_stats(raw):
@@ -516,7 +529,7 @@ def collect_inventory(client, raw):
             if vms_by_host:
                 inventory[name] = {"method": "legacy", "vmsByHost": vms_by_host,
                                    "hostsByCluster": legacy_clusters(client, base)}
-                print(f"  [OK]   Inventory {name:<16} {sum(map(len, vms_by_host.values()))} VMs / {len(vms_by_host)} hosts")
+                print(f"  [OK]   {lap()} Inventory {name:<16} {sum(map(len, vms_by_host.values()))} VMs / {len(vms_by_host)} hosts")
                 continue
             items += client.get_all(f"{base}&typeFilter=VirtualMachine")
         except Exception as e:  # noqa: BLE001
@@ -527,14 +540,14 @@ def collect_inventory(client, raw):
             errors.append(f"browser: {e}")
         if not items:
             raw["_errors"][f"inventory {name}"] = "; ".join(errors)
-            print(f"  [skip] Inventory {name:<16} {'; '.join(errors)}")
+            print(f"  [skip] {lap()} Inventory {name:<16} {'; '.join(errors)}")
             continue
         inventory[name] = {"method": "items", "items": items}
         kinds = {}
         for i in items:
             t = _lc(_obj(i).get("type"))
             kinds[t] = kinds.get(t, 0) + 1
-        print(f"  [OK]   Inventory {name:<16} {len(items)} objects ("
+        print(f"  [OK]   {lap()} Inventory {name:<16} {len(items)} objects ("
               + ", ".join(f"{k or '?'}={v}" for k, v in sorted(kinds.items())) + ")")
     return inventory
 
@@ -630,7 +643,7 @@ def collect_enterprise_managers(args, vbr_host, password, raw):
             except Exception as e:  # noqa: BLE001 - the EM node is still drawn without verification
                 em["error"] = str(e)
         ems.append(em)
-        print(f"  [OK]   Enterprise Manager     {h}" + (f" (verification failed: {em['error']})" if em.get("error") else ""))
+        print(f"  [OK]   {lap()} Enterprise Manager     {h}" + (f" (verification failed: {em['error']})" if em.get("error") else ""))
         if "401" in em.get("error", ""):
             print("         EM rejected the login. Check --em-user / --em-password, the account format\n"
                   "         (DOMAIN\\user, or EMHOST\\user for a local account) and that the account has\n"
@@ -743,7 +756,7 @@ def collect_vcenter(args, raw, password):
         targets = [s["name"] for s in raw.get("managedServers") or []
                    if s.get("type") == "ViHost" and s.get("viHostType") in ("VC", "vCenter")]
     if not targets:
-        print("  [skip] vCenter REST            no vCenter registered in VBR (use --vcenter)")
+        print(f"  [skip] {lap()} vCenter REST            no vCenter registered in VBR (use --vcenter)")
         return
     ctx = make_ssl_context(args.insecure, args.ca_bundle)
     raw["vcenter"] = {}
@@ -753,7 +766,7 @@ def collect_vcenter(args, raw, password):
             login_vcenter(vc, vc_host, args.vcenter_user, password)
         except Exception as e:  # noqa: BLE001
             raw["_errors"][f"vCenter {vc_host}"] = f"login failed: {e}"
-            print(f"  [skip] vCenter {vc_host:<18} login failed: {e}")
+            print(f"  [skip] {lap()} vCenter {vc_host:<18} login failed: {e}")
             if "401" in str(e):
                 print("         Check --vcenter-user / --vcenter-password (e.g. readonly@vsphere.local).")
             continue
@@ -777,10 +790,10 @@ def collect_vcenter(args, raw, password):
             except Exception as e:  # noqa: BLE001
                 raw["_errors"][f"vCenter {vc_host} version"] = str(e)
             with_guest = sum(1 for v in vms if v.get("guestHost") or v.get("ips"))
-            print(f"  [OK]   vCenter {vc_host:<18} {len(hosts)} hosts, {len(vms)} VMs ({with_guest} with guest info)")
+            print(f"  [OK]   {lap()} vCenter {vc_host:<18} {len(hosts)} hosts, {len(vms)} VMs ({with_guest} with guest info)")
         except Exception as e:  # noqa: BLE001
             raw["_errors"][f"vCenter {vc_host}"] = str(e)
-            print(f"  [skip] vCenter {vc_host:<18} {e}")
+            print(f"  [skip] {lap()} vCenter {vc_host:<18} {e}")
         finally:
             vc.logout()
 
@@ -1530,6 +1543,10 @@ def build_model(raw, csv_rows=()):
             px = sel_proxies or proxies_by_type.get("GeneralPurposeProxy", [])
             for p in px:
                 add_link(p, repo, label, "data" if sel_proxies else "auto")
+            # Archive repository (long-term retention, usually object storage): a copy from the backup repository
+            arch = (j.get("archiveRepository") or {}).get("archiveRepositoryId")
+            if arch and arch != repo:
+                add_link(repo, arch, label, "copy")
         elif is_copy:
             # Source repositories: those of the source jobs (sourceObjects.includes.jobs), the source
             # repositories listed in the job, and the older sourceRepositoryId / source fields
@@ -1941,7 +1958,7 @@ def main():
     print(f"Data-flow links: {len(model['links'])}, components placed on a host: {placed}")
     for w in model["warnings"]:
         print("  Warning:", w)
-    print(f"Done -> {html}")
+    print(f"Done in {time.monotonic() - _START:.0f} s -> {html}")
 
 
 if __name__ == "__main__":

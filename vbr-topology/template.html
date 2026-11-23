@@ -111,6 +111,8 @@ const I18N = {
     meta: "VBR: {name}  ·  Build {build}  ·  API {api}  ·  Scanned {time}",
     legendData: "Data flow (set in job)", legendAuto: "Data flow (automatic proxy selection)",
     legendCopy: "Backup copy / Replica / Offload", legendInferred: "Inferred link", legendGateway: "Gateway server",
+    legendUnused: "Not used by any job, no backups", unusedTip: "Not used by any job and holds no backups",
+    unusedWarn: "Not used by any job and holding no backups: {list}",
     tipInferred: "(inferred: no job information)", tipAuto: "(automatic proxy selection)", tipGateway: "(gateway server of the repository)",
     otherTitle: "Other servers (tape servers and libraries, SureBackup virtual labs, managed servers without a proxy or repository role)",
     unknownHost: "Physical / unknown host", unknownGroup: "Physical / unknown", hosted: "Components running here",
@@ -151,6 +153,8 @@ const I18N = {
     meta: "VBR: {name}  ·  Build {build}  ·  API {api}  ·  掃描時間 {time}",
     legendData: "資料流 (Job 指定)", legendAuto: "資料流 (Proxy 自動選擇)",
     legendCopy: "Backup copy / Replica / Offload", legendInferred: "推測連線", legendGateway: "Gateway server",
+    legendUnused: "未被任何 Job 使用，也沒有 backup", unusedTip: "未被任何 Job 使用，也沒有 backup",
+    unusedWarn: "未被任何 Job 使用、也沒有 backup：{list}",
     tipInferred: "(推測：無 Job 資訊)", tipAuto: "(Proxy 自動選擇)", tipGateway: "(此 repository 的 gateway server)",
     otherTitle: "其他伺服器 (Tape server 與 tape library、SureBackup virtual lab、未擔任 proxy、repository 角色的受管伺服器)",
     unknownHost: "實體機 / 未知主機", unknownGroup: "實體機 / 未知", hosted: "上面執行的元件",
@@ -296,6 +300,8 @@ const SVG_STYLE = `
   .dim { opacity:.12; }
   .badge { fill:#00b336; stroke:#fff; stroke-width:2; }
   .badgeT { fill:#fff; font-size:12px; font-weight:700; }
+  .badge.unused { fill:#9aa5ae; }
+  .node.unused .card { stroke-dasharray:5 3; }
   .gtitle { font-size:12px; fill:#7a858f; letter-spacing:.5px; }
   .legend text { font-size:12px; }
   .frame { fill:#f4f7f9; stroke:#c9d3db; stroke-dasharray:4 3; }
@@ -353,6 +359,22 @@ let collapsed = null;
 // SOBRs opened to show their tiers: performance extents, capacity tier, archive tier
 const openSobr = new Set();
 const TIERS = [["extents", "Performance tier"], ["capacity", "Capacity tier"], ["archive", "Archive tier"]];
+// Proxies and repositories that no job uses and that hold no backups. A SOBR in use also uses its extents
+// and tiers; a gateway server is in use when its repository is. WAN accelerators and Cloud Connect service
+// providers are not checked (the model does not record which jobs use them).
+const UNUSED = (() => {
+  const used = new Set(), byName = {};
+  MODEL.nodes.forEach(n => (byName[(n.name || "").toLowerCase()] ??= []).push(n.id));
+  const useName = v => typeof v === "string" && (byName[v.toLowerCase()] || []).forEach(id => used.add(id));
+  const links = MODEL.links || [];
+  links.filter(l => l.kind !== "gateway").forEach(l => { used.add(l.source); used.add(l.target); });
+  (MODEL.jobs || []).forEach(j => { useName(j.repository); useName(j.target); [].concat(j.proxies || []).forEach(useName); });
+  (MODEL.backups || []).forEach(b => useName(b.repository));
+  MODEL.nodes.filter(n => n.kind === "sobr" && used.has(n.id)).forEach(n => TIERS.forEach(([k]) => (n[k] || []).forEach(id => used.add(id))));
+  links.filter(l => l.kind === "gateway" && used.has(l.target)).forEach(l => used.add(l.source));
+  return new Set(MODEL.nodes.filter(n => ["proxy", "repo", "sobr", "object"].includes(n.kind) && !used.has(n.id)
+    && !/^(WAN accelerator|Cloud Connect)/.test(n.sub || "")).map(n => n.id));
+})();
 const hasTiers = n => n.kind === "sobr" && TIERS.some(([k]) => (n[k] || []).some(id => MODEL.nodes.some(x => x.id === id)));
 // Hosts of a collapsed cluster -> the cluster card's id; the cluster cards themselves
 let alias = {}, EXTRA = [];
@@ -550,10 +572,12 @@ function render() {
     const w = n.w || W;
     const usage = n.usage != null ? `<rect x="58" y="${H - 11}" width="${w - 72}" height="4" rx="2" fill="#e6eaec"/>
       <rect x="58" y="${H - 11}" width="${(w - 72) * Math.min(1, n.usage)}" height="4" rx="2" fill="${n.usage > .85 ? "#e0533d" : "#00b336"}"/>` : "";
-    const badges = (n.badges || []).map((b, k) => `<circle class="badge" cx="${w - 6 - k * 26}" cy="0" r="12"/>
+    const unused = UNUSED.has(n.id);
+    const badges = (n.badges || []).map(b => [b, ""]).concat(unused ? [["0", " unused"]] : [])
+      .map(([b, c], k) => `<circle class="badge${c}" cx="${w - 6 - k * 26}" cy="0" r="12"/>
       <text class="badgeT" x="${w - 6 - k * 26}" y="4.5" text-anchor="middle">${esc(b)}</text>`).join("");
     const toggle = hasTiers(n) ? `<text class="more" x="${w - 10}" y="${H - 6}" text-anchor="end">${esc(t(openSobr.has(n.id) ? "hideTiers" : "showTiers"))}</text>` : "";
-    return `<g class="node${n.isCluster || hasTiers(n) ? " click" : ""}" data-id="${esc(n.id)}" transform="translate(${n.x},${n.y})">
+    return `<g class="node${n.isCluster || hasTiers(n) ? " click" : ""}${unused ? " unused" : ""}" data-id="${esc(n.id)}" transform="translate(${n.x},${n.y})">
       <rect class="card" width="${w}" height="${H}" rx="8"/>
       <g transform="translate(10,${(H - 40) / 2})">${icon(n.kind, n.sub)}</g>
       <text class="name" x="58" y="${HAS_PLACE ? 22 : 27}">${esc(trunc(n.name, 21))}</text>
@@ -578,7 +602,9 @@ function render() {
      <circle class="badge" cx="${lx + 10}" cy="0" r="10"/><text class="badgeT" x="${lx + 10}" y="4" text-anchor="middle">M</text>
      <text x="${lx + 26}" y="4">Veeam Data Mover Service</text>
      <circle class="badge" cx="${lx + 230}" cy="0" r="10"/><text class="badgeT" x="${lx + 230}" y="4" text-anchor="middle">A</text>
-     <text x="${lx + 246}" y="4">Veeam Agent</text></g>`;
+     <text x="${lx + 246}" y="4">Veeam Agent</text>${UNUSED.size ? (ux => `
+     <circle class="badge unused" cx="${ux + 10}" cy="0" r="10"/><text class="badgeT" x="${ux + 10}" y="4" text-anchor="middle">0</text>
+     <text x="${ux + 26}" y="4">${esc(t("legendUnused"))}</text>`)(lx + 276 + textW("Veeam Agent")) : ""}</g>`;
 
   const marker = (id, c) => `<marker id="arr-${id}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="${c}"/></marker>`;
   s = `<defs>${marker("data", "#00b336")}${marker("auto", "#7fd99a")}${marker("copy", "#1f8fd6")}${marker("inferred", "#9aa5ae")}${marker("gateway", "#8a5cd6")}</defs>` + s;
@@ -623,7 +649,7 @@ function wireHover(svg) {
         .map(([k, v]) => `<tr><td>${esc(td(k))}</td><td>${esc(td(v))}</td></tr>`).join("");
       const hosted = MODEL.nodes.filter(o => o.runsOn === n.id || alias[o.runsOn] === n.id);
       const hostedRow = hosted.length ? `<tr><td>${esc(t("hosted"))}</td><td>${hosted.map(o => esc(o.name)).join("<br>")}</td></tr>` : "";
-      tip.innerHTML = `<b>${esc(n.name)}</b><br>${esc(td(n.sub))}<table>${rows}${hostedRow}</table>`;
+      tip.innerHTML = `<b>${esc(n.name)}</b><br>${esc(td(n.sub))}${UNUSED.has(n.id) ? `<br><i>${esc(t("unusedTip"))}</i>` : ""}<table>${rows}${hostedRow}</table>`;
       tip.style.display = "block";
     });
     g.addEventListener("click", () => {
@@ -779,8 +805,9 @@ function renderAll() {
   document.getElementById("meta").textContent = t("meta",
     { name: v.name || "?", build: v.build || "?", api: v.apiVersion || "?", time: v.collectedAt || MODEL.generatedAt })
     + (v.toolVersion ? `  ·  vbr-topology v${v.toolVersion}${v.toolCommit ? " (" + v.toolCommit + ")" : ""}` : "");
-  document.getElementById("warnings").innerHTML = MODEL.warnings?.length
-    ? `<div class="warn">⚠ ${MODEL.warnings.map(w => esc(td(w))).join("<br>⚠ ")}</div>` : "";
+  const warns = (MODEL.warnings || []).map(w => esc(td(w)));
+  if (UNUSED.size) warns.push(esc(t("unusedWarn", { list: MODEL.nodes.filter(n => UNUSED.has(n.id)).map(n => `${n.name} (${td(n.sub.split(" · ")[0])})`).join(", ") })));
+  document.getElementById("warnings").innerHTML = warns.length ? `<div class="warn">⚠ ${warns.join("<br>⚠ ")}</div>` : "";
   render(); tables();
 }
 document.getElementById("langBtn").onclick = () => {

@@ -600,6 +600,15 @@
             }
           }
         }
+      },
+      "archiveRepository": {
+        "archiveRepositoryId": "r-4",
+        "archiveRecentFileVersions": true,
+        "archivePreviousFileVersions": false,
+        "archiveRetentionPolicy": {
+          "type": "Years",
+          "quantity": 3
+        }
       }
     },
     {

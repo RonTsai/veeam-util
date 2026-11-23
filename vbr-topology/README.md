@@ -32,6 +32,8 @@ infrastructure topology". Its diagram follows the style of the "Backup architect
 - vCenter and ESXi versions (product, version, build)
 - data-flow arrows derived from the job settings
 - the Veeam Data Mover Service (**M**) and Veeam Agent (**A**) badges
+- proxies and repositories that no job uses and that hold no backups: a gray **0** badge and a dashed card,
+  also listed above the diagram
 - **which ESXi / Hyper-V host each component runs on**
 - ESXi hosts grouped by vSphere cluster; click a cluster title to collapse or expand it
 - scale-out repositories that open into their tiers: click a SOBR card to show its performance extents,
@@ -92,7 +94,8 @@ its toolbar. The language it opens in is decided in this order:
 3. `-Language` / `--lang` given when the report was generated (default `zh-TW`)
 
 Veeam product terms (backup proxy, repository, SOBR, job types, ...) stay in English in both languages.
-Console output is always English.
+Console output is always English. Each status line shows the seconds since the previous one, and the last
+line the total scan time, to find slow steps.
 
 How it works: the collectors write English into `topology.json`. `template.html` holds all UI strings
 (`I18N`) plus a table that translates the collectors' text (`DATA_ZH`, `DATA_ZH_RULES`). To change a
@@ -350,8 +353,9 @@ Without PowerCLI, the script falls back to the Veeam inventory automatically.
   since the plug-in proxies cannot be read. When the job's source is not a registered host (for example a
   Proxmox cluster name), every host of that platform gets an inferred (dashed) link.
 - **Agent job**: protection group → repository
-- **File share job**: general-purpose proxies → repository. A file backup copy: source job's repository →
-  target repository (blue dashed line)
+- **File share job**: general-purpose proxies → repository, and repository → archive repository when the job
+  keeps an archive (blue dashed line). A file backup copy: source job's repository → target repository
+  (blue dashed line)
 - **CDP policy** (PowerShell only): source host → CDP proxies → target host
 - **Configuration backup**: listed in the Jobs table; its target repository and encryption show on the
   backup server card
@@ -367,6 +371,11 @@ Without PowerCLI, the script falls back to the Veeam inventory automatically.
 - **Sources without job information**: get a gray dashed "inferred" link to the proxies. ESXi hosts are skipped
   when a vCenter is present.
 - **Managed servers without a role**: listed under "Other servers"
+- **Not used**: a proxy, repository, SOBR or object storage that no job uses (as repository, target, proxy or
+  data-flow link) and that holds no backups gets a gray **0** badge and a dashed card. A SOBR in use also uses
+  its extents and tiers, and a gateway server is in use when its repository is. WAN accelerators and Cloud
+  Connect service providers are not checked. Application plug-ins and standalone agents write without a VBR
+  job, so a repository they use counts once it holds their backups.
 
 ## Jobs and protected objects
 

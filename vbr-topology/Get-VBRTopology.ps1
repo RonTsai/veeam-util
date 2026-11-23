@@ -75,14 +75,23 @@ Write-Host ("vbr-topology v$ToolVersion" + $(if ($ToolCommit) { " ($ToolCommit)"
 # Helpers
 # ---------------------------------------------------------------------------
 
+# Seconds since the previous console status line (to find slow steps in a scan)
+$script:Lap = [System.Diagnostics.Stopwatch]::StartNew()
+$script:ScanClock = [System.Diagnostics.Stopwatch]::StartNew()
+function Get-Lap {
+    $t = $script:Lap.Elapsed.TotalSeconds
+    $script:Lap.Restart()
+    return ("{0,5:F1}s" -f $t)
+}
+
 function Invoke-Safe {
     param([string]$Name, [scriptblock]$Script)
     try {
         $r = @(& $Script)
-        Write-Host ("  [OK]   {0,-28} {1}" -f $Name, $r.Count)
+        Write-Host ("  [OK]   {0} {1,-28} {2}" -f (Get-Lap), $Name, $r.Count)
         return , $r
     } catch {
-        Write-Host ("  [skip] {0,-28} {1}" -f $Name, $_.Exception.Message) -ForegroundColor Yellow
+        Write-Host ("  [skip] {0} {1,-28} {2}" -f (Get-Lap), $Name, $_.Exception.Message) -ForegroundColor Yellow
         $script:Warnings.Add("${Name}: $($_.Exception.Message)")
         return , @()
     }
@@ -173,6 +182,7 @@ if (-not $session) {
 }
 
 Write-Host "Scanning:"
+$script:Lap.Restart()
 
 # ---------------------------------------------------------------------------
 # Collect
@@ -307,7 +317,7 @@ foreach ($e in @($emInfo)) {
     $emConn = Get-Prop $e @("IsConnected", "Connected")
     if ($name) { Add-Mgmt "em" $name ("Enterprise Manager" + $(if ($emConn -eq $false) { " · not connected" } else { "" })) $det }
 }
-Write-Host ("  [OK]   {0,-28} {1}" -f "Enterprise Manager", $mgmtSeen.Count)
+Write-Host ("  [OK]   {0} {1,-28} {2}" -f (Get-Lap), "Enterprise Manager", $mgmtSeen.Count)
 
 try {
     $svcs = @(Get-Service -ErrorAction SilentlyContinue)
@@ -846,6 +856,9 @@ foreach ($n in @($nasJobs) + @($entraLogJobs) + @($nasCopyJobs)) {
         continue
     }
     foreach ($p in $proxyByType.GeneralPurposeProxy) { Add-Link $p $repo $n.Name "auto" }
+    # Archive repository (long-term retention, usually object storage): a copy from the backup repository
+    $arch = Add-JobRepoNode (Get-Prop $n @("LongTermBackupRepository", "ArchiveRepository"))
+    if ($arch -and "$arch" -ne "$repo") { Add-Link $repo $arch $n.Name "copy" }
     # Each share or bucket, then its include / exclude masks (VBR: File masks; buckets also have tag masks)
     $nasObjs = @(foreach ($b in @($n.BackupObject)) {
         if (-not $b) { continue }
@@ -1212,7 +1225,7 @@ if (Get-Command Get-VBRSession -ErrorAction SilentlyContinue) {
             }
         } catch { $script:Warnings.Add("Get-VBRSession $($x.Name): $($_.Exception.Message)") }
     }
-    Write-Host ("  [OK]   {0,-28} {1}" -f "Get-VBRSession (tape, config)", $n)
+    Write-Host ("  [OK]   {0} {1,-28} {2}" -f (Get-Lap), "Get-VBRSession (tape, config)", $n)
 }
 foreach ($r in $JobRows) {
     $jid = $(if ($r.type -eq "Configuration Backup") { "cfg" } else { "$($idByName[$r.name])" })
@@ -1317,7 +1330,7 @@ if ($PlacementCsv) {
     try {
         $rows = @(Import-Csv $PlacementCsv)
         foreach ($r in $rows) { if ($r.Component -and $r.Host) { Add-PlaceKeys $r.Component @{ host = $r.Host; vm = $r.VM; source = "Manual CSV"; platform = "vi" } } }
-        Write-Host ("  [OK]   {0,-28} {1}" -f "PlacementCsv", $rows.Count)
+        Write-Host ("  [OK]   {0} {1,-28} {2}" -f (Get-Lap), "PlacementCsv", $rows.Count)
     } catch { $script:Warnings.Add("PlacementCsv: $($_.Exception.Message)") }
 }
 
@@ -1381,7 +1394,7 @@ if ($UsePowerCLI) {
                     foreach ($ip in @($vm.Guest.IPAddress)) { Add-PlaceKey $ip $info }
                 }
                 $skipped = if ($noHost) { " ($noHost without a host, skipped)" } else { "" }
-                Write-Host ("  [OK]   {0,-28} {1}{2}" -f "PowerCLI $($vc.Name)", $vms.Count, $skipped)
+                Write-Host ("  [OK]   {0} {1,-28} {2}{3}" -f (Get-Lap), "PowerCLI $($vc.Name)", $vms.Count, $skipped)
             } catch { $script:Warnings.Add("PowerCLI $($vc.Name): $($_.Exception.Message)") }
             finally { if ($ci) { Disconnect-VIServer $ci -Confirm:$false -ErrorAction SilentlyContinue } }
         }
@@ -1441,7 +1454,7 @@ function Read-Inventory($Srv, [string]$Platform) {
         Add-PlaceKeys $e.Name @{ host = $h; vm = $e.Name; source = "Veeam inventory ($($Srv.Name))"; platform = $Platform }
         $n++
     }
-    Write-Host ("  [OK]   {0,-28} {1}" -f "Inventory $($Srv.Name)", $n)
+    Write-Host ("  [OK]   {0} {1,-28} {2}" -f (Get-Lap), "Inventory $($Srv.Name)", $n)
 }
 foreach ($vc in $viScan) { Read-Inventory $vc "vi" }
 foreach ($hv in @($servers | Where-Object { "$($_.Type)" -match '^(HvServer|HvCluster)$' })) { Read-Inventory $hv "hv" }
@@ -1532,7 +1545,7 @@ foreach ($n in @($Nodes.Values)) {
     if ($guestIps) { $n.details["IP"] = "$guestIps (VM guest)" }
     $placedCount++
 }
-Write-Host ("  [OK]   {0,-28} {1}" -f "Components placed", $placedCount)
+Write-Host ("  [OK]   {0} {1,-28} {2}" -f (Get-Lap), "Components placed", $placedCount)
 
 # IP addresses for the hover details: the VM's guest IPs (PowerCLI) when known, else DNS
 foreach ($n in @($Nodes.Values)) {
@@ -1617,4 +1630,4 @@ $stats = $model.nodes | Group-Object { $_.kind } | ForEach-Object { "$($_.Name)=
 Write-Host ("Nodes: " + ($stats -join ", "))
 Write-Host "Data-flow links: $($model.links.Count)"
 foreach ($w in $script:Warnings) { Write-Host "  Warning: $w" -ForegroundColor Yellow }
-Write-Host "Done -> $htmlPath" -ForegroundColor Green
+Write-Host ("Done in {0:F0} s -> {1}" -f $script:ScanClock.Elapsed.TotalSeconds, $htmlPath) -ForegroundColor Green
