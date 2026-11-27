@@ -806,10 +806,13 @@ foreach ($a in $agentJobs) {
             if ("$(Get-Prop $_ @('Type'))" -eq "Computer") {
                 # A computer added on its own: its protection group as location. Its name is what it was added as
                 # (an IP address, say); the console shows the host name, taken from its restore points further down
+                # A failover cluster is a "Computer" too; its BiosUuid holds its name instead of a UUID (seen on one
+                # Windows cluster in the lab, no other property tells it apart)
                 $agPg = "$(Get-Prop $_ @('ProtectionGroupId'))"
-                $agObj = New-JobObject "$($_.Name)" "Computer" $(if ((Test-Node $agPg)) { $Nodes[$agPg].name } else { "" })
                 $agBios = "$(Get-Prop $_ @('BiosUuid'))".ToLower()
-                if ($agBios) { if (-not $agentObjByUuid.ContainsKey($agBios)) { $agentObjByUuid[$agBios] = @() }; $agentObjByUuid[$agBios] += , $agObj }
+                $agIsUuid = $agBios -match '^[0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12}$'
+                $agObj = New-JobObject "$($_.Name)" $(if ($agBios -and -not $agIsUuid) { "Cluster" } else { "Computer" }) $(if ((Test-Node $agPg)) { $Nodes[$agPg].name } else { "" })
+                if ($agIsUuid) { if (-not $agentObjByUuid.ContainsKey($agBios)) { $agentObjByUuid[$agBios] = @() }; $agentObjByUuid[$agBios] += , $agObj }
                 $agObj
             } else { New-JobObject "$($_.Name)" "Protection group" (Get-PgTypeName "$(Get-Prop $_ @('Container.Type', 'Type'))") } }) })
 }
@@ -1128,12 +1131,13 @@ $rpError = $null
 $childIds = @{}
 $vmsByBackup = [ordered]@{}   # backup id -> object key -> @{ Name; Points; First; Last; Files }
 $fmtTime = { param($t) if ($t) { ([datetime]$t).ToString("yyyy-MM-dd HH:mm", [Globalization.CultureInfo]::InvariantCulture) } else { $null } }
-function Add-BackupPoint($Vms, [string]$Key, [string]$Vm, [string]$PointId, $Time, $File) {
+function Add-BackupPoint($Vms, [string]$Key, [string]$Vm, [string]$PointId, $Time, $File, [bool]$Counted = $true) {
     if (-not $Key) { $Key = $Vm }
     if (-not $Vms.Contains($Key)) { $Vms[$Key] = @{ Name = $Vm; Points = @{}; First = $null; Last = $null; Files = @{} } }
     $v = $Vms[$Key]
     $ptId = $(if ($PointId) { $PointId } else { [guid]::NewGuid().ToString() })
-    $v.Points[$ptId] = $true
+    # A corrupted point is not counted (as the console), but its time and file still are
+    if ($Counted) { $v.Points[$ptId] = $true }
     if ($Time -and (-not $v.Last -or $Time -gt $v.Last)) { $v.Last = $Time }
     # First: the oldest backup file, as the console's creation time (the restore point's time if no file)
     $ft = Get-Prop $File @("CreationTime"); if (-not $ft) { $ft = $Time }
@@ -1203,7 +1207,7 @@ foreach ($b in $backups) {
     foreach ($rp in $rps) {
         $f = $null; try { $f = $rp.GetStorage() } catch { }
         $rpName = "$(Get-Prop $rp $nameProps)"
-        Add-BackupPoint $vms "$(Get-Prop $rp @('ObjectId'))" $rpName "$(Get-Prop $rp @('Id'))" (Get-Prop $rp @("CreationTime")) $f
+        Add-BackupPoint $vms "$(Get-Prop $rp @('ObjectId'))" $rpName "$(Get-Prop $rp @('Id'))" (Get-Prop $rp @("CreationTime")) $f ((Get-Prop $rp @('IsCorrupted')) -ne $true)
         # InsideDir holds the computer's BIOS UUID ("<id> (<BIOS UUID>_<id>)"): give its job objects the host name
         if ($agentObjByUuid.Count -and $nameProps[0] -eq 'DisplayName' -and $rpName) {
             foreach ($uuidMatch in [regex]::Matches("$(Get-Prop $rp @('InsideDir'))", '[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}')) {

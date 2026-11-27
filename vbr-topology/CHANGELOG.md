@@ -161,7 +161,10 @@ Current as of v1.12.5 (checked on VBR v13.1, REST API 1.3-rev2).
 - PowerShell: agent backups show the computer's host name (`DisplayName`), as the console, not the IP address it
   was added as. A computer added to an agent job on its own shows as `Computer`, under its protection group, with
   the host name from its restore points (matched by BIOS UUID; the IP address when it has none); its protection
-  group is the job's source (was "Veeam Agents").
+  group is the job's source (was "Veeam Agents"). A failover cluster added on its own shows as `Cluster` (told
+  apart by a `BiosUuid` that holds its name instead of a UUID, seen on one cluster in the lab).
+- PowerShell: corrupted restore points (`IsCorrupted`) are not counted, as in the console; their time and backup
+  file still count for the last backup and the size on disk.
 - Python: a computer added to an agent job on its own shows its protection group as location, not the raw path
   (`ProtectionGroup:<name>;LinuxComputer:<host>`).
 - Report: the Enterprise Manager's "port 9398 not reachable" and "timed out" errors are translated on the Chinese

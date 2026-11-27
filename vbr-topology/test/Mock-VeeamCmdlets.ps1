@@ -88,6 +88,9 @@ function Get-VBRProtectionGroup { $PG1; $PG2 }
 # A computer added to an agent job on its own, by IP address: only its restore points have the host name
 $C1 = New-Obj @{ Id = (gid "c1"); Name = "192.0.2.51"; Type = "Computer"; IPAddress = "192.0.2.51"; ProtectionGroupId = (gid "pg1")
     BiosUuid = [guid]"4c4c4544-0042-3110-8030-b4c04f4d3132" }
+# A failover cluster added on its own: also a "Computer", with its name as BiosUuid
+$C2 = New-Obj @{ Id = (gid "c2"); Name = "wfc01.corp.local"; Type = "Computer"; IPAddress = "192.0.2.60"; ProtectionGroupId = (gid "pg1")
+    BiosUuid = "wfc01.corp.local"; OperatingSystem = "Unknown" }
 function Get-VBRDiscoveredComputer($ProtectionGroup) { 1..3 }
 function job($k, $name, $type, $plat, $repoKey, $proxies, $auto, $hosts) {
     $px = $proxies
@@ -183,7 +186,7 @@ $J7._objs[0].Object | Add-Member ObjectId "vm-101"
 $J9 | Add-Member _objs @((jo "a1b2c3d4-0000-4000-8000-000000000001:101" "Virtual Machine" "" "proxmox" $false "0 B"))
 function Get-VBRJobObject($Job) { $Job._objs }
 function Get-VBRComputerBackupJob {
-    New-Obj @{ Id = (gid "a1"); Name = "Agent-Windows"; OSPlatform = "Windows"; Mode = "ManagedByBackupServer"; JobEnabled = $true; BackupRepository = $global:R1; BackupObject = @($PG1, $C1)
+    New-Obj @{ Id = (gid "a1"); Name = "Agent-Windows"; OSPlatform = "Windows"; Mode = "ManagedByBackupServer"; JobEnabled = $true; BackupRepository = $global:R1; BackupObject = @($PG1, $C1, $C2)
         RetentionType = "RestoreDays"; RetentionPolicy = 14; StorageOptions = [pscustomobject]@{ EncryptionEnabled = $false } }
     New-Obj @{ Id = (gid "a2"); Name = "Agent-Linux"; OSPlatform = "Linux"; Mode = "ManagedByBackupServer"; JobEnabled = $true; BackupRepository = (New-Obj @{ Id = (gid "sobr") }); BackupObject = @($PG2)
         RetentionType = "RestoreDays"; RetentionPolicy = 14; StorageOptions = [pscustomobject]@{ EncryptionEnabled = $false } }
@@ -289,12 +292,14 @@ function pfile($time, $gb) { [pscustomobject]@{ Id = [guid]::NewGuid(); Creation
 $global:SqlPlugFiles = @((pfile "2026-10-25 21:00" 12), (pfile "2026-10-26 21:00" 1), (pfile "2026-10-27 21:00" 1))
 $global:SqlLogFiles = @((pfile "2026-10-27 22:30" 1), (pfile "2026-10-27 23:00" 1), (pfile "2026-10-27 23:30" 1))
 # Agent backup of Agent-Windows: Name is the IP address the computer was added as, DisplayName its host name
-function agentpoint($time, $gb) {
+function agentpoint($time, $gb, $corrupted = $false) {
     $p = rpoint "192.0.2.51" $time $gb "win-app01"
+    $p | Add-Member IsCorrupted $corrupted
     $p | Add-Member DisplayName "win-app01"; $p | Add-Member InsideDir "11111111-2222-4333-8444-555555555555 (4c4c4544-0042-3110-8030-b4c04f4d3132_66666666-7777-4888-9999-aaaaaaaaaaaa)"
     $p
 }
-$global:RPs["a1"] = @((agentpoint "2026-10-26 20:00" 60), (agentpoint "2026-10-27 20:00" 4))
+# The newest point is corrupted: not counted, as in the console, but its time and file are
+$global:RPs["a1"] = @((agentpoint "2026-10-26 20:00" 60), (agentpoint "2026-10-27 20:00" 4), (agentpoint "2026-10-28 20:00" 1 $true))
 $global:RPs["bimp"] = @((rpoint "legacy01" "2026-03-02 22:00" 25), (rpoint "legacy01" "2026-03-03 22:00" 2))
 function ahvfile($time, $gb) { [pscustomobject]@{ Id = [guid]::NewGuid(); BackupId = (gid "bj4c"); CreationTime = [datetime]$time; Stats = [pscustomobject]@{ BackupSize = [int64]$gb * 1GB } } }
 $global:AhvFiles = @((ahvfile "2026-10-25 01:00" 20), (ahvfile "2026-10-26 01:00" 1), (ahvfile "2026-10-27 01:00" 1))
