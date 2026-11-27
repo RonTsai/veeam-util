@@ -291,7 +291,9 @@ $global:AhvChild = New-Obj @{ Id = (gid "bj4c"); Name = "web01 Backup"; JobId = 
 function pfile($time, $gb) { [pscustomobject]@{ Id = [guid]::NewGuid(); CreationTime = [datetime]$time; Stats = [pscustomobject]@{ BackupSize = [int64]$gb * 1GB } } }
 $global:SqlPlugFiles = @((pfile "2026-10-25 21:00" 12), (pfile "2026-10-26 21:00" 1), (pfile "2026-10-27 21:00" 1))
 # One log restore point per database and log backup: 2 databases x 3 log backups, one corrupted (not counted)
-$global:SqlLogOibs = @(foreach ($db in "db1", "db2") { foreach ($i in 1..3) { [pscustomobject]@{ Id = [guid]::NewGuid(); GuestDatabaseId = (gid $db); IsCorrupted = ($db -eq "db2" -and $i -eq 3) } } })
+# The newest log point is later than the newest log file was created (a file takes a day of log backups)
+$global:SqlLogOibs = @(foreach ($db in "db1", "db2") { foreach ($i in 1..3) { [pscustomobject]@{ Id = [guid]::NewGuid(); GuestDatabaseId = (gid $db)
+    IsCorrupted = ($db -eq "db2" -and $i -eq 3); CreationTime = ([datetime]"2026-10-27 23:30").AddMinutes(15 * $i) } } })
 $global:SqlLogFiles = @((pfile "2026-10-27 22:30" 1), (pfile "2026-10-27 23:00" 1), (pfile "2026-10-27 23:30" 1))
 # Agent backup of Agent-Windows: Name is the IP address the computer was added as, DisplayName its host name
 function agentpoint($time, $gb, $corrupted = $false) {
@@ -327,6 +329,10 @@ function Get-VBRBackup {
         GetDbSqlOibs = { $global:SqlLogOibs } }
     New-Obj @{ Id = (gid "bagent"); JobId = (gid "a1"); Name = "Agent-Windows"; JobType = "EpAgentBackup"; Platform = "EEndPoint"
         TypeToString = "Windows Agent Backup"; RepositoryId = (gid "r1"); CreationTime = [datetime]"2026-10-26 20:00" }
+    # A PostgreSQL log backup of VMware-Dev without any log point: not shown, as in the console
+    New-Obj @{ Id = (gid "bpglog"); JobId = (gid "pglogjob"); Name = "VMware-Dev PostgreSQL Log Backup"; JobType = "PostgreSqlLogBackup"
+        Platform = "EVmware"; TypeToString = "VMware PostgreSQL Log Backup"; RepositoryId = (gid "r1") } @{ GetAllChildrenStorages = { @(pfile "2026-10-27 23:00" 0) }
+        GetDbPostgreSqlOibs = { @() } }
     New-Obj @{ Id = (gid "bimp"); JobId = [guid]::Empty; Name = "Legacy-VMs"; JobType = "PerVmParentBackup"; Platform = "EVmware"; IsImported = $true
         RepositoryId = (gid "r1"); CreationTime = [datetime]"2026-03-02 22:00" }
 }

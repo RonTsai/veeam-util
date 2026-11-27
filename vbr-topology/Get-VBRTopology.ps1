@@ -1238,8 +1238,17 @@ foreach ($parentId in @($logOf.Keys)) {
         try { foreach ($f in @($lb.GetAllChildrenStorages())) { if ($f) { Add-BackupPoint $tmp "x" "x" "$($f.Id)" (Get-Prop $f @("CreationTime")) $f } } } catch { }
         if (-not $tmp.Count) { continue }
         $o = $tmp["x"]; $o.Points = @{}; $o.Log = $true
+        # A log file takes the log backups of a whole day: the newest log point is the newest oib, not the newest file.
+        # A log backup without any point is not shown (as the console); one whose points cannot be read still is.
         if ($logOibMethods.ContainsKey($jt)) {
-            try { $o.LogPoints = @($lb.($logOibMethods[$jt])() | Where-Object { $_ -and $_.IsCorrupted -ne $true }).Count } catch { }
+            $oibs = $null
+            try { $oibs = @($lb.($logOibMethods[$jt])() | Where-Object { $_ -and $_.IsCorrupted -ne $true }) } catch { }
+            if ($null -ne $oibs) {
+                if (-not $oibs.Count) { continue }
+                $o.LogPoints = $oibs.Count
+                $newest = @($oibs | ForEach-Object { Get-Prop $_ @("CreationTime") } | Where-Object { $_ } | Sort-Object)
+                if ($newest.Count) { $o.Last = $newest[-1] }
+            }
         }
         $o.Name = $(if ($who) { "$who - $what" } else { $what })
         $vms["log:$($lb.Id)"] = $o

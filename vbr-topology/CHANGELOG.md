@@ -166,7 +166,9 @@ Current as of v1.12.5 (checked on VBR v13.1, REST API 1.3-rev2).
   apart by a `BiosUuid` that holds its name instead of a UUID, seen on one cluster in the lab).
 - PowerShell: transaction log objects show their restore point count, as the console: one per database and log
   backup (`GetDbSqlOibs()` and the PostgreSQL / Oracle methods of the same name), corrupted ones not counted. The
-  backup's own count stays its VMs'.
+  backup's own count stays its VMs'. Their last backup is the newest log point (a log file takes a whole day of log
+  backups, so its creation time was too early), and a log backup without any log point is not shown, as in the
+  console.
 - PowerShell: corrupted restore points (`IsCorrupted`) are not counted, as in the console; their time and backup
   file still count for the last backup and the size on disk.
 - Python: a computer added to an agent job on its own shows its protection group as location, not the raw path
