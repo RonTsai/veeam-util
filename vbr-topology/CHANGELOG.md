@@ -2,7 +2,7 @@
 
 ## Known limitations
 
-Current as of v1.12.4 (checked on VBR v13.1, REST API 1.3-rev2).
+Current as of v1.12.5 (checked on VBR v13.1, REST API 1.3-rev2).
 
 **Testing**
 
@@ -25,6 +25,10 @@ Current as of v1.12.4 (checked on VBR v13.1, REST API 1.3-rev2).
   (`GetChilds()` / `GetSubHosts()` return nothing), and REST lists `NutanixAHV` and `PVE` in `EProxyType`
   but `/proxies` returns none of them.
 - Storage copy jobs (HPE StoreOnce Catalyst Copy, Dell Data Domain Managed File Replication) are not listed.
+- Application plug-in jobs (Veeam Plug-ins for Microsoft SQL Server, Oracle RMAN, SAP HANA, SAP on Oracle,
+  MongoDB, whether VBR or the plug-in manages them) are not listed. Their backups and SQL Server transaction
+  log backups are missing from the Backups table, except a MongoDB backup in PowerShell.
+- Imported and orphaned backups (the console's Disk (Imported) / Disk (Orphaned)) are listed with the others.
 - Backup copies from an Application Backup Repository report a size on disk of 0.
 - Without PowerCLI or `--vcenter-user`, components are matched to hosts by VM name only. Proxies
   registered by IP, and VMs whose name differs from their hostname, show as "Physical / unknown host".
@@ -124,6 +128,8 @@ Current as of v1.12.4 (checked on VBR v13.1, REST API 1.3-rev2).
 
 ## Unreleased
 
+## v1.12.5 (2026-11-27)
+
 ### Added
 
 - Report: proxies, repositories, SOBRs and object storage that no job uses and that hold no backups get a
@@ -145,6 +151,10 @@ Current as of v1.12.4 (checked on VBR v13.1, REST API 1.3-rev2).
   together. Each `Inventory` line shows that vCenter's own time.
 - Python: an Enterprise Manager whose REST port (9398) does not answer within 3 s is reported as "port 9398
   not reachable" instead of waiting for the login timeout (now 10 s, was 20 s).
+
+### Known limitations
+- New entries: application plug-in jobs and their backups are not listed; imported and orphaned backups are
+  listed with the others (found on a VBR with Microsoft SQL, Oracle RMAN, SAP HANA and MongoDB plug-ins).
 
 ## v1.12.4 (2026-11-17)
 

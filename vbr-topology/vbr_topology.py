@@ -46,7 +46,7 @@ import urllib.parse
 import urllib.request
 
 # This tool's version (set at each release, as in Get-VBRTopology.ps1)
-TOOL_VERSION = "1.12.4"
+TOOL_VERSION = "1.12.5"
 TOOL_COMMIT = None   # set in main()
 
 
