@@ -507,49 +507,78 @@ def collect_inventory(client, raw):
     vi = [s for s in raw.get("managedServers") or [] if s.get("type") == "ViHost"]
     targets = [s for s in vi if s.get("viHostType") in ("VC", "vCenter")] or vi  # vCenter only, if present
     inventory = {}
-    if targets:
-        print("Reading vSphere inventory (component hosts):")
-    for s in targets:
-        name = s["name"]
-        q = urllib.parse.quote(name, safe="")
-        base = f"/api/v1/inventory/vmware/hosts/{q}?hierarchyTypeFilter=HostsAndClusters"
-        items, vms_by_host, errors = [], {}, []
+    if not targets:
+        return inventory
+    print("Reading vSphere inventory (component hosts):")
+    # The vCenters, and the queries within one, run in parallel (at most about 8 requests at a time);
+    # each line shows that vCenter's own time, the lines keep the managedServers order.
+    workers = max(2, 8 // min(4, len(targets)))
+    with ThreadPoolExecutor(max_workers=min(4, len(targets))) as pool:
+        results = list(pool.map(lambda s: _inventory_one(client, s["name"], workers), targets))
+    lap()
+    for name, entry, error, line in results:
+        print(line)
+        if entry:
+            inventory[name] = entry
+        else:
+            raw["_errors"][f"inventory {name}"] = error
+    return inventory
+
+
+def _inventory_one(client, name, workers):
+    """One vCenter's inventory (see collect_inventory). Returns (name, entry or None, error, console line)."""
+    t0 = time.monotonic()
+    took = lambda: f"{time.monotonic() - t0:5.1f}s"   # noqa: E731
+    q = urllib.parse.quote(name, safe="")
+    base = f"/api/v1/inventory/vmware/hosts/{q}?hierarchyTypeFilter=HostsAndClusters"
+    items, vms_by_host, errors = [], {}, []
+
+    def host_vms(hn):
+        vms = client.get_all(f"{base}&typeFilter=VirtualMachine"
+                             f"&parentContainerNameFilter={urllib.parse.quote(hn, safe='')}")
+        return hn, [_obj(v).get("name") for v in vms if _obj(v).get("name")]
+
+    def browser():
+        return client.post_all(f"/api/v1/inventory/{q}", {"hierarchyType": "HostsAndClusters"})
+
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        legacy_ok = True
         try:
             hosts = client.get_all(f"{base}&typeFilter=Host")
             items += hosts
-            for h in hosts:
-                hn = _obj(h).get("name")
-                if not hn:
-                    continue
-                vms = client.get_all(f"{base}&typeFilter=VirtualMachine"
-                                     f"&parentContainerNameFilter={urllib.parse.quote(hn, safe='')}")
-                names = [_obj(v).get("name") for v in vms if _obj(v).get("name")]
-                if names:
-                    vms_by_host[hn] = names
+            names = [_obj(h).get("name") for h in hosts if _obj(h).get("name")]
+            for hn, vms in pool.map(host_vms, names):
+                if vms:
+                    vms_by_host[hn] = vms
             if vms_by_host:
-                inventory[name] = {"method": "legacy", "vmsByHost": vms_by_host,
-                                   "hostsByCluster": legacy_clusters(client, base)}
-                print(f"  [OK]   {lap()} Inventory {name:<16} {sum(map(len, vms_by_host.values()))} VMs / {len(vms_by_host)} hosts")
-                continue
-            items += client.get_all(f"{base}&typeFilter=VirtualMachine")
+                entry = {"method": "legacy", "vmsByHost": vms_by_host,
+                         "hostsByCluster": legacy_clusters(client, base)}
+                return name, entry, None, (f"  [OK]   {took()} Inventory {name:<16} "
+                                           f"{sum(map(len, vms_by_host.values()))} VMs / {len(vms_by_host)} hosts")
         except Exception as e:  # noqa: BLE001
             errors.append(f"legacy: {e}")
+            legacy_ok = False
+        # No VMs per host: the legacy flat VM list and the inventory browser, side by side
+        flat = pool.submit(client.get_all, f"{base}&typeFilter=VirtualMachine") if legacy_ok else None
+        tree = pool.submit(browser)
+        if flat:
+            try:
+                items += flat.result()
+            except Exception as e:  # noqa: BLE001
+                errors.append(f"legacy: {e}")
         try:
-            items += client.post_all(f"/api/v1/inventory/{q}", {"hierarchyType": "HostsAndClusters"})
+            items += tree.result()
         except Exception as e:  # noqa: BLE001
             errors.append(f"browser: {e}")
-        if not items:
-            raw["_errors"][f"inventory {name}"] = "; ".join(errors)
-            print(f"  [skip] {lap()} Inventory {name:<16} {'; '.join(errors)}")
-            continue
-        inventory[name] = {"method": "items", "items": items}
-        kinds = {}
-        for i in items:
-            t = _lc(_obj(i).get("type"))
-            kinds[t] = kinds.get(t, 0) + 1
-        print(f"  [OK]   {lap()} Inventory {name:<16} {len(items)} objects ("
-              + ", ".join(f"{k or '?'}={v}" for k, v in sorted(kinds.items())) + ")")
-    return inventory
+    if not items:
+        return name, None, "; ".join(errors), f"  [skip] {took()} Inventory {name:<16} {'; '.join(errors)}"
+    kinds = {}
+    for i in items:
+        t = _lc(_obj(i).get("type"))
+        kinds[t] = kinds.get(t, 0) + 1
+    return name, {"method": "items", "items": items}, None, (
+        f"  [OK]   {took()} Inventory {name:<16} {len(items)} objects ("
+        + ", ".join(f"{k or '?'}={v}" for k, v in sorted(kinds.items())) + ")")
 
 
 def legacy_clusters(client, base):
@@ -596,7 +625,7 @@ def probe_port(host, port, timeout=2.0):
         return False
 
 
-def query_em(host, user, password, ctx, timeout=20):
+def query_em(host, user, password, ctx, timeout=10):
     """
     Log in to the Enterprise Manager REST API (port 9398) and list the backup
     servers registered to it. Returns a dict for the node details.
@@ -636,7 +665,9 @@ def collect_enterprise_managers(args, vbr_host, password, raw):
             continue
         seen.add(h.lower())
         em = {"host": h, "source": "Manual (--em)" if h in (args.em or []) else "EM REST detected on VBR host (9398)"}
-        if args.user and password:
+        if args.user and password and not probe_port(h, EM_REST_PORT, 3.0):
+            em["error"] = f"port {EM_REST_PORT} not reachable"   # no login, so no wait for its timeout
+        elif args.user and password:
             try:
                 em.update(query_em(h, args.em_user or args.user, args.em_password or password, ctx))
                 em["connected"] = True

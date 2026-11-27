@@ -140,6 +140,11 @@ Current as of v1.12.4 (checked on VBR v13.1, REST API 1.3-rev2).
 - PowerShell: when `Connect-VBRServer` fails because the VBR Console (Veeam PowerShell module) is not the
   same version as the backup server, the script explains this and suggests running on the VBR server,
   installing the matching Console, or using the Python collector. README notes the version requirement.
+- Python: faster scans of large vSphere inventories. The vCenters, and the per-host VM queries within one,
+  are read in parallel (about 8 requests at a time), and the flat VM list and the inventory browser
+  together. Each `Inventory` line shows that vCenter's own time.
+- Python: an Enterprise Manager whose REST port (9398) does not answer within 3 s is reported as "port 9398
+  not reachable" instead of waiting for the login timeout (now 10 s, was 20 s).
 
 ## v1.12.4 (2026-11-17)
 

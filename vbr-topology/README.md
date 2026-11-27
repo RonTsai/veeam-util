@@ -95,7 +95,8 @@ its toolbar. The language it opens in is decided in this order:
 
 Veeam product terms (backup proxy, repository, SOBR, job types, ...) stay in English in both languages.
 Console output is always English. Each status line shows the seconds since the previous one, and the last
-line the total scan time, to find slow steps.
+line the total scan time, to find slow steps. (Python reads the vCenters' inventories in parallel, so each
+`Inventory` line shows that vCenter's own time.)
 
 How it works: the collectors write English into `topology.json`. `template.html` holds all UI strings
 (`I18N`) plus a table that translates the collectors' text (`DATA_ZH`, `DATA_ZH_RULES`). To change a
