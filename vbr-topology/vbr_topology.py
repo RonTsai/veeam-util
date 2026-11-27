@@ -191,6 +191,44 @@ def lap():
     return f"{t:5.1f}s"
 
 
+def _http_detail(e):
+    """The start of an HTTP error's response body (VBR puts the reason there), or ''."""
+    try:
+        body = e.read().decode(errors="replace")
+        try:
+            body = json.loads(body)
+            body = body.get("message") or "" if isinstance(body, dict) else body
+        except ValueError:
+            pass
+        return " ".join(str(body).split())[:300]
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def get_one_by_one(client, path, limit=1000):
+    """
+    Read a list one item at a time (limit=1), skipping items the server fails on. Returns (items, positions that
+    failed). Stops at the first empty page, or after 20 failures in a row.
+    """
+    items, bad, misses = [], [], 0
+    for skip in range(limit):
+        sep = "&" if "?" in path else "?"
+        try:
+            res = client._request("GET", f"{path}{sep}skip={skip}&limit=1")
+        except urllib.error.HTTPError:
+            bad.append(skip)
+            misses += 1
+            if misses >= 20:
+                break
+            continue
+        misses = 0
+        data = res.get("data", []) if isinstance(res, dict) else (res or [])
+        if not data:
+            break
+        items.extend(data)
+    return items, bad[:-misses] if misses else bad
+
+
 def collect(client):
     _LAP[0] = time.monotonic()   # login time is not counted in the first endpoint
     raw = {"_meta": {"base": client.base, "apiVersion": client.api_version,
@@ -202,7 +240,16 @@ def collect(client):
             n = len(raw[key]) if isinstance(raw[key], list) else 1
             print(f"  [OK]   {lap()} {key:<22} {n}")
         except urllib.error.HTTPError as e:
-            raw["_errors"][key] = f"HTTP {e.code}"
+            detail = _http_detail(e)
+            if key == "jobs" and e.code >= 500:
+                # One job the server cannot serialize fails the whole list: read them one at a time
+                raw[key], bad = get_one_by_one(client, path)
+                raw["_errors"]["jobs"] = f"HTTP {e.code} for the list; read one at a time, {len(bad)} failed" + (
+                    f" (positions {', '.join(map(str, bad))}): {detail}" if bad else f": {detail}")
+                print(f"  [OK]   {lap()} {key:<22} {len(raw[key])} (list failed with HTTP {e.code}; read one at a time,"
+                      f" {len(bad)} could not be read)")
+                continue
+            raw["_errors"][key] = f"HTTP {e.code}" + (f": {detail}" if detail else "")
             print(f"  [skip] {lap()} {key:<22} HTTP {e.code} (not supported by this version or account)")
         except Exception as e:  # noqa: BLE001 - one failing endpoint must not stop the scan
             raw["_errors"][key] = str(e)
@@ -262,9 +309,32 @@ def collect_backup_files(client, raw):
         print(f"  [skip] {lap()} {'backupFiles':<22} {raw['_errors']['backupFiles']}")
 
 
+def named_objects(backup_name, objs):
+    """
+    Backup files without an object (application plug-in backups) give an object with no name: it takes the server
+    the plug-in names the backup after ("[<job>\\]<server> <application> backup (<repository>)"), merged into
+    that server's object when there is one.
+    """
+    unnamed = [o for o in objs if not o.get("name")]
+    if not unnamed:
+        return objs
+    m = re.match(r"^(?:.*\\)?(\S+) ", backup_name or "")
+    server = m.group(1) if m else backup_name or ""
+    out = [o for o in objs if o.get("name")]
+    for u in unnamed:
+        same = next((o for o in out if _lc(o["name"]) == _lc(server)), None)
+        if same:
+            for k, v in u.items():
+                if k != "name" and same.get(k) in (None, "", 0):
+                    same[k] = v
+        else:
+            out.append(dict(u, name=server))
+    return out
+
+
 def _ts(v):
-    """ISO time -> 'yyyy-MM-dd HH:mm' (server time, as given)."""
-    return v[:16].replace("T", " ") if v else None
+    """ISO time -> 'yyyy-MM-dd HH:mm' (server time, as given). 0001-01-01 is .NET's empty date: None."""
+    return v[:16].replace("T", " ") if v and not str(v).startswith("0001-") else None
 
 
 def _parse_time(v):
@@ -1813,15 +1883,20 @@ def build_model(raw, csv_rows=()):
             "repository": b.get("repositoryName") or (nodes.get(repo_id) or {}).get("name"),
             "platform": backup_platform(b.get("platformName"), b.get("platformId"), b.get("jobType")),
             **(backup_totals(vms) if vms else {}),
-            "objects": [{"name": v["name"], **backup_totals({k: v})}
-                        for k, v in sorted(vms.items(), key=lambda kv: (_lc(kv[1]["name"]), kv[0]))]})
+            "objects": named_objects(b.get("name"), [{"name": v["name"], **backup_totals({k: v})}
+                                     for k, v in sorted(vms.items(), key=lambda kv: (_lc(kv[1]["name"]), kv[0]))])})
     backup_rows.sort(key=lambda x: (_lc(x["name"]), x["repository"] or ""))
 
+    vbr = {"name": vbr_name, "base": meta.get("base"), "apiVersion": meta.get("apiVersion"),
+           "build": info.get("buildVersion"), "collectedAt": meta.get("collectedAt"),
+           "toolVersion": TOOL_VERSION, "toolCommit": TOOL_COMMIT}
+    # Some or all jobs could not be read: the report cannot tell which proxies and repositories no job uses
+    jobs_err = (raw.get("_errors") or {}).get("jobs")
+    if jobs_err and (not jobs or "positions" in jobs_err):
+        vbr["jobsUnavailable"] = True
     return {
         "generatedAt": dt.datetime.now().isoformat(timespec="seconds"),
-        "vbr": {"name": vbr_name, "base": meta.get("base"), "apiVersion": meta.get("apiVersion"),
-                "build": info.get("buildVersion"), "collectedAt": meta.get("collectedAt"),
-                "toolVersion": TOOL_VERSION, "toolCommit": TOOL_COMMIT},
+        "vbr": vbr,
         "nodes": list(nodes.values()),
         "links": list(links.values()),
         "jobs": job_rows,

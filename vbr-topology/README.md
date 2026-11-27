@@ -53,6 +53,7 @@ There are two collectors that produce the same diagram from one shared `template
 | Enterprise Manager | Auto-detected | `--em <host>` (or auto, when EM is installed on the VBR host) |
 | vSphere versions | vCenter and ESXi | vCenter only (with `--vcenter-user`) |
 | Plug-in platforms (Proxmox VE, Nutanix AHV, HPE Morpheus VME) | Hosts and jobs | Proxmox VE and Nutanix AHV jobs only (name and repository, from `/backups`) |
+| Application plug-in jobs (Microsoft SQL Server, Oracle RMAN, SAP HANA, MongoDB, SAP backint) | Jobs, last run, and their backups (restore points from the backup files) | Only what `/backups` gives (no jobs, no restore point counts) |
 | Job protected objects | All job types, with full inventory paths | All but plug-in jobs; location is the host name |
 | Extras | Tape servers, tape libraries and tape jobs, SureBackup virtual labs, Cloud Connect service providers, Hyper-V replica jobs | — |
 
@@ -354,6 +355,8 @@ Without PowerCLI, the script falls back to the Veeam inventory automatically.
   since the plug-in proxies cannot be read. When the job's source is not a registered host (for example a
   Proxmox cluster name), every host of that platform gets an inferred (dashed) link.
 - **Agent job**: protection group → repository
+- **Application plug-in job** (Microsoft SQL Server, Oracle RMAN, SAP HANA, MongoDB, SAP backint; PowerShell only):
+  a "Veeam Plug-ins" card → repository, since the database servers are not in the diagram
 - **File share job**: general-purpose proxies → repository, and repository → archive repository when the job
   keeps an archive (blue dashed line). A file backup copy: source job's repository → target repository
   (blue dashed line)
@@ -376,7 +379,8 @@ Without PowerCLI, the script falls back to the Veeam inventory automatically.
   data-flow link) and that holds no backups gets a gray **0** badge and a dashed card. A SOBR in use also uses
   its extents and tiers, and a gateway server is in use when its repository is. WAN accelerators and Cloud
   Connect service providers are not checked. Application plug-ins and standalone agents write without a VBR
-  job, so a repository they use counts once it holds their backups.
+  job, so a repository they use counts once it holds their backups. When the collector cannot read all jobs,
+  nothing is marked.
 
 ## Jobs and protected objects
 
@@ -394,6 +398,9 @@ The **Backups** table lists the backups as the VBR console's Backups view does: 
 snapshots and backups whose job no longer exists included) with its job, repository, platform, creation
 time, restore points, last backup and size on disk. Click a backup to see the same per object (a VM
 backed up as two objects, for example after it was registered again, has two rows, as in the console).
+Transaction log backups (SQL Server, PostgreSQL) are one more object of their backup, with their size and newest
+log file but no restore point count. Backups imported from another backup server come last under their own
+heading, as the console's Disk (Imported) node (PowerShell only: the REST API does not tell them apart).
 
 Click a job in the **Jobs** table to expand its protected objects: type, name, location, size, and
 whether the object is included or excluded (excluded rows are struck through). The job's links stay
@@ -404,6 +411,7 @@ highlighted in the diagram until you click the job again, even while you hover o
 | VMware, Hyper-V, Cloud Director, replica | `Get-VBRJobObject`, `Include` / `Exclude` entries (type from `TypeDisplayName`, full inventory path) | `virtualMachines.includes` / `excludes.vms` (location is the host name) |
 | Plug-in (Proxmox VE, Nutanix AHV, HPE Morpheus VME) | `Get-VBRJobObject` (no location) | — (only the job, from `/backups`) |
 | Agent | `BackupObject`: protection groups | `computers`: protection groups |
+| Application plug-in | `Get-VBRApplicationBackupJob` (`BackupObject`) and `Get-VBRPluginJob` (the server in the job name) | — |
 | File share, object storage | `BackupObject`: shares and buckets, then their include / exclude File masks (and tag masks for buckets) | `objects`: the same |
 | Backup copy | Source jobs and repositories | `sourceObjects` |
 | SureBackup | Linked jobs, application group (with its VMs) and virtual lab | `linkedJobs` |

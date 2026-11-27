@@ -45,13 +45,14 @@ The maintainer's personal working rules and lab notes are in `CLAUDE.local.md` (
     `gfs`: `{weekly, monthly, yearly}`, the GFS backups kept, only the enabled ones; `encrypted`: bool;
     `unavailable`: `{field: note code}` for cells the collector cannot read, shown as "n/a" with the footnote
     `note_<code>` from `template.html`'s `I18N`)
-  - `backups[]`: `name, job, created, repository, platform`, optionally `restorePoints, lastBackup, onDisk`,
+  - `backups[]`: `name, job, created, repository, platform`, optionally `restorePoints, lastBackup, onDisk, state`,
     and `objects[]` (`name`, optionally `restorePoints, lastBackup, onDisk`), as the VBR console's Backups view
-    (`created` / `lastBackup`: `yyyy-MM-dd HH:mm`; `onDisk`: bytes)
+    (`created` / `lastBackup`: `yyyy-MM-dd HH:mm`; `onDisk`: bytes; `state`: `imported` for the console's Disk (Imported))
     (`objects[]`: `name, type, location, size, excluded`, optionally `unavailable` as for jobs (`location`, `size`),
     the job's protected objects)
   - `warnings[]`, `vbr`, `lang` (`vbr`: `name, base, apiVersion, build, collectedAt, toolVersion`, optionally
-    `toolCommit`: this tool's version and, in a git clone, its commit, shown in the report header)
+    `toolCommit`: this tool's version and, in a git clone, its commit, shown in the report header; `jobsUnavailable`:
+    true when not all jobs could be read, so no proxy or repository is marked as not used)
 - **i18n.** Collectors write English only. All on-screen text lives in `template.html`:
   `I18N` for UI strings, `DATA_ZH` / `DATA_ZH_RULES` for collector text. Whenever a collector
   emits new display text, add its Traditional Chinese translation there.

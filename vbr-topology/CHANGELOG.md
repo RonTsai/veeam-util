@@ -25,10 +25,13 @@ Current as of v1.12.5 (checked on VBR v13.1, REST API 1.3-rev2).
   (`GetChilds()` / `GetSubHosts()` return nothing), and REST lists `NutanixAHV` and `PVE` in `EProxyType`
   but `/proxies` returns none of them.
 - Storage copy jobs (HPE StoreOnce Catalyst Copy, Dell Data Domain Managed File Replication) are not listed.
-- Application plug-in jobs (Veeam Plug-ins for Microsoft SQL Server, Oracle RMAN, SAP HANA, SAP on Oracle,
-  MongoDB, whether VBR or the plug-in manages them) are not listed. Their backups and SQL Server transaction
-  log backups are missing from the Backups table, except a MongoDB backup in PowerShell.
-- Imported and orphaned backups (the console's Disk (Imported) / Disk (Orphaned)) are listed with the others.
+- Application plug-in jobs (Microsoft SQL Server, Oracle RMAN, SAP HANA, MongoDB, SAP backint) are listed by
+  PowerShell only. Python shows only their backups, as `/backups` gives them (no job, no restore point count).
+  Their retention is not shown (`RetentionPolicy` has no unit).
+- Transaction log backups show no restore point count (the console counts log restore points in a way the backup
+  files do not show).
+- Orphaned backups (the console's Disk (Orphaned)) are listed with the others: no property tells them apart from
+  plug-in backups that have no job either. Python also lists imported backups with the others.
 - Backup copies from an Application Backup Repository report a size on disk of 0.
 - Without PowerCLI or `--vcenter-user`, components are matched to hosts by VM name only. Proxies
   registered by IP, and VMs whose name differs from their hostname, show as "Physical / unknown host".
@@ -127,6 +130,35 @@ Current as of v1.12.5 (checked on VBR v13.1, REST API 1.3-rev2).
   (`Container.Type`) and "Manually added" in Python (REST `type`). The console shows no type for it.
 
 ## Unreleased
+
+### Added
+
+- PowerShell: application plug-in jobs are listed (Microsoft SQL Server, Oracle RMAN, SAP HANA, MongoDB, ...): the
+  ones VBR manages (`Get-VBRApplicationBackupJob`, last run from `Get-VBRApplicationBackupJobSession`; an Idle
+  newest session shows no last result, as the console) and the ones the plug-in manages (`Get-VBRPluginJob`; one
+  that never ran shows no result instead of its "Success"). Their data comes from a "Veeam Plug-ins" card.
+- PowerShell: application plug-in backups are in the Backups table, with restore points, last backup and size from
+  their backup files (`GetAllChildrenStorages()`; `Get-VBRRestorePoint` refuses them), under their job.
+- PowerShell: transaction log backups (SQL Server, PostgreSQL) are an object of the backup they belong to, with
+  their size and newest log file.
+- PowerShell: imported backups (`IsImported`) come last in the Backups table under their own heading, as the
+  console's Disk (Imported) node. The model's backups gain an optional `state` (`imported`).
+- PowerShell: when `Connect-VBRServer` fails because the backup server's certificate is not trusted, the script
+  says to connect once with the VBR Console on that machine and accept it.
+
+### Fixed
+
+- Python: when `/jobs` fails with a server error (VBR v13.1 returns HTTP 500 for the whole list when it cannot
+  serialize one job), the jobs are read one at a time and only the failing ones are left out; the warning names
+  their positions and the server's message. HTTP errors now carry the start of the response body.
+- Both: when the jobs could not all be read, no proxy or repository is marked as not used (model:
+  `vbr.jobsUnavailable`).
+- Python: application plug-in backups no longer show "0001-01-01 00:00" as their creation time, nor an object
+  without a name.
+- PowerShell: backup platforms "MongoDB" (was "MongoDb") and "Unix" for imported Solaris agent backups (was
+  "Plug-in"); MongoDB protection groups show "MongoDB" as their type.
+- Report: the Enterprise Manager's "port 9398 not reachable" and "timed out" errors are translated on the Chinese
+  page.
 
 ## v1.12.5 (2026-11-27)
 

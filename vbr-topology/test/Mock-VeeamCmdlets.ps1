@@ -254,6 +254,20 @@ function Get-VBRCDPPolicy {
         Server = $H.esx2; MetadataRepository = $global:R1 }
 }
 function Get-VBRvCDReplicaJob { }
+# Application plug-in jobs: one VBR manages (Microsoft SQL Server availability group), one the SAP backint plug-in
+# manages; its newest session is Idle (the console: status Idle, no last result)
+function Get-VBRApplicationBackupJob {
+    New-Obj @{ Id = (gid "app1"); Name = "SQL-AG-Plugin"; ApplicationType = "MSSQL"; BackupObject = "AG01"; BackupRepository = $global:R1
+        RetentionPolicy = 7; ScheduleEnabled = $true }
+}
+function Get-VBRPluginJob {
+    New-Obj @{ Id = (gid "plug1"); Name = "sap01 SAP backint backup (Repo01-ReFS)"; PluginType = "SAP"; Type = "Backup"
+        LastRun = [datetime]"2026-10-27 20:15"; LastResult = "Success"; LastState = "Stopped"; TargetRepositoryId = (gid "r1"); IsEnabled = $true }
+}
+function Get-VBRApplicationBackupJobSession {
+    [pscustomobject]@{ JobId = (gid "app1"); CreationTime = [datetime]"2026-10-27 21:10"; Result = "None"; State = "Idle" }
+    [pscustomobject]@{ JobId = (gid "app1"); CreationTime = [datetime]"2026-10-27 21:00"; Result = "Success"; State = "Stopped" }
+}
 function Get-VBRConfigurationBackupJob { New-Obj @{ Name = "Backup Configuration Job"; Enabled = $true; Repository = $global:R1; EncryptionOptions = $true; RestorePointsToKeep = 10; LastResult = "Success" } }
 # Backups and restore points (one backup file per restore point), matching sample_raw.json "backupFiles".
 # app-sql01 has a point from an older chain (another object in VBR, same VM name: its own row)
@@ -267,6 +281,11 @@ $global:RPs = @{
 }
 # Plug-in platform backup (j4): per-VM child backups and their backup files, read with internal methods
 $global:AhvChild = New-Obj @{ Id = (gid "bj4c"); Name = "web01 Backup"; JobId = (gid "j4"); JobType = "VmbApiPolicyTempJob" }
+# Backup files of application plug-in and transaction log backups (one file per restore point)
+function pfile($time, $gb) { [pscustomobject]@{ Id = [guid]::NewGuid(); CreationTime = [datetime]$time; Stats = [pscustomobject]@{ BackupSize = [int64]$gb * 1GB } } }
+$global:SqlPlugFiles = @((pfile "2026-10-25 21:00" 12), (pfile "2026-10-26 21:00" 1), (pfile "2026-10-27 21:00" 1))
+$global:SqlLogFiles = @((pfile "2026-10-27 22:30" 1), (pfile "2026-10-27 23:00" 1), (pfile "2026-10-27 23:30" 1))
+$global:RPs["bimp"] = @((rpoint "legacy01" "2026-03-02 22:00" 25), (rpoint "legacy01" "2026-03-03 22:00" 2))
 function ahvfile($time, $gb) { [pscustomobject]@{ Id = [guid]::NewGuid(); BackupId = (gid "bj4c"); CreationTime = [datetime]$time; Stats = [pscustomobject]@{ BackupSize = [int64]$gb * 1GB } } }
 $global:AhvFiles = @((ahvfile "2026-10-25 01:00" 20), (ahvfile "2026-10-26 01:00" 1), (ahvfile "2026-10-27 01:00" 1))
 # j1 also has a per-machine child backup that returns the same restore points (counted once); an old
@@ -281,11 +300,21 @@ function Get-VBRBackup {
         FindChildBackups = { @($global:AhvChild) }; GetAllChildrenStorages = { $global:AhvFiles } }
     $global:AhvChild
     New-Obj @{ Id = (gid "bold"); JobId = (gid "oldjob"); Name = "Old-Backup"; JobType = "Backup"; Platform = "EVmware"; RepositoryId = (gid "r1"); CreationTime = [datetime]"2025-01-15 22:00" }
+    # Application plug-in backup of SQL-AG-Plugin (its JobId is the plug-in's own job, not the VBR job), a SQL Server
+    # transaction log backup of VMware-Prod-Daily, and a backup imported from another backup server
+    New-Obj @{ Id = (gid "bplug"); JobId = (gid "appchild"); Name = "SQL-AG-Plugin\sqlnode01 Microsoft SQL backup (Repo01-ReFS)"; JobType = "MSSQLPluginBackup"
+        Platform = "ECustomPlatform"; PlatformId = [guid]"0151f286-a73f-4158-9e14-b64716033a46"; TypeToString = "Microsoft SQL Server Backup"
+        RepositoryId = (gid "r1"); CreationTime = [datetime]"2026-10-25 21:00" } @{ GetAllChildrenStorages = { $global:SqlPlugFiles } }
+    New-Obj @{ Id = (gid "blog"); JobId = (gid "logjob"); Name = "VMware-Prod-Daily SQL Server Transaction Log Backup"; JobType = "SqlLogBackup"
+        Platform = "EVmware"; TypeToString = "VMware SQL Log Backup"; RepositoryId = (gid "sobr") } @{ GetAllChildrenStorages = { $global:SqlLogFiles } }
+    New-Obj @{ Id = (gid "bimp"); JobId = [guid]::Empty; Name = "Legacy-VMs"; JobType = "PerVmParentBackup"; Platform = "EVmware"; IsImported = $true
+        RepositoryId = (gid "r1"); CreationTime = [datetime]"2026-03-02 22:00" }
 }
 function Get-VBRRestorePoint($Backup) {
     if ("$($Backup.JobType)" -eq "VmbApiPolicyTempJob" -or $Backup.Id -eq (gid "bj4c") -or $Backup.Id -eq (gid "bold")) {
         throw "Cannot get restore points from backup $($Backup.Name), because it is encrypted or created by an enterprise application plug-in."
     }
+    if ($Backup.Id -eq (gid "bimp")) { return $global:RPs["bimp"] }
     $k = @($global:RPs.Keys | Where-Object { (gid $_) -eq $Backup.JobId })[0]
     if ($k) { $global:RPs[$k] }
 }

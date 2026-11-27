@@ -49,6 +49,7 @@
   .na { color:var(--mute); font-style:italic; } .na sup { font-style:normal; margin-left:1px; }
   .notes { color:var(--mute); font-size:12px; margin:6px 0 0; } .notes ol { margin:2px 0 0; padding-left:20px; }
   table.jtab tr.objs > td { background:#fafbfb; padding:6px 10px 12px 36px; }
+  table.jtab tr.group > td { font-weight:600; color:var(--mute); padding-top:14px; border-bottom:1px solid #d9dee2; }
   table.jtab tr.objs table { width:auto; min-width:60%; }
   #jobTable tr.objs tr.ex td { color:#a3acb3; text-decoration:line-through; }
   #tip { position:fixed; pointer-events:none; background:#263038; color:#fff; font-size:12px; padding:8px 10px;
@@ -135,6 +136,7 @@ const I18N = {
     note_pluginObjectLocation: "The REST API gives no host for plug-in platform VMs (/api/v1/backupObjects). The PowerShell collector shows it.",
     note_shareSize: "The job settings hold no size for a file share or an object storage bucket.",
     backupsTitle: "Backups", backupsHint: "As the VBR console's Backups view lists them, including storage snapshots and backups whose job no longer exists. Click a backup to see its VMs.",
+    backupsImported: "Imported (backups that no job of this server made: the console's Disk (Imported))",
     thBackup: "Backup", thPlatform: "Platform", thCreated: "Created",
     enabled: "Enabled", disabled: "Disabled",
     kind_backup: "Backup server", kind_em: "Enterprise Manager", kind_vone: "Veeam ONE", kind_agent: "Veeam Agent",
@@ -177,6 +179,7 @@ const I18N = {
     note_pluginObjectLocation: "REST API 沒有提供 plug-in 平台 VM 的主機（/api/v1/backupObjects）。PowerShell collector 會顯示主機。",
     note_shareSize: "Job 設定不含 file share 或 object storage bucket 的大小。",
     backupsTitle: "Backups", backupsHint: "與 VBR 主控台的 Backups 畫面相同，包含儲存快照，以及 job 已不存在的備份。點一下備份可看各台 VM。",
+    backupsImported: "Imported (不是這台 server 的 job 產生的備份，即主控台的 Disk (Imported))",
     thBackup: "備份", thPlatform: "平台", thCreated: "建立時間",
     enabled: "Enabled", disabled: "Disabled",
     kind_server: "其他受管伺服器", kind_ext_host: "Plug-in 平台",
@@ -204,6 +207,8 @@ const DATA_ZH = {
   "Individual computers": "個別電腦", "Microsoft Active Directory objects": "Microsoft Active Directory 物件",
   "Computers listed in a CSV file": "CSV 檔列出的電腦", "Computers with pre-installed backup agents": "預先安裝 backup agent 的電腦",
   "Cloud machines": "雲端機器", "Manually added": "手動新增",
+  "Application servers": "應用程式伺服器",
+  "<urlopen error timed out>": "連線逾時 (<urlopen error timed out>)",
   "File share": "檔案共用", "SMB share": "SMB 共用", "NFS share": "NFS 共用",
   "Object storage": "物件儲存",
   "Hosts": "主機",
@@ -218,8 +223,10 @@ const DATA_ZH = {
 };
 const DATA_ZH_RULES = [
   [/^Veeam inventory \((.+)\)$/, "Veeam 清冊 ($1)"],
-  [/^Failed: (.*)$/s, "失敗: $1"],
-  [/^Enterprise Manager (\S+): verification failed: (.*)$/s, "Enterprise Manager $1 驗證失敗: $2"],
+  [/^Failed: (.*)$/s, (_, d) => `失敗: ${td(d)}`],
+  [/^port (\d+) not reachable$/, "$1 port 無法連線"],
+  [/^Enterprise Manager (\S+): verification failed: (.*)$/s, (_, h, d) => `Enterprise Manager ${h} 驗證失敗: ${td(d)}`],
+  [/^jobs: HTTP (\d+) for the list; read one at a time, (\d+) failed(.*)$/s, "jobs: 清單讀取失敗 (HTTP $1)，改為逐筆讀取，$2 筆無法讀取$3"],
   [/^Enterprise Manager auto-detection \(SBackupOptions\.GetEnterpriseServerInfo\) failed: (.*)$/s, "Enterprise Manager 自動偵測 (SBackupOptions.GetEnterpriseServerInfo) 失敗: $1"],
   [/^PowerCLI could not be loaded: (.*)$/s, "PowerCLI 無法載入: $1"],
   [/^Reading the inventory of (\S+) failed: (.*)$/s, "讀取 $1 清冊失敗: $2"],
@@ -363,6 +370,7 @@ const TIERS = [["extents", "Performance tier"], ["capacity", "Capacity tier"], [
 // and tiers; a gateway server is in use when its repository is. WAN accelerators and Cloud Connect service
 // providers are not checked (the model does not record which jobs use them).
 const UNUSED = (() => {
+  if (MODEL.vbr?.jobsUnavailable) return new Set();   // jobs not (all) read: "not used by any job" is unknown
   const used = new Set(), byName = {};
   MODEL.nodes.forEach(n => (byName[(n.name || "").toLowerCase()] ??= []).push(n.id));
   const useName = v => typeof v === "string" && (byName[v.toLowerCase()] || []).forEach(id => used.add(id));
@@ -730,12 +738,16 @@ function tables() {
   document.querySelectorAll("#jobTable tr.job.has").forEach(tr => tr.onclick = () => toggleJob(tr));
   showSelJob();
   // Backups, as the VBR console's Backups view lists them; each expands to its VMs
+  // Imported backups come last under their own heading, as the console's Disk (Imported) node
   const bks = MODEL.backups || [];
+  const bkOrder = bks.map((b, i) => i).sort((a, c) => (bks[a].state === "imported") - (bks[c].state === "imported") || a - c);
   document.getElementById("backupSection").style.display = bks.length ? "" : "none";
   document.getElementById("backupTable").innerHTML = th(["thBackup", "thJob", "thRepo", "thPlatform", "thCreated", "thPoints", "thLast", "thDisk"]) +
-    bks.map((b, i) => {
-      const objs = b.objects || [], has = objs.length > 0, open = openBackups.has(i);
-      return `<tr class="job${has ? " has" : ""}${open ? " open" : ""}" data-i="${i}"><td><span class="caret">${has ? (open ? "▾" : "▸") : ""}</span>${esc(b.name)}${
+    bkOrder.map((i, k) => {
+      const b = bks[i], objs = b.objects || [], has = objs.length > 0, open = openBackups.has(i);
+      const head = b.state === "imported" && (k === 0 || bks[bkOrder[k - 1]].state !== "imported")
+        ? `<tr class="group"><td colspan="8">${esc(t("backupsImported"))}</td></tr>` : "";
+      return head + `<tr class="job${has ? " has" : ""}${open ? " open" : ""}" data-i="${i}"><td><span class="caret">${has ? (open ? "▾" : "▸") : ""}</span>${esc(b.name)}${
         has ? `<span class="count">(${objs.length})</span>` : ""}</td><td>${esc(b.job ?? "—")}</td><td>${esc(b.repository ?? "—")}</td><td>${esc(b.platform ?? "—")}</td>
         <td class="nowrap">${esc(b.created ?? "—")}</td><td class="num">${esc(b.restorePoints ?? "—")}</td><td class="nowrap">${esc(b.lastBackup ?? "—")}</td>
         <td class="num">${esc(fmtBytes(b.onDisk))}</td></tr>` + (has ? `<tr class="objs" data-for="${i}"${open ? "" : " hidden"}><td colspan="8"><table>${

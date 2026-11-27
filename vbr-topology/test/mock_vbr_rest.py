@@ -3,7 +3,9 @@ Minimal HTTPS mock of the VBR REST API (and the EM REST API) for offline tests.
 
   python3 test/mock_vbr_rest.py <cert.pem> <key.pem> <vbr_port> <em_port> [<vcenter_port>]
 
-Env: MOCK_IP_PROXY=1 registers one proxy by IP; MOCK_VC_OLD=1 makes vCenter serve only /rest.
+Env: MOCK_IP_PROXY=1 registers one proxy by IP; MOCK_VC_OLD=1 makes vCenter serve only /rest;
+MOCK_JOBS_500=1 makes /jobs fail with HTTP 500 for any page that holds the third job (as VBR does for a job it
+cannot serialize).
 The vCenter mock rejects the password "bad".
 
 Serves the objects from sample_raw.json plus a legacy vSphere inventory.
@@ -93,6 +95,10 @@ class VbrHandler(BaseHTTPRequestHandler):
             return self.send_json({}, 401)
         u = urllib.parse.urlparse(self.path)
         q = urllib.parse.parse_qs(u.query)
+        if u.path == "/api/v1/jobs" and os.environ.get("MOCK_JOBS_500"):
+            skip, limit = int(q.get("skip", ["0"])[0]), int(q.get("limit", ["500"])[0])
+            if skip <= 2 < skip + limit:
+                return self.send_json({"errorCode": "UnknownError", "message": "Object reference not set to an instance of an object."}, 500)
         if u.path in PATHS:
             v = RAW[PATHS[u.path]]
             return self.page(v, q) if isinstance(v, list) else self.send_json(v)
@@ -194,6 +200,7 @@ class VCenterHandler(VbrHandler):
 
 
 def serve(handler, port, ctx):
+    ThreadingHTTPServer.request_queue_size = 64   # the collectors send up to 8 parallel requests
     srv = ThreadingHTTPServer(("127.0.0.1", port), handler)
     srv.socket = ctx.wrap_socket(srv.socket, server_side=True)
     srv.serve_forever()

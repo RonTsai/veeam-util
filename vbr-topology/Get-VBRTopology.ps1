@@ -175,6 +175,9 @@ if (-not $session) {
         if ($msg -match "different version|requires update") {
             Write-Host "The Veeam PowerShell module (installed with the VBR Console) must be the same version as the backup server." -ForegroundColor Yellow
             Write-Host "Run this script on the VBR server, install the VBR Console of the server's version, or use the Python collector (vbr_topology.py, REST API)." -ForegroundColor Yellow
+        } elseif ($msg -match "SSL connection could not be established") {
+            Write-Host "The backup server's certificate is not trusted on this machine. Connect to $Server once with the VBR Console" -ForegroundColor Yellow
+            Write-Host "on this machine and accept its certificate, then run the script again." -ForegroundColor Yellow
         }
         throw
     }
@@ -239,6 +242,14 @@ $entraLogJobs = Invoke-Safe "Get-VBREntraIDLogsBackupJob"  {
 }
 $nasCopyJobs = Invoke-Safe "Get-VBRNASBackupCopyJob"       {
     if (Get-Command Get-VBRNASBackupCopyJob -ErrorAction SilentlyContinue) { Get-VBRNASBackupCopyJob -WarningAction SilentlyContinue }
+}
+# Application plug-in jobs: the ones VBR manages (Microsoft SQL Server, Oracle RMAN, SAP HANA, MongoDB, ...), and the
+# ones the plug-in manages on the database server (SAP backint, Microsoft SQL Server). Neither is in Get-VBRJob.
+$appJobs     = Invoke-Safe "Get-VBRApplicationBackupJob"   {
+    if (Get-Command Get-VBRApplicationBackupJob -ErrorAction SilentlyContinue) { Get-VBRApplicationBackupJob }
+}
+$pluginJobs  = Invoke-Safe "Get-VBRPluginJob"              {
+    if (Get-Command Get-VBRPluginJob -ErrorAction SilentlyContinue) { Get-VBRPluginJob }
 }
 $cfgJobs     = Invoke-Safe "Get-VBRConfigurationBackupJob" { Get-VBRConfigurationBackupJob }
 $backups     = Invoke-Safe "Get-VBRBackup"                 { Get-VBRBackup }
@@ -594,6 +605,7 @@ function Get-PgTypeName([string]$Code) {
         'PreInstalled|ManuallyDeployed' { return "Computers with pre-installed backup agents" }
         'Cloud' { return "Cloud machines" }
         '^ManuallyAdded$' { return "Manually added" }
+        'MongoDB' { return "MongoDB" }
     }
     return $Code
 }
@@ -791,6 +803,39 @@ foreach ($a in $agentJobs) {
         sources = @($pgIds | ForEach-Object { $Nodes[$_].name }); proxies = "—"
         objects = @(@($a.BackupObject) | Where-Object { $_ } | ForEach-Object {
             New-JobObject "$($_.Name)" "Protection group" (Get-PgTypeName "$(Get-Prop $_ @('Container.Type', 'Type'))") }) })
+}
+
+# Application plug-in jobs: the database servers are not in the diagram, so their data comes from one
+# "Veeam Plug-ins" card. Types as the console's Jobs view names them.
+$appTypeNames = @{ MSSQL = "Microsoft SQL Backup"; OracleRMAN = "Oracle RMAN Backup"; SAPHANA = "SAP HANA Backup"
+    MongoDB = "MongoDB Backup"; SAPOnOracle = "SAP on Oracle Backup"; PostgreSQL = "PostgreSQL Backup"; Db2 = "Db2 Backup" }
+$pluginTypeNames = @{ SAP = "SAP Backup"; MSSQLPlugin = "Microsoft SQL Server Backup"; Oracle = "Oracle RMAN Backup"
+    OracleRMAN = "Oracle RMAN Backup"; SAPOnOracle = "SAP on Oracle Backup"; Db2 = "Db2 Backup" }
+function Add-PluginJobRow($x, [string]$Type, $RepoId, [string]$Object, [string]$ObjectType) {
+    $enabled = Get-Prop $x @("JobEnabled", "IsEnabled", "Enabled")
+    $label = $x.Name + $(if ($enabled -eq $false) { " (disabled)" } else { "" })
+    Add-Node "plugins" "agent" "Veeam Plug-ins" "Application servers" @("A") | Out-Null
+    if ($RepoId) { Add-Link "plugins" $RepoId $label }
+    $JobRows.Add([ordered]@{ name = $x.Name; type = $Type; disabled = ($enabled -eq $false)
+        repository = $(if ($RepoId -and (Test-Node "$RepoId")) { $Nodes["$RepoId"].name } else { $null })
+        sources = @("Veeam Plug-ins"); proxies = "—"
+        objects = @($(if ($Object) { New-JobObject $Object $ObjectType })) })
+}
+foreach ($x in $appJobs) {
+    if (-not $x) { continue }
+    $at = "$(Get-Prop $x @('ApplicationType'))"
+    $type = $(if ($appTypeNames.ContainsKey($at)) { $appTypeNames[$at] } else { "$at Backup" })
+    $repo = Add-JobRepoNode (Get-Prop $x @("BackupRepository", "TargetRepository"))
+    Add-PluginJobRow $x $type $repo "$(Get-Prop $x @('BackupObject.Name', 'BackupObject'))" ($type -replace ' Backup$', '')
+}
+foreach ($x in $pluginJobs) {
+    if (-not $x) { continue }
+    $pt = "$(Get-Prop $x @('PluginType'))"
+    $type = $(if ($pluginTypeNames.ContainsKey($pt)) { $pluginTypeNames[$pt] } else { "$pt Backup" })
+    $repo = "$(Get-Prop $x @('TargetRepositoryId'))"
+    # The plug-in names its job "<server> <application> backup (<repository>)"
+    $srv = $(if ("$($x.Name)" -match '^(\S+) ') { $Matches[1] } else { $null })
+    Add-PluginJobRow $x $type $(if ($repo -and (Test-Node $repo)) { $repo } else { $null }) $srv ($type -replace ' Backup$', '')
 }
 
 # Backup copy jobs (v12+ cmdlet)
@@ -1031,7 +1076,7 @@ function Get-Gfs($x) {
 }
 $settingsSrc = @{}   # job name -> objects to read, the job's own cmdlet first
 foreach ($x in @($agentJobs) + @($copyJobs) + @($nasJobs) + @($entraJobs) + @($entraLogJobs) + @($nasCopyJobs) + @($cdpPolicies) +
-               @($vcdReplicas) + @($jobs)) {
+               @($vcdReplicas) + @($appJobs) + @($jobs)) {
     if ($x -and $x.Name) { if (-not $settingsSrc.ContainsKey($x.Name)) { $settingsSrc[$x.Name] = @() }; $settingsSrc[$x.Name] += , $x }
 }
 foreach ($r in $JobRows) {
@@ -1066,7 +1111,7 @@ foreach ($r in $JobRows) {
 # another one is left out.
 $idByName = @{}
 foreach ($x in @($jobs) + @($agentJobs) + @($copyJobs) + @($nasJobs) + @($entraJobs) + @($entraLogJobs) + @($nasCopyJobs) +
-               @($sbJobs) + @($tapeJobs) + @($cdpPolicies) + @($vcdReplicas)) { if ($x -and $x.Name) { $idByName[$x.Name] = Get-IdStr $x } }
+               @($sbJobs) + @($tapeJobs) + @($cdpPolicies) + @($vcdReplicas) + @($appJobs) + @($pluginJobs)) { if ($x -and $x.Name) { $idByName[$x.Name] = Get-IdStr $x } }
 $nameById = @{}; foreach ($k in $idByName.Keys) { $nameById[$idByName[$k]] = $k }
 $typeByJob = @{}; foreach ($r in $JobRows) { $i = $idByName[$r.name]; if ($i) { $typeByJob["$i"] = "$($r.type)" } }
 $rpFailed = [ordered]@{}   # backup id -> name (only backups of jobs in the report)
@@ -1087,12 +1132,12 @@ function Add-BackupPoint($Vms, [string]$Key, [string]$Vm, [string]$PointId, $Tim
     $fid = "$(Get-Prop $File @('Id'))"
     if ($fid) { try { $v.Files[$fid] = [int64]$File.Stats.BackupSize } catch { } }
 }
-function Get-BackupTotals($Vms) {
+function Get-BackupTotals($Vms, [bool]$WithLogs = $false) {
     $files = @{}; $max = 0; $last = $null
     foreach ($v in $Vms.Values) {
         foreach ($k in $v.Files.Keys) { $files[$k] = $v.Files[$k] }
         if ($v.Points.Count -gt $max) { $max = $v.Points.Count }
-        if ($v.Last -and (-not $last -or $v.Last -gt $last)) { $last = $v.Last }
+        if ($v.Last -and ($WithLogs -or -not $v.Log) -and (-not $last -or $v.Last -gt $last)) { $last = $v.Last }
     }
     $size = $null; if ($files.Count) { $size = [int64]0; foreach ($x in $files.Values) { $size += $x } }
     return [ordered]@{ restorePoints = $(if ($max) { $max } else { $null }); lastBackup = (& $fmtTime $last); onDisk = $size }
@@ -1115,9 +1160,32 @@ foreach ($b in @($backups | Where-Object { $_ -and "$($_.JobType)" -eq "VmbApiPo
         Add-BackupPoint $vms $bid $(if ($vmOf.ContainsKey($bid)) { $vmOf[$bid] } else { $bid }) "$($f.Id)" (Get-Prop $f @("CreationTime")) $f
     }
 }
+# Application plug-in backups (Microsoft SQL Server, SAP backint, Oracle RMAN, ...): Get-VBRRestorePoint refuses them;
+# their backup files are read with GetAllChildrenStorages() (one file per restore point), under the server the
+# plug-in names the backup after ("[<job>\]<server> <application> backup (<repository>)").
+# Transaction log backups (SQL Server, PostgreSQL, Oracle) are backups of their own with no restore points; their
+# files are shown as one object of the backup they belong to (the longest backup name their name starts with).
+$pluginBackupTypes = 'PluginBackup$|BackintBackup$|^OracleRMANBackup$|^Db2.*Backup$'
+$logBackupTypes = 'LogBackup$'
+$logOf = @{}   # parent backup id -> list of log backups
+foreach ($b in @($backups | Where-Object { $_ -and "$($_.JobType)" -match $logBackupTypes })) {
+    $parent = $null
+    foreach ($p in $backups) {
+        if (-not $p -or "$($p.JobType)" -match $logBackupTypes -or $p.Id -eq $b.Id) { continue }
+        if ("$($b.Name)".StartsWith("$($p.Name) ") -and (-not $parent -or "$($p.Name)".Length -gt "$($parent.Name)".Length)) { $parent = $p }
+    }
+    if ($parent) { if (-not $logOf.ContainsKey("$($parent.Id)")) { $logOf["$($parent.Id)"] = @() }; $logOf["$($parent.Id)"] += , $b }
+}
 foreach ($b in $backups) {
     if (-not $b -or "$($b.JobType)" -eq "VmbApiPolicyTempJob" -or $childIds.ContainsKey("$($b.Id)")) { continue }
+    if ("$($b.JobType)" -match $logBackupTypes) { continue }
     $vms = [ordered]@{}; $vmsByBackup["$($b.Id)"] = $vms
+    if ("$($b.JobType)" -match $pluginBackupTypes) {
+        $srv = $(if ("$($b.Name)" -match '^(?:.*\\)?(\S+) ') { $Matches[1] } else { "$($b.Name)" })
+        try { foreach ($f in @($b.GetAllChildrenStorages())) { if ($f) { Add-BackupPoint $vms $srv $srv "$($f.Id)" (Get-Prop $f @("CreationTime")) $f } } }
+        catch { if ($typeByJob["$(Get-Prop $b @('JobId'))"]) { $rpFailed["$($b.Id)"] = "$($b.Name)"; if (-not $rpError) { $rpError = $_.Exception.Message } } }
+        continue
+    }
     $rps = @()
     try { $rps = @(Get-VBRRestorePoint -Backup $b) }
     catch { if ($typeByJob["$(Get-Prop $b @('JobId'))"]) { $rpFailed["$($b.Id)"] = "$($b.Name)"; if (-not $rpError) { $rpError = $_.Exception.Message } }; continue }
@@ -1128,6 +1196,26 @@ foreach ($b in $backups) {
 }
 # Child backups returned on their own (a plug-in child has no children of its own to read)
 foreach ($c in @($childIds.Keys)) { $rpFailed.Remove($c); $vmsByBackup.Remove($c) }
+# Transaction log backups: one object of their backup, "<VM or server> - <log type>", with the size and newest file
+# of the log; no restore point count (the console counts log restore points in a way the files do not show)
+$logNames = @{ SqlLogBackup = "SQL Server transaction log backup"; PostgreSqlLogBackup = "PostgreSQL log backup"; OracleLogBackup = "Oracle log backup" }
+$backupById = @{}; foreach ($b in $backups) { if ($b) { $backupById["$($b.Id)"] = $b } }
+foreach ($parentId in @($logOf.Keys)) {
+    $vms = $vmsByBackup[$parentId]; if ($null -eq $vms) { continue }
+    $parent = $backupById[$parentId]
+    foreach ($lb in $logOf[$parentId]) {
+        $jt = "$($lb.JobType)"
+        $what = $(if ($logNames.ContainsKey($jt)) { $logNames[$jt] } else { "$($lb.TypeToString)" })
+        $rest = "$($lb.Name)".Substring("$($parent.Name)".Length)
+        $who = $(if ($rest -match '^\s*-\s*(\S+) ') { $Matches[1] } elseif ($vms.Count -eq 1) { @($vms.Values)[0].Name } else { $null })
+        $tmp = [ordered]@{}
+        try { foreach ($f in @($lb.GetAllChildrenStorages())) { if ($f) { Add-BackupPoint $tmp "x" "x" "$($f.Id)" (Get-Prop $f @("CreationTime")) $f } } } catch { }
+        if (-not $tmp.Count) { continue }
+        $o = $tmp["x"]; $o.Points = @{}; $o.Log = $true
+        $o.Name = $(if ($who) { "$who - $what" } else { $what })
+        $vms["log:$($lb.Id)"] = $o
+    }
+}
 if ($rpFailed.Count) {
     $script:Warnings.Add("Restore points of $($rpFailed.Count) backups could not be read: $((@($rpFailed.Values) | Sort-Object -Unique) -join ', '). Error: $rpError")
 }
@@ -1145,18 +1233,19 @@ for ($i = 0; $i -lt $order.Count; $i++) {
         if ($all) { $dropped[$order[$i]] = $true; break }
     }
 }
-$backupById = @{}; foreach ($b in $backups) { if ($b) { $backupById["$($b.Id)"] = $b } }
 $BackupRows = New-Object System.Collections.Generic.List[object]
 $platformMap = @{ vmware = "VMware"; hyperv = "Hyper-V"; vcd = "VMware Cloud Director"; clouddirector = "VMware Cloud Director"
     endpoint = "Windows"; windowsphysical = "Windows"; linuxphysical = "Linux"; unixphysical = "Unix"; solarisphysical = "Unix"
     macphysical = "Mac"; nas = "Unstructured data"; unstructureddata = "Unstructured data"; entraid = "Microsoft Entra ID"
-    abrbackup = "Application backup repository" }
+    abrbackup = "Application backup repository"; mongodb = "MongoDB" }
 foreach ($k in $vmsByBackup.Keys) {
     if ($dropped[$k] -or -not $vmsByBackup[$k].Count) { continue }
     $b = $backupById[$k]; $vms = $vmsByBackup[$k]
     # Its job: JobId, or the job of the same name (a backup copy's backups can name another id)
     $jid = "$(Get-Prop $b @('JobId'))"
     if (-not $nameById[$jid] -and $idByName["$($b.Name)"]) { $jid = $idByName["$($b.Name)"] }
+    # A plug-in backup of a job VBR manages: "<job>\<server> ... backup (<repository>)"
+    if (-not $nameById[$jid] -and "$($b.Name)" -match '^(.+?)\\' -and $idByName[$Matches[1]]) { $jid = $idByName[$Matches[1]] }
     $repoId = "$(Get-Prop $b @('RepositoryId'))"
     $isSnapshot = $repoId -match '^[0-]+$'
     $repo = $(if ((Test-Node $repoId)) { $Nodes[$repoId].name } else { $null })
@@ -1167,20 +1256,24 @@ foreach ($k in $vmsByBackup.Keys) {
     $pf = ("$(Get-Prop $b @('Platform', 'BackupPlatform.Platform'))" -replace '^E(?=[A-Z])', '')
     if ($PluginPlatforms.ContainsKey($pfId)) { $pf = $PluginPlatforms[$pfId] }
     elseif ($platformMap.ContainsKey($pf.ToLower())) { $pf = $platformMap[$pf.ToLower()] }
+    elseif ("$($b.JobType)" -match $pluginBackupTypes) { $pf = "$($b.TypeToString)" -replace ' Backup$', '' }
     elseif ("$($b.JobType)" -eq "VmbApiPolicyTempJob" -or $pf -eq "CustomPlatform") {
         $jt = $typeByJob[$jid]
         $pf = $(if ($jt -match "Nutanix|AHV") { "Nutanix AHV" } elseif ($jt -match "Proxmox") { "Proxmox VE" } elseif ($jt -match "Morpheus") { "HPE Morpheus VME" }
                 elseif ($jt -match '^(\w+) Agent (Backup|Policy)$') { $Matches[1] }
+                elseif ("$($b.TypeToString)" -match '^(\w+) Agent (Backup|Policy)$') { $Matches[1] }
                 elseif ("$($b.JobType)" -match "Copy|BackupSync") { "Image-level" } else { "Plug-in" })
     }
     # Created: the oldest backup file, as the console shows it (CreationTime can be the date of an upgrade)
-    $first = $null; foreach ($v in $vms.Values) { if ($v.First -and (-not $first -or $v.First -lt $first)) { $first = $v.First } }
+    $first = $null; foreach ($v in $vms.Values) { if ($v.First -and -not $v.Log -and (-not $first -or $v.First -lt $first)) { $first = $v.First } }
     if (-not $first) { $first = Get-Prop $b @("CreationTime") }
     $row = [ordered]@{ name = "$($b.Name)"; job = $nameById[$jid]; created = (& $fmtTime $first); repository = $repo
         platform = $(if ($pf) { $pf } else { $null }) }
+    # Imported backups: the console's Disk (Imported) node, not Disk
+    if ((Get-Prop $b @("IsImported")) -eq $true) { $row["state"] = "imported" }
     if ($vms.Count) { $t = Get-BackupTotals $vms; foreach ($x in $t.Keys) { $row[$x] = $t[$x] } }
     $row["objects"] = @($vms.Keys | Sort-Object { "$($vms[$_].Name)".ToLower() }, { $_ } | ForEach-Object {
-        $o = [ordered]@{ name = $vms[$_].Name }; $t = Get-BackupTotals @{ $_ = $vms[$_] }; foreach ($x in $t.Keys) { $o[$x] = $t[$x] }; $o })
+        $o = [ordered]@{ name = $vms[$_].Name }; $t = Get-BackupTotals @{ $_ = $vms[$_] } $true; foreach ($x in $t.Keys) { $o[$x] = $t[$x] }; $o })
     $BackupRows.Add($row)
 }
 $BackupRows = @($BackupRows | Sort-Object { "$($_.name)".ToLower() }, { "$($_.repository)" })
@@ -1202,8 +1295,16 @@ foreach ($j in $jobs) {
     if (-not $j) { continue }
     try { $s = $j.FindLastSession(); if ($s) { Add-LastSession (Get-IdStr $j) (Get-Prop $s @("CreationTime")) (Get-Prop $s @("Result")) (Get-Prop $s @("State")) } } catch { }
 }
+# Plug-in jobs the plug-in manages carry their last run; one that never ran says Success without a run time,
+# which Add-LastSession leaves out (blank, as in the console)
+foreach ($x in $pluginJobs) {
+    if ($x) { Add-LastSession (Get-IdStr $x) (Get-Prop $x @("LastRun")) (Get-Prop $x @("LastResult")) (Get-Prop $x @("LastState")) }
+}
+# Get-VBRApplicationBackupJobSession: the jobs VBR manages for application plug-ins. Their newest session can be Idle
+# (Result None), which the console shows as status Idle with a blank last result.
 foreach ($cmd in @("Get-VBRComputerBackupJobSession", "Get-VBRNASBackupJobSession", "Get-VBRSureBackupSession",
-                   "Get-VBREntraIDTenantBackupJobSession", "Get-VBREntraIDLogsBackupJobSession")) {
+                   "Get-VBREntraIDTenantBackupJobSession", "Get-VBREntraIDLogsBackupJobSession", "Get-VBRApplicationBackupJobSession")) {
+    if ($cmd -eq "Get-VBRApplicationBackupJobSession" -and -not @($appJobs).Count) { continue }
     if (-not (Get-Command $cmd -ErrorAction SilentlyContinue)) { continue }
     $sessions = Invoke-Safe $cmd ([scriptblock]::Create("$cmd -WarningAction SilentlyContinue"))
     foreach ($s in $sessions) {
@@ -1594,6 +1695,8 @@ $nodeList = New-Object System.Collections.Generic.List[object]
 foreach ($k in $Nodes.Keys) { $nodeList.Add($Nodes[$k]) }
 $linkList = New-Object System.Collections.Generic.List[object]
 foreach ($k in $Links.Keys) { $l = $Links[$k]; $l["jobs"] = [string[]]$l["jobs"].ToArray(); $linkList.Add($l) }
+# Get-VBRJob failed: the report cannot tell which proxies and repositories no job uses
+if (@($script:Warnings | Where-Object { "$_" -like "Get-VBRJob:*" }).Count) { $jobsUnavailable = $true } else { $jobsUnavailable = $false }
 $model = [ordered]@{
     generatedAt = $now
     lang = $Language
@@ -1605,6 +1708,7 @@ $model = [ordered]@{
     backups = $BackupRows
     warnings = $script:Warnings
 }
+if ($jobsUnavailable) { $model.vbr["jobsUnavailable"] = $true }
 
 # One subfolder per run so earlier results are not overwritten
 if (-not $NoTimestamp) {
