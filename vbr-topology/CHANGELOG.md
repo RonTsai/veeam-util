@@ -28,8 +28,9 @@ Current as of v1.12.5 (checked on VBR v13.1, REST API 1.3-rev2).
 - Application plug-in jobs (Microsoft SQL Server, Oracle RMAN, SAP HANA, MongoDB, SAP backint) are listed by
   PowerShell only. Python shows only their backups, as `/backups` gives them (no job, no restore point count).
   Their retention is not shown (`RetentionPolicy` has no unit).
-- Transaction log backups show no restore point count (the console counts log restore points in a way the backup
-  files do not show).
+- Transaction log backups show no restore point count in Python. PowerShell counts them as the console does (one per
+  database and log backup); this was checked for SQL Server only, PostgreSQL and Oracle use the methods of the same
+  name (`GetDbPostgreSqlOibs()` / `GetDbOracleOibs()`) untested.
 - Orphaned backups (the console's Disk (Orphaned)) are listed with the others: no property tells them apart from
   plug-in backups that have no job either. Python also lists imported backups with the others.
 - Backup copies from an Application Backup Repository report a size on disk of 0.
@@ -163,6 +164,9 @@ Current as of v1.12.5 (checked on VBR v13.1, REST API 1.3-rev2).
   the host name from its restore points (matched by BIOS UUID; the IP address when it has none); its protection
   group is the job's source (was "Veeam Agents"). A failover cluster added on its own shows as `Cluster` (told
   apart by a `BiosUuid` that holds its name instead of a UUID, seen on one cluster in the lab).
+- PowerShell: transaction log objects show their restore point count, as the console: one per database and log
+  backup (`GetDbSqlOibs()` and the PostgreSQL / Oracle methods of the same name), corrupted ones not counted. The
+  backup's own count stays its VMs'.
 - PowerShell: corrupted restore points (`IsCorrupted`) are not counted, as in the console; their time and backup
   file still count for the last backup and the size on disk.
 - Python: a computer added to an agent job on its own shows its protection group as location, not the raw path

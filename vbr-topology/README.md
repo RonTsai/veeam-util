@@ -399,7 +399,8 @@ snapshots and backups whose job no longer exists included) with its job, reposit
 time, restore points, last backup and size on disk. Click a backup to see the same per object (a VM
 backed up as two objects, for example after it was registered again, has two rows, as in the console).
 Transaction log backups (SQL Server, PostgreSQL) are one more object of their backup, with their size and newest
-log file but no restore point count. Backups imported from another backup server come last under their own
+log file; PowerShell also counts their restore points as the console does (one per database and log backup).
+Backups imported from another backup server come last under their own
 heading, as the console's Disk (Imported) node (PowerShell only: the REST API does not tell them apart).
 
 Click a job in the **Jobs** table to expand its protected objects: type, name, location, size, and

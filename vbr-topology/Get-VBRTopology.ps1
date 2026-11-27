@@ -1149,7 +1149,9 @@ function Get-BackupTotals($Vms, [bool]$WithLogs = $false) {
     $files = @{}; $max = 0; $last = $null
     foreach ($v in $Vms.Values) {
         foreach ($k in $v.Files.Keys) { $files[$k] = $v.Files[$k] }
-        if ($v.Points.Count -gt $max) { $max = $v.Points.Count }
+        # A log object counts its log restore points, and only on its own row: the backup's count is its VMs'
+        $n = $(if (-not $v.Log) { $v.Points.Count } elseif ($WithLogs -and $v.LogPoints) { $v.LogPoints } else { 0 })
+        if ($n -gt $max) { $max = $n }
         if ($v.Last -and ($WithLogs -or -not $v.Log) -and (-not $last -or $v.Last -gt $last)) { $last = $v.Last }
     }
     $size = $null; if ($files.Count) { $size = [int64]0; foreach ($x in $files.Values) { $size += $x } }
@@ -1219,8 +1221,10 @@ foreach ($b in $backups) {
 # Child backups returned on their own (a plug-in child has no children of its own to read)
 foreach ($c in @($childIds.Keys)) { $rpFailed.Remove($c); $vmsByBackup.Remove($c) }
 # Transaction log backups: one object of their backup, "<VM or server> - <log type>", with the size and newest file
-# of the log; no restore point count (the console counts log restore points in a way the files do not show)
+# of the log. Its restore points are the console's: one per database and log backup (GetDbSqlOibs(), checked in the
+# lab; GetDbPostgreSqlOibs() / GetDbOracleOibs() by the same naming), corrupted ones not counted
 $logNames = @{ SqlLogBackup = "SQL Server transaction log backup"; PostgreSqlLogBackup = "PostgreSQL log backup"; OracleLogBackup = "Oracle log backup" }
+$logOibMethods = @{ SqlLogBackup = "GetDbSqlOibs"; PostgreSqlLogBackup = "GetDbPostgreSqlOibs"; OracleLogBackup = "GetDbOracleOibs" }
 $backupById = @{}; foreach ($b in $backups) { if ($b) { $backupById["$($b.Id)"] = $b } }
 foreach ($parentId in @($logOf.Keys)) {
     $vms = $vmsByBackup[$parentId]; if ($null -eq $vms) { continue }
@@ -1234,6 +1238,9 @@ foreach ($parentId in @($logOf.Keys)) {
         try { foreach ($f in @($lb.GetAllChildrenStorages())) { if ($f) { Add-BackupPoint $tmp "x" "x" "$($f.Id)" (Get-Prop $f @("CreationTime")) $f } } } catch { }
         if (-not $tmp.Count) { continue }
         $o = $tmp["x"]; $o.Points = @{}; $o.Log = $true
+        if ($logOibMethods.ContainsKey($jt)) {
+            try { $o.LogPoints = @($lb.($logOibMethods[$jt])() | Where-Object { $_ -and $_.IsCorrupted -ne $true }).Count } catch { }
+        }
         $o.Name = $(if ($who) { "$who - $what" } else { $what })
         $vms["log:$($lb.Id)"] = $o
     }

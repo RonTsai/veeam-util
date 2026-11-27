@@ -290,6 +290,8 @@ $global:AhvChild = New-Obj @{ Id = (gid "bj4c"); Name = "web01 Backup"; JobId = 
 # Backup files of application plug-in and transaction log backups (one file per restore point)
 function pfile($time, $gb) { [pscustomobject]@{ Id = [guid]::NewGuid(); CreationTime = [datetime]$time; Stats = [pscustomobject]@{ BackupSize = [int64]$gb * 1GB } } }
 $global:SqlPlugFiles = @((pfile "2026-10-25 21:00" 12), (pfile "2026-10-26 21:00" 1), (pfile "2026-10-27 21:00" 1))
+# One log restore point per database and log backup: 2 databases x 3 log backups, one corrupted (not counted)
+$global:SqlLogOibs = @(foreach ($db in "db1", "db2") { foreach ($i in 1..3) { [pscustomobject]@{ Id = [guid]::NewGuid(); GuestDatabaseId = (gid $db); IsCorrupted = ($db -eq "db2" -and $i -eq 3) } } })
 $global:SqlLogFiles = @((pfile "2026-10-27 22:30" 1), (pfile "2026-10-27 23:00" 1), (pfile "2026-10-27 23:30" 1))
 # Agent backup of Agent-Windows: Name is the IP address the computer was added as, DisplayName its host name
 function agentpoint($time, $gb, $corrupted = $false) {
@@ -321,7 +323,8 @@ function Get-VBRBackup {
         Platform = "ECustomPlatform"; PlatformId = [guid]"0151f286-a73f-4158-9e14-b64716033a46"; TypeToString = "Microsoft SQL Server Backup"
         RepositoryId = (gid "r1"); CreationTime = [datetime]"2026-10-25 21:00" } @{ GetAllChildrenStorages = { $global:SqlPlugFiles } }
     New-Obj @{ Id = (gid "blog"); JobId = (gid "logjob"); Name = "VMware-Prod-Daily SQL Server Transaction Log Backup"; JobType = "SqlLogBackup"
-        Platform = "EVmware"; TypeToString = "VMware SQL Log Backup"; RepositoryId = (gid "sobr") } @{ GetAllChildrenStorages = { $global:SqlLogFiles } }
+        Platform = "EVmware"; TypeToString = "VMware SQL Log Backup"; RepositoryId = (gid "sobr") } @{ GetAllChildrenStorages = { $global:SqlLogFiles }
+        GetDbSqlOibs = { $global:SqlLogOibs } }
     New-Obj @{ Id = (gid "bagent"); JobId = (gid "a1"); Name = "Agent-Windows"; JobType = "EpAgentBackup"; Platform = "EEndPoint"
         TypeToString = "Windows Agent Backup"; RepositoryId = (gid "r1"); CreationTime = [datetime]"2026-10-26 20:00" }
     New-Obj @{ Id = (gid "bimp"); JobId = [guid]::Empty; Name = "Legacy-VMs"; JobType = "PerVmParentBackup"; Platform = "EVmware"; IsImported = $true
