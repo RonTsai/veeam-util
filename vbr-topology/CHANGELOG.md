@@ -124,8 +124,9 @@ Current as of v1.12.5 (checked on VBR v13.1, REST API 1.3-rev2).
 - Azure Blob containers are managed servers in PowerShell only; Veeam Data Cloud Vault archive repositories
   (`VeeamDataCloudVaultArchive`) are in Python only.
 - Job object locations: PowerShell shows the full inventory path, Python only the host name (vCenter /
-  Hyper-V host). Object type names differ slightly (`Vapp` / `vApp`, `Virtual machine` / `Virtual Machine`
-  for Hyper-V), and PowerShell lists the computers of an agent job as `Protection group`.
+  Hyper-V host). PowerShell shows the location VBR keeps (`Get-VBRJobObject` `Location`), which for some VMs is
+  only the VM name. Object type names differ slightly (`Vapp` / `vApp`, `Virtual machine` / `Virtual Machine`
+  for Hyper-V, `Computer` / `Linux Computer` for a computer added to an agent job on its own).
 - The built-in "Manually Added" protection group shows as "Individual computers" in PowerShell
   (`Container.Type`) and "Manually added" in Python (REST `type`). The console shows no type for it.
 
@@ -157,6 +158,12 @@ Current as of v1.12.5 (checked on VBR v13.1, REST API 1.3-rev2).
   without a name.
 - PowerShell: backup platforms "MongoDB" (was "MongoDb") and "Unix" for imported Solaris agent backups (was
   "Plug-in"); MongoDB protection groups show "MongoDB" as their type.
+- PowerShell: agent backups show the computer's host name (`DisplayName`), as the console, not the IP address it
+  was added as. A computer added to an agent job on its own shows as `Computer`, under its protection group, with
+  the host name from its restore points (matched by BIOS UUID; the IP address when it has none); its protection
+  group is the job's source (was "Veeam Agents").
+- Python: a computer added to an agent job on its own shows its protection group as location, not the raw path
+  (`ProtectionGroup:<name>;LinuxComputer:<host>`).
 - Report: the Enterprise Manager's "port 9398 not reachable" and "timed out" errors are translated on the Chinese
   page.
 

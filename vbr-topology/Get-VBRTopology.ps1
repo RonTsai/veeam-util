@@ -790,19 +790,28 @@ function Add-JobRepoNode($r) {
 }
 
 # Agent jobs (v12+ cmdlet). Policies the agent manages keep their repository in DestinationOptions
+$agentObjByUuid = @{}   # BIOS UUID -> job objects of computers added on their own
 foreach ($a in $agentJobs) {
     $repo = Add-JobRepoNode (Get-Prop $a @("BackupRepository", "TargetRepository", "DestinationOptions.BackupRepository"))
     $enabled = Get-Prop $a @("JobEnabled", "IsEnabled")
     $label = $a.Name + $(if ($enabled -eq $false) { " (disabled)" } else { "" })
-    $pgIds = @(@($a.BackupObject) | ForEach-Object { Get-IdStr (Get-Prop $_ @("Container", "ProtectionGroup")); Get-IdStr $_ } |
-               Where-Object { $_ -and (Test-Node $_) -and $Nodes[$_].kind -eq "agent" })
+    $pgIds = @(@($a.BackupObject) | ForEach-Object { Get-IdStr (Get-Prop $_ @("Container", "ProtectionGroup")); "$(Get-Prop $_ @('ProtectionGroupId'))"; Get-IdStr $_ } |
+               Where-Object { $_ -and (Test-Node $_) -and $Nodes[$_].kind -eq "agent" } | Select-Object -Unique)
     if (-not $pgIds.Count) { Add-Node "agents" "agent" "Veeam Agents" "Physical / virtual servers" @("A") | Out-Null; $pgIds = @("agents") }
     foreach ($pg in $pgIds) { Add-Link $pg $repo $label }
     $JobRows.Add([ordered]@{ name = $a.Name; type = "$($a.OSPlatform) Agent $(if ("$($a.Mode)" -match 'ManagedByAgent') { 'Policy' } else { 'Backup' })"; disabled = ($enabled -eq $false)
         repository = $(if ((Test-Node "$repo")) { $Nodes["$repo"].name } else { $null })
         sources = @($pgIds | ForEach-Object { $Nodes[$_].name }); proxies = "—"
         objects = @(@($a.BackupObject) | Where-Object { $_ } | ForEach-Object {
-            New-JobObject "$($_.Name)" "Protection group" (Get-PgTypeName "$(Get-Prop $_ @('Container.Type', 'Type'))") }) })
+            if ("$(Get-Prop $_ @('Type'))" -eq "Computer") {
+                # A computer added on its own: its protection group as location. Its name is what it was added as
+                # (an IP address, say); the console shows the host name, taken from its restore points further down
+                $agPg = "$(Get-Prop $_ @('ProtectionGroupId'))"
+                $agObj = New-JobObject "$($_.Name)" "Computer" $(if ((Test-Node $agPg)) { $Nodes[$agPg].name } else { "" })
+                $agBios = "$(Get-Prop $_ @('BiosUuid'))".ToLower()
+                if ($agBios) { if (-not $agentObjByUuid.ContainsKey($agBios)) { $agentObjByUuid[$agBios] = @() }; $agentObjByUuid[$agBios] += , $agObj }
+                $agObj
+            } else { New-JobObject "$($_.Name)" "Protection group" (Get-PgTypeName "$(Get-Prop $_ @('Container.Type', 'Type'))") } }) })
 }
 
 # Application plug-in jobs: the database servers are not in the diagram, so their data comes from one
@@ -1189,9 +1198,18 @@ foreach ($b in $backups) {
     $rps = @()
     try { $rps = @(Get-VBRRestorePoint -Backup $b) }
     catch { if ($typeByJob["$(Get-Prop $b @('JobId'))"]) { $rpFailed["$($b.Id)"] = "$($b.Name)"; if (-not $rpError) { $rpError = $_.Exception.Message } }; continue }
+    # Agent backups: the console shows the host name (DisplayName), Name can be the IP address the computer was added as
+    $nameProps = $(if ("$($b.JobType)" -match '^Ep') { @('DisplayName', 'Name', 'VmName') } else { @('Name', 'VmName') })
     foreach ($rp in $rps) {
         $f = $null; try { $f = $rp.GetStorage() } catch { }
-        Add-BackupPoint $vms "$(Get-Prop $rp @('ObjectId'))" "$(Get-Prop $rp @('Name', 'VmName'))" "$(Get-Prop $rp @('Id'))" (Get-Prop $rp @("CreationTime")) $f
+        $rpName = "$(Get-Prop $rp $nameProps)"
+        Add-BackupPoint $vms "$(Get-Prop $rp @('ObjectId'))" $rpName "$(Get-Prop $rp @('Id'))" (Get-Prop $rp @("CreationTime")) $f
+        # InsideDir holds the computer's BIOS UUID ("<id> (<BIOS UUID>_<id>)"): give its job objects the host name
+        if ($agentObjByUuid.Count -and $nameProps[0] -eq 'DisplayName' -and $rpName) {
+            foreach ($uuidMatch in [regex]::Matches("$(Get-Prop $rp @('InsideDir'))", '[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}')) {
+                foreach ($agObj in @($agentObjByUuid[$uuidMatch.Value.ToLower()])) { if ($agObj) { $agObj.name = $rpName } }
+            }
+        }
     }
 }
 # Child backups returned on their own (a plug-in child has no children of its own to read)

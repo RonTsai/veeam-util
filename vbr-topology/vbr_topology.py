@@ -534,7 +534,10 @@ def job_objects(j, names):
         if c.get("type") == "ProtectionGroup":
             add(c.get("name"), "Protection group", pg_type_name(c.get("protectionGroupType")))
         else:
-            add(c.get("name"), c.get("type"), c.get("path"))
+            # A computer added on its own: "ProtectionGroup:<name>;LinuxComputer:<host>", shown as its protection group
+            path = c.get("path") or ""
+            pg = next((x.split(":", 1)[1] for x in path.split(";") if x.startswith("ProtectionGroup:")), None)
+            add(c.get("name"), c.get("type"), pg or path)
     # Include / exclude masks, as VBR calls them: File masks, plus tag masks for buckets
     masks = (("inclusionMask", "File mask", False), ("inclusionPathMask", "File mask", False),
              ("exclusionMask", "File mask", True), ("exclusionPathMask", "File mask", True),

@@ -458,6 +458,12 @@
           "path": "ProtectionGroup:Physical Windows Servers",
           "protectionGroupType": "IndividualComputers",
           "protectionGroupId": "pg-1"
+        },
+        {
+          "id": "c-1",
+          "type": "WindowsComputer",
+          "name": "win-app01",
+          "path": "ProtectionGroup:Physical Windows Servers;WindowsComputer:win-app01"
         }
       ],
       "storage": {
